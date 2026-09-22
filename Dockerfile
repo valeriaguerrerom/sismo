@@ -24,16 +24,11 @@ RUN npm run build
 # ── Etapa 2: servir con Nginx ──
 FROM nginx:1.27-alpine
 
-# La config es una plantilla: al arrancar se sustituye ${PORT} (que inyecta
-# Railway) con envsubst y se genera la config real de Nginx. Fallback a 80 local.
-COPY nginx.conf /etc/nginx/templates/default.conf.template
+# Config directa (nginx escucha en 8080 fijo, sin plantillas ni envsubst).
+# En Railway el dominio se genera apuntando al puerto 8080.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# La imagen oficial de nginx procesa /etc/nginx/templates/*.template con
-# envsubst al iniciar. NGINX_ENVSUBST_FILTER limita la sustitución a la variable
-# PORT, para NO tocar las variables propias de nginx ($uri, $host, etc.).
-ENV PORT=80
-ENV NGINX_ENVSUBST_FILTER="PORT"
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
