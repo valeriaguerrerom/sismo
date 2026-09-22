@@ -1,0 +1,32 @@
+# SismoNariño — despliegue local con Docker (RNF-07)
+#
+#   docker compose up --build
+#   Frontend: http://localhost:8080   Backend: http://localhost:8000/docs
+#
+# Variables: copia .env.example a .env (raíz) y backend/.env con las claves de Supabase.
+services:
+  backend:
+    build: ./backend
+    container_name: sismonarino-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Opcional: MiniSEED crudos para /api/waveforms (solo lectura).
+      - ./backend/data_raw:/app/data_raw:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_API_URL: ""
+    container_name: sismonarino-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

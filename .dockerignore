@@ -1,0 +1,8 @@
+node_modules
+dist
+docs
+backend
+.git
+.env
+*.log
+public/data/cm

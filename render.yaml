@@ -1,0 +1,15 @@
+# Blueprint de Render para el backend FastAPI (RNF-07).
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sismonarino-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false

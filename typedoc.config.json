@@ -1,0 +1,11 @@
+{
+  "entryPointStrategy": "expand",
+  "entryPoints": ["src"],
+  "out": "docs/frontend",
+  "name": "SismoNariño — Frontend",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "exclude": ["**/node_modules/**", "**/*.css"],
+  "tsconfig": "tsconfig.app.json"
+}
