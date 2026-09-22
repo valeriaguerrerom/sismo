@@ -19,11 +19,11 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
-# Los MiniSEED crudos (data_raw) no se copian al contenedor: son opcionales
-# y pesados. Móntalos como volumen si se necesita /api/waveforms.
+# Los MiniSEED crudos (data_raw) no se copian al contenedor: en producción se
+# leen del bucket público de Supabase Storage (ver api/waveforms.py).
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# En Railway/plataformas cloud el puerto lo inyecta la variable $PORT; en local
+# no existe y se usa 8000. Forma shell del CMD para que $PORT se expanda.
+# El healthcheck lo hace la plataforma (railway.json → /health), no el Docker.
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
