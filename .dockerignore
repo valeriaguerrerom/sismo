@@ -5,4 +5,5 @@ backend
 .git
 .env
 *.log
-public/data/cm
+# public/data/cm SÍ debe entrar al build del frontend: el Explorador lo necesita
+# y Nginx lo sirve como estático. (Antes estaba excluido para docker-compose.)
