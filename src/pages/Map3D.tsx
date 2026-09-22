@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X,
+  Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check,
 } from '../lib/icons';
 import { Scene3D } from '../components/map3d/Scene3D';
 import { Legend } from '../components/map3d/Legend';
@@ -24,6 +24,12 @@ import {
   type SceneEventInput, ApiError,
 } from '../lib/api3d';
 import { loadCatalog } from '../lib/catalog';
+import { useAuth } from '../lib/auth';
+import { supabase } from '../lib/supabase';
+import {
+  downloadMap3dPdf, downloadMap3dCsv, DEFAULT_MAP3D_OPTIONS,
+  type Map3dReportData, type Map3dReportOptions,
+} from '../lib/map3dReport';
 
 interface CatalogEvent {
   id: string;
@@ -88,6 +94,13 @@ export function Map3D() {
   // UI
   const [showEventList, setShowEventList] = useState(false);
   const [loadingTT, setLoadingTT] = useState(false);
+  // Reporte del Mapa 3D (modal de opciones + formato + guardado).
+  const { user } = useAuth();
+  const [showReport, setShowReport] = useState(false);
+  const [reportOpts, setReportOpts] = useState<Map3dReportOptions>(DEFAULT_MAP3D_OPTIONS);
+  const [reportFormat, setReportFormat] = useState<'pdf' | 'csv'>('pdf');
+  const [savingReport, setSavingReport] = useState(false);
+  const [reportMsg, setReportMsg] = useState<string | null>(null);
   const [viewCommand, setViewCommand] = useState<{ view: 'north' | 'cut' | 'top' | 'fit'; nonce: number } | null>(null);
   const setView = (view: 'north' | 'cut' | 'top' | 'fit') => setViewCommand({ view, nonce: Date.now() });
   // Filtros de la lista de eventos.
@@ -321,6 +334,77 @@ export function Map3D() {
     const m = Math.floor(s / 60);
     const ss = Math.floor(s % 60);
     return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  };
+
+  // ── Reporte del Mapa 3D ──
+  /** Arma los datos del reporte con el estado actual (epicentro, tiempos, etc.). */
+  const buildReportData = useCallback((): Map3dReportData | null => {
+    if (!epicenter) return null;
+    const ev = events.find(e => e.id === currentEventId) ?? null;
+    const fecha = new Date().toISOString().slice(0, 10);
+    const title = ev
+      ? `Mapa 3D · ${ev.label}`
+      : `Mapa 3D · ${epicenter.lat.toFixed(2)}, ${epicenter.lon.toFixed(2)} · ${fecha}`;
+
+    // Sismograma de la estación seleccionada (si hay y se pidió esa sección).
+    const syn = selectedStation ? traces[selectedStation] : null;
+    const seismogram = syn && selectedStation
+      ? {
+          station: selectedStation,
+          t: syn.t, north: syn.north, east: syn.east, vertical: syn.vertical,
+          tP: syn.tP_detectado, tS: syn.tS_detectado,
+        }
+      : null;
+
+    return {
+      title,
+      author: user?.full_name || user?.email,
+      createdAt: new Date().toISOString(),
+      eventLabel: ev?.label ?? null,
+      epicenter,
+      magnitude,
+      sourceType,
+      model,
+      medium: { vp, vs, density },
+      stations: travelTimes.map(t => ({
+        code: t.code, name: t.name, approx: t.approx,
+        distancia_epicentral_km: t.distancia_epicentral_km,
+        distancia_hipocentral_km: t.distancia_hipocentral_km,
+        distancia_grados: t.distancia_grados,
+        azimut: t.azimut, tP: t.tP, tS: t.tS, tS_menos_tP: t.tS_menos_tP,
+      })),
+      seismogram,
+    };
+  }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes]);
+
+  /** Descarga el reporte en el formato elegido (PDF o CSV). */
+  const handleDownloadReport = () => {
+    const data = buildReportData();
+    if (!data) return;
+    if (reportFormat === 'pdf') downloadMap3dPdf(data, reportOpts);
+    else downloadMap3dCsv(data, reportOpts);
+  };
+
+  /** Guarda el reporte en "Mis Reportes" (Supabase) para regenerarlo luego. */
+  const handleSaveReport = async () => {
+    const data = buildReportData();
+    if (!data || !supabase || !user) return;
+    setSavingReport(true);
+    setReportMsg(null);
+    // Se guarda con report_type='map3d' + los datos y opciones para regenerar.
+    const { error } = await supabase.from('simulation_reports').insert({
+      user_id: user.id,
+      title: data.title,
+      params: { sourceType, magnitude, depth: epicenter?.depthKm, model, vp, vs, density },
+      results: { report_type: 'map3d', map3d: data, options: reportOpts },
+    });
+    if (error) {
+      setReportMsg('No se pudo guardar. Inténtalo de nuevo.');
+      console.error('Guardar reporte Mapa 3D:', error.message);
+    } else {
+      setReportMsg('¡Guardado! Míralo en "Mis Reportes".');
+    }
+    setSavingReport(false);
   };
 
   // Nº de estaciones con señal (sintético o real) para el título.
@@ -564,6 +648,15 @@ export function Map3D() {
             >
               Recalcular con estos valores
             </button>
+            {/* Generar reporte del Mapa 3D (PDF/CSV, con opciones). */}
+            <button
+              onClick={() => { setReportMsg(null); setShowReport(true); }}
+              disabled={!epicenter || travelTimes.length === 0}
+              title={!epicenter ? 'Coloca un epicentro primero' : undefined}
+              className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold py-1.5 rounded-lg bg-[#2D6A4F] text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FileDown size={12} /> Generar reporte
+            </button>
           </div>
 
           {/* Detalle de estación seleccionada */}
@@ -652,6 +745,98 @@ export function Map3D() {
               ))}
               {filteredEvents.length === 0 && (
                 <div className="px-4 py-6 text-center font-mono text-[11px] text-stone-500">Ningún evento coincide.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: generar reporte del Mapa 3D */}
+      {showReport && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowReport(false)}>
+          <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-md overflow-hidden flex flex-col font-mono" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h3 className="text-sm font-bold text-stone-100 flex items-center gap-2">
+                <FileDown size={15} className="text-[#2D6A4F]" /> Generar reporte del Mapa 3D
+              </h3>
+              <button onClick={() => setShowReport(false)} className="text-stone-400"><X size={16} /></button>
+            </div>
+
+            <div className="px-4 py-3 space-y-4">
+              {/* Qué incluir */}
+              <div>
+                <div className="text-[9px] text-stone-500 uppercase mb-2">¿Qué incluir?</div>
+                <div className="space-y-2">
+                  {([
+                    ['epicentro', 'Epicentro y fuente'],
+                    ['parametros', 'Parámetros del medio (Vp, Vs, ρ)'],
+                    ['tiemposViaje', 'Tabla de tiempos de viaje por estación'],
+                    ['sismograma', `Sismograma de la estación${selectedStation ? ` (${selectedStation})` : ' seleccionada'}`],
+                  ] as [keyof Map3dReportOptions, string][]).map(([key, label]) => {
+                    const disabled = key === 'sismograma' && (!selectedStation || !traces[selectedStation]);
+                    return (
+                      <label key={key} className={`flex items-center gap-2 text-[11px] ${disabled ? 'text-stone-600' : 'text-stone-300 cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={reportOpts[key] && !disabled}
+                          disabled={disabled}
+                          onChange={e => setReportOpts(o => ({ ...o, [key]: e.target.checked }))}
+                          className="accent-[#2D6A4F]"
+                        />
+                        {label}
+                        {disabled && <span className="text-[9px] text-stone-600">(elige una estación)</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Formato */}
+              <div>
+                <div className="text-[9px] text-stone-500 uppercase mb-1">Formato</div>
+                <div className="flex gap-1.5">
+                  {(['pdf', 'csv'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setReportFormat(f)}
+                      className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg border ${
+                        reportFormat === f ? 'bg-[#C4553A] text-white border-[#C4553A]' : 'bg-white/5 text-stone-400 border-white/10'
+                      }`}
+                    >
+                      {f.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {reportMsg && (
+                <div className="text-[10px] text-[#2D6A4F] bg-[#2D6A4F]/10 rounded-lg px-2.5 py-1.5 border border-[#2D6A4F]/20">
+                  {reportMsg}
+                </div>
+              )}
+
+              {/* Acciones */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleDownloadReport}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[11px] font-bold py-2 rounded-lg"
+                >
+                  <FileDown size={13} /> Descargar {reportFormat.toUpperCase()}
+                </button>
+                {user && (
+                  <button
+                    onClick={handleSaveReport}
+                    disabled={savingReport}
+                    title="Guardar en Mis Reportes"
+                    className="flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 text-stone-200 text-[11px] font-bold px-3 py-2 rounded-lg disabled:opacity-50"
+                  >
+                    {reportMsg?.startsWith('¡Guardado') ? <Check size={13} /> : <Save size={13} />}
+                    {savingReport ? 'Guardando…' : 'Guardar'}
+                  </button>
+                )}
+              </div>
+              {!user && (
+                <p className="text-[9px] text-stone-500">Inicia sesión para guardar el reporte en "Mis Reportes".</p>
               )}
             </div>
           </div>
