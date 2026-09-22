@@ -325,6 +325,15 @@ export function Map3D() {
 
   // Nº de estaciones con señal (sintético o real) para el título.
   const stationsWithSignal = travelTimes.filter(tt => traces[tt.code]).length;
+
+  // ¿Sigue calculando? True mientras se resuelven tiempos de viaje o mientras
+  // queda alguna traza sintética por generar. Con esto bloqueamos "Reproducir"
+  // y mostramos un aviso de carga, para que no se reproduzca sin ondas.
+  const isCalculating = loadingTT || loadingTraces.size > 0;
+  // Hay epicentro pero todavía ninguna traza lista (aún generando la primera).
+  const noSignalYet = !!epicenter && travelTimes.length > 0 && stationsWithSignal === 0;
+  const canPlay = !!epicenter && !isCalculating && stationsWithSignal > 0;
+
   const loadedEvent = events.find(e => e.id === currentEventId) ?? null;
   const magType = sourceType === 'volcanic' ? 'Md' : 'Ml';
   const currentEventTitle = epicenter
@@ -365,24 +374,43 @@ export function Map3D() {
           <div className="flex items-center gap-2 mb-2">
             <Radio size={13} className="text-[#C4553A]" />
             <h2 className="font-mono text-xs font-bold text-stone-200">SISMOGRAMAS</h2>
+            {isCalculating && travelTimes.length > 0 && (
+              <span className="flex items-center gap-1 font-mono text-[9px] text-[#eab308]">
+                <Loader size={9} className="animate-spin" /> generando…
+              </span>
+            )}
             <span className="font-mono text-[10px] text-stone-500 ml-auto">por distancia →</span>
           </div>
           {travelTimes.length === 0 ? (
             <div className="flex items-center justify-center h-[520px] text-center px-4">
               <p className="font-mono text-[11px] text-stone-500">
-                Coloca un epicentro o carga un evento para ver los sismogramas.
+                {loadingTT
+                  ? 'Calculando tiempos de viaje…'
+                  : 'Coloca un epicentro o carga un evento para ver los sismogramas.'}
               </p>
             </div>
           ) : (
-            <RecordSection
-              stations={travelTimes}
-              traces={traces}
-              loadingTraces={loadingTraces}
-              elapsed={elapsed}
-              maxTime={maxTime}
-              selectedStation={selectedStation}
-              onSelectStation={selectStation}
-            />
+            <div className="relative">
+              <RecordSection
+                stations={travelTimes}
+                traces={traces}
+                loadingTraces={loadingTraces}
+                elapsed={elapsed}
+                maxTime={maxTime}
+                selectedStation={selectedStation}
+                onSelectStation={selectStation}
+              />
+              {/* Aviso de carga: mientras aún no hay ninguna traza lista, cubre
+                  el panel para que quede claro que se están generando y que no
+                  tiene sentido reproducir todavía. */}
+              {noSignalYet && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0e1a]/70 backdrop-blur-[1px] rounded-lg">
+                  <Loader size={22} className="animate-spin text-[#C4553A] mb-2" />
+                  <p className="font-mono text-[11px] text-stone-300">Generando sismogramas…</p>
+                  <p className="font-mono text-[9px] text-stone-500 mt-1">Espera un momento para reproducir</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -445,11 +473,15 @@ export function Map3D() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPlaying(p => !p)}
-                disabled={!epicenter}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40"
+                disabled={!canPlay}
+                title={isCalculating ? 'Espera a que terminen de generarse los sismogramas' : undefined}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {playing ? <Pause size={13} /> : <Play size={13} />}
-                {playing ? 'Pausar' : 'Reproducir'}
+                {isCalculating ? (
+                  <><Loader size={13} className="animate-spin" /> Generando…</>
+                ) : (
+                  <>{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'Pausar' : 'Reproducir'}</>
+                )}
               </button>
               <button onClick={reset} className="p-2 rounded-lg bg-white/5 border border-white/10 text-stone-300">
                 <RotateCcw size={13} />
