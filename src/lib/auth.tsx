@@ -116,18 +116,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const authUser = session.user;
 
-    // Perfil con nombre desde los metadatos de auth (Google aporta name).
-    // Se usa como fallback si la consulta a `profiles` se cuelga o falla, para
-    // NO perder la sesión: quedas logueado igual, con perfil por completar.
+    // Fallback cuando la consulta a `profiles` se cuelga o falla (p. ej. la red
+    // a Supabase falla en un refresh de token). CLAVE: si ya teníamos un perfil
+    // cargado (mismo usuario), lo CONSERVAMOS en vez de degradarlo a "perfil
+    // incompleto" — así no aparece "Completar perfil" cada vez que un refresh
+    // no logra releer la tabla. Solo se usa el perfil mínimo si es la primera
+    // carga (aún no había user en memoria).
     const authFallback = () => {
       setBlockedMessage(null);
-      setUser({
-        id: authUser.id,
-        email: authUser.email ?? '',
-        full_name: (authUser.user_metadata?.full_name as string) ?? (authUser.user_metadata?.name as string) ?? '',
-        role: 'user',
-        institution: '', active: true, occupation: '', research_area: '',
-        city: '', country: '', usage_purpose: '', profileComplete: false,
+      setUser(prev => {
+        if (prev && prev.id === authUser.id) return prev; // conservar el existente
+        return {
+          id: authUser.id,
+          email: authUser.email ?? '',
+          full_name: (authUser.user_metadata?.full_name as string) ?? (authUser.user_metadata?.name as string) ?? '',
+          role: 'user',
+          institution: '', active: true, occupation: '', research_area: '',
+          city: '', country: '', usage_purpose: '', profileComplete: false,
+        };
       });
     };
 
