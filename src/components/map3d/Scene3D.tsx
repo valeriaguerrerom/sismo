@@ -536,13 +536,19 @@ export function Scene3D({
       labelRenderer.render(scene, camera);
 
       // ── Render del mini globo en un viewport de la esquina sup. derecha ──
-      const w = renderer.domElement.width;
-      const gsize = Math.round(Math.min(w * 0.22, 150));
+      // IMPORTANTE: setViewport/setScissor trabajan en coordenadas CSS (Three
+      // multiplica internamente por el pixel ratio). Usar domElement.width/height
+      // (píxeles del buffer, ya escalados por DPR) desplazaba el globo fuera de
+      // la pantalla en monitores de alta densidad (portátiles), por eso solo se
+      // veía en el monitor externo (DPR 1). getSize() devuelve el tamaño CSS.
+      const sizeCss = renderer.getSize(new THREE.Vector2());
+      const wCss = sizeCss.x, hCss = sizeCss.y;
+      const gsize = Math.round(Math.min(wCss * 0.22, 150));
       renderer.clearDepth();
       renderer.setScissorTest(true);
       const margin = 12;
-      const gx = w - gsize - margin;
-      const gy = renderer.domElement.height - gsize - margin;
+      const gx = wCss - gsize - margin;
+      const gy = hCss - gsize - margin;
       renderer.setViewport(gx, gy, gsize, gsize);
       renderer.setScissor(gx, gy, gsize, gsize);
       // Oscila suavemente alrededor de Nariño (±25°) en vez de dar la vuelta
@@ -552,7 +558,8 @@ export function Scene3D({
       }
       renderer.render(globeScene, globeCam);
       renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, w, renderer.domElement.height);
+      // Restaurar el viewport principal en coordenadas CSS.
+      renderer.setViewport(0, 0, wCss, hCss);
     };
     animate();
 
