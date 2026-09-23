@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity, ChevronRight, BarChart3, AlertTriangle, LogIn, UserPlus, Database, BookOpen } from '../lib/icons';
 import { Page } from '../lib/types';
 import { useAuth } from '../lib/auth';
-import { getHomeStats, type HomeStats } from '../lib/api3d';
+import { loadHomeStats, type HomeStats } from '../lib/homeStats';
 import { SISMO_MAS_FUERTE, ALTURA_GALERAS, MONITOREO_SGC } from '../data/hechos-narino';
 
 interface Props { onNavigate: (page: Page, opts?: { register?: boolean }) => void; }
@@ -96,7 +96,7 @@ export function Home({ onNavigate }: Props) {
   // Cargar cifras reales al montar (no hardcodeadas).
   useEffect(() => {
     let active = true;
-    getHomeStats().then(s => { if (active) setStats(s); }).catch(() => { /* deja skeleton */ });
+    loadHomeStats().then(s => { if (active) setStats(s); }).catch(() => { /* deja skeleton */ });
     return () => { active = false; };
   }, []);
 

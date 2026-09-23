@@ -63,7 +63,7 @@ export function MyReports() {
 
   /** Opciones por defecto para regenerar un reporte 3D si no se guardaron. */
   const map3dOpts = (r: Report): Map3dReportOptions =>
-    r.results.options ?? { epicentro: true, parametros: true, tiemposViaje: true, sismograma: false };
+    r.results.options ?? { epicentro: true, parametros: true, tiemposViaje: true, mapa: true, registro: true, sismograma: false };
 
   /** Genera el PDF del reporte (simulación RF-19 o Mapa 3D según su tipo). */
   const exportPDF = (report: Report) => {

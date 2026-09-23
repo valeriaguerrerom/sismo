@@ -221,22 +221,36 @@ export function Scene3D({
       (globe.material as THREE.MeshStandardMaterial).needsUpdate = true;
     });
     // Punto rojo en Nariño (centro del dominio: lat 1.5, lon -78.1) sobre la esfera.
-    // La textura earth_atmos mapea lon 0 en +Z; convertimos (lat,lon) a XYZ.
+    // Conversión (lat,lon) → XYZ para una SphereGeometry de Three.js con textura
+    // equirectangular estándar (lon 0 = meridiano central de la imagen):
+    //   x = -cos(lat)·cos(lon),  y = sin(lat),  z = cos(lat)·sin(lon)
     const narLat = (1.5 * Math.PI) / 180;
-    const narLon = (-78.1 * Math.PI) / 180;
+    // La textura equirectangular tiene el meridiano 0 desfasado π respecto a
+    // la convención de SphereGeometry; lo compensamos en la longitud del punto
+    // para que el marcador caiga realmente sobre Nariño.
+    const narLon = (-78.1 * Math.PI) / 180 + Math.PI;
     const rr = 1.33;
+    const markerDir = new THREE.Vector3(
+      -Math.cos(narLat) * Math.cos(narLon),
+      Math.sin(narLat),
+      Math.cos(narLat) * Math.sin(narLon),
+    );
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(0.07, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xff3333 }),
+      new THREE.MeshBasicMaterial({ color: 0xff3333, depthTest: false }),
     );
-    marker.position.set(
-      rr * Math.cos(narLat) * Math.sin(narLon),
-      rr * Math.sin(narLat),
-      rr * Math.cos(narLat) * Math.cos(narLon),
-    );
+    marker.renderOrder = 999; // siempre visible por encima del globo
+    marker.position.copy(markerDir).multiplyScalar(rr);
     globeGroup.add(marker);
-    // Rotar el grupo para que Nariño quede de frente a la cámara del mini globo.
-    globeGroup.rotation.y = -narLon;
+    // Rotar el grupo para que el marcador quede de frente a la cámara (+Z),
+    // así Nariño siempre mira al observador del mini globo. El ángulo del
+    // marcador en el plano XZ (medido desde +Z) es atan2(x, z); rotamos su
+    // negativo para llevarlo a +Z. Un pequeño tilt en X sube la latitud a la vista.
+    // Rotación que lleva el marcador (ya con la longitud corregida) al frente
+    // de la cámara del mini globo, para que Nariño mire al observador.
+    const globeBaseRotY = -Math.atan2(markerDir.x, markerDir.z);
+    globeGroup.rotation.y = globeBaseRotY;
+    globeGroup.rotation.x = narLat;
 
     // (Las aristas, estratos y etiquetas de profundidad las dibuja TerrainBlock.)
 
@@ -531,7 +545,11 @@ export function Scene3D({
       const gy = renderer.domElement.height - gsize - margin;
       renderer.setViewport(gx, gy, gsize, gsize);
       renderer.setScissor(gx, gy, gsize, gsize);
-      if (!globeUserRotating.current) globeGroup.rotation.y += 0.002; // giro lento
+      // Oscila suavemente alrededor de Nariño (±25°) en vez de dar la vuelta
+      // completa, para que el punto rojo siempre quede visible al frente.
+      if (!globeUserRotating.current) {
+        globeGroup.rotation.y = globeBaseRotY + Math.sin(performance.now() * 0.0002) * 0.44;
+      }
       renderer.render(globeScene, globeCam);
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, w, renderer.domElement.height);

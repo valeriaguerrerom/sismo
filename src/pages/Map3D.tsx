@@ -368,12 +368,30 @@ export function Map3D() {
       medium: { vp, vs, density },
       stations: travelTimes.map(t => ({
         code: t.code, name: t.name, approx: t.approx,
+        latitude: t.latitude, longitude: t.longitude,
         distancia_epicentral_km: t.distancia_epicentral_km,
         distancia_hipocentral_km: t.distancia_hipocentral_km,
         distancia_grados: t.distancia_grados,
         azimut: t.azimut, tP: t.tP, tS: t.tS, tS_menos_tP: t.tS_menos_tP,
       })),
       seismogram,
+      selectedStation,
+      // Trazas de todas las estaciones con señal (componente vertical) para el
+      // registro sísmico multi-estación. La distancia sirve para ordenarlas.
+      traces: travelTimes
+        .map(tt => {
+          const s = traces[tt.code];
+          if (!s) return null;
+          return {
+            code: tt.code,
+            dist: tt.distancia_epicentral_km,
+            t: s.t,
+            values: s.vertical,
+            tP: s.tP_detectado,
+            tS: s.tS_detectado,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
     };
   }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes]);
 
@@ -770,8 +788,10 @@ export function Map3D() {
                   {([
                     ['epicentro', 'Epicentro y fuente'],
                     ['parametros', 'Parámetros del medio (Vp, Vs, ρ)'],
+                    ['mapa', 'Mapa de estaciones (vista superior)'],
                     ['tiemposViaje', 'Tabla de tiempos de viaje por estación'],
-                    ['sismograma', `Sismograma de la estación${selectedStation ? ` (${selectedStation})` : ' seleccionada'}`],
+                    ['registro', 'Registro sísmico por estación'],
+                    ['sismograma', `Sismograma triaxial de la estación${selectedStation ? ` (${selectedStation})` : ' seleccionada'}`],
                   ] as [keyof Map3dReportOptions, string][]).map(([key, label]) => {
                     const disabled = key === 'sismograma' && (!selectedStation || !traces[selectedStation]);
                     return (
