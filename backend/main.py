@@ -35,6 +35,7 @@ from api.ray_path import router as ray_path_router
 from api.stats_home import router as stats_home_router
 from api.quakeml import router as quakeml_router
 from api.mseed_upload import router as mseed_upload_router
+from api.account import router as account_router
 
 load_dotenv()
 
@@ -115,6 +116,8 @@ app.include_router(stats_home_router)
 app.include_router(quakeml_router)
 # Carga de MiniSEED por investigadores
 app.include_router(mseed_upload_router)
+# Autogestión de la cuenta (eliminación por el propio usuario)
+app.include_router(account_router)
 
 
 # ─── Health ───

@@ -6,22 +6,39 @@
  * indicadores), RF-23 (reportes administrativos en Excel/PDF) y RF-25
  * (gestión de contenido educativo).
  */
-import { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, ChangeEvent } from 'react';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import {
   Users, Database, FileText, Settings, Trash2, Shield, BarChart3, Plus, Pencil, Upload,
-  BookOpen, Check, X, UserX, UserCheck, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle,
+  BookOpen, Check, X, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle,
+  MoreVertical, UserCheck, UserX, Download, ArrowRight, Mail,
 } from '../lib/icons';
 import type { SeismicEvent } from '../lib/types';
 import {
   AdminReport, AdminUser, DashboardStats, QuizRow, TimelineRow, WaveFactRow,
   bulkInsertEvents, createEvent, deleteEvent, deleteFactRow, deleteQuizRow, deleteReport, deleteTimelineRow,
   loadDashboardStats, loadEvents, loadFactRows, loadQuizRows, loadReports, loadTimelineRows, loadUsers,
-  saveFactRow, saveQuizRow, saveTimelineRow, setUserActive, setUserRole, updateEvent,
+  saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, setUserActive, updateEvent,
 } from '../lib/adminData';
+import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { importQuakeml, ImportResult } from '../lib/quakeml';
-import { exportAdminExcel, exportAdminPdf } from '../lib/adminExport';
+import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf } from '../lib/adminExport';
+
+/** Muestra un valor de texto en formato título, o "Sin dato" si está vacío. */
+function DisplayVal({ value, className = '' }: { value: string; className?: string }) {
+  const v = (value ?? '').trim();
+  if (!v) return <span className={`text-stone-300 ${className}`}>Sin dato</span>;
+  return <span className={className}>{titleCase(v)}</span>;
+}
+
+/** Fecha larga en español o "Sin dato". */
+function longDate(iso: string | null | undefined): string {
+  if (!iso) return 'Sin dato';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Sin dato';
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 type Tab = 'overview' | 'users' | 'events' | 'education' | 'reports';
 type EduTab = 'quiz' | 'facts' | 'timeline';
@@ -48,7 +65,60 @@ function Toast({ msg, type, onClose }: { msg: string; type: 'ok' | 'error'; onCl
 
 /* ─────────────────────────────── Overview ─────────────────────────────── */
 
-function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefresh: () => void }) {
+/** Barra horizontal simple de la caracterización. */
+function CharBars({ title, buckets, total }: { title: string; buckets: { label: string; count: number }[]; total: number }) {
+  const max = Math.max(1, ...buckets.map(b => b.count));
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+      <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">{title}</h3>
+      {buckets.length === 0 ? (
+        <p className="text-xs text-stone-400">Sin datos aún.</p>
+      ) : (
+        <ul className="space-y-2">
+          {buckets.map(b => {
+            const pct = Math.round((b.count / total) * 100);
+            const isEmpty = b.label === 'Sin dato';
+            return (
+              <li key={b.label}>
+                <div className="flex items-center justify-between text-xs mb-0.5">
+                  <span className={isEmpty ? 'text-stone-300' : 'text-[#1A1A2E]'}>{b.label}</span>
+                  <span className="text-stone-400">{b.count} · {pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, backgroundColor: isEmpty ? '#D6D3D1' : '#C4553A' }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Overview({ stats, users, onRefresh }: { stats: DashboardStats | null; users: AdminUser[]; onRefresh: () => void }) {
+  const chars = useMemo(() => characterize(users), [users]);
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onDoc = (e: MouseEvent) => { if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [exportOpen]);
+
+  const exportCsv = () => {
+    const csv = characterizationCsv(chars);
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `caracterizacion_usuarios_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!stats) return <div className="text-center py-12 text-stone-400">Cargando indicadores...</div>;
   const maxMonth = Math.max(1, ...stats.reportsPerMonth.map(m => m.count));
   const total = Math.max(1, stats.roles.admin + stats.roles.user);
@@ -61,13 +131,13 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Investigadores registrados', sub: `${stats.activeUsers} activos`, value: stats.users, color: '#C4553A', icon: <Users size={20} /> },
-          { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, color: '#D4A853', icon: <FileText size={20} /> },
-          { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, color: '#2D6A4F', icon: <Database size={20} /> },
-          { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} datos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, color: '#6B5B95', icon: <BookOpen size={20} /> },
+          { label: 'Investigadores registrados', sub: 'usuarios de la plataforma', value: stats.users, icon: <Users size={20} /> },
+          { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={20} /> },
+          { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={20} /> },
+          { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} datos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={20} /> },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-stone-200/60 p-5 card-hover">
-            <span style={{ color: s.color }}>{s.icon}</span>
+            <span className="text-stone-400">{s.icon}</span>
             <div className="text-3xl font-black text-[#1A1A2E] mt-2">{s.value}</div>
             <div className="text-xs font-semibold text-stone-500 mt-1">{s.label}</div>
             <div className="text-[11px] text-stone-400">{s.sub}</div>
@@ -78,7 +148,7 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Simulaciones por mes */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5 lg:col-span-1">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-4 flex items-center gap-1.5"><BarChart3 size={13} /> Simulaciones · últimos 6 meses</h3>
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-4 flex items-center gap-1.5"><BarChart3 size={14} className="text-stone-400" /> Simulaciones de los últimos 6 meses</h3>
           <svg viewBox="0 0 300 140" className="w-full h-36" role="img" aria-label="Simulaciones por mes">
             {stats.reportsPerMonth.map((m, i) => {
               const bw = 300 / stats.reportsPerMonth.length;
@@ -86,7 +156,7 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
               const x = i * bw + bw * 0.2;
               return (
                 <g key={m.label + i}>
-                  <rect x={x} y={110 - h} width={bw * 0.6} height={h} rx={4} fill="#D4A853" />
+                  <rect x={x} y={110 - h} width={bw * 0.6} height={h} rx={4} fill="#C4553A" />
                   <text x={x + bw * 0.3} y={104 - h} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1A1A2E">{m.count}</text>
                   <text x={x + bw * 0.3} y={128} textAnchor="middle" fontSize="10" fill="#78716C">{m.label}</text>
                 </g>
@@ -98,7 +168,7 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
 
         {/* Distribución de roles */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-4 flex items-center gap-1.5"><Shield size={13} /> Distribución de roles</h3>
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-4 flex items-center gap-1.5"><Shield size={14} className="text-stone-400" /> Distribución de roles</h3>
           <div className="flex items-center gap-5">
             <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
               <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E7E5E4" strokeWidth="4" />
@@ -107,16 +177,15 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#C4553A]" /> Administradores: <b>{stats.roles.admin}</b> ({adminPct}%)</div>
               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-stone-300" /> Investigadores: <b>{stats.roles.user}</b> ({100 - adminPct}%)</div>
-              <div className="text-xs text-stone-400">Cuentas inactivas: {stats.users - stats.activeUsers}</div>
             </div>
           </div>
         </div>
 
         {/* Últimos accesos */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3 flex items-center gap-1.5"><Clock size={13} /> Últimos accesos</h3>
+          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3 flex items-center gap-1.5"><Clock size={14} className="text-stone-400" /> Últimos accesos</h3>
           {stats.lastLogins.length === 0 ? (
-            <p className="text-xs text-stone-400">Aún no hay accesos registrados. Se registran al iniciar sesión (requiere la migración 20260911).</p>
+            <p className="text-xs text-stone-400">Aún no hay accesos registrados. Se registran al iniciar sesión.</p>
           ) : (
             <ul className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin pr-1">
               {stats.lastLogins.map((l, i) => (
@@ -129,16 +198,180 @@ function Overview({ stats, onRefresh }: { stats: DashboardStats | null; onRefres
           )}
         </div>
       </div>
+
+      {/* Caracterización de usuarios */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-[#1A1A2E]">Caracterización de usuarios</h2>
+          <div ref={exportRef} className="relative">
+            <button onClick={() => setExportOpen(o => !o)} className={`${btnGhost} text-[#2D6A4F] border-[#2D6A4F]/30`}><Download size={13} /> Exportar</button>
+            {exportOpen && (
+              <div className="absolute right-0 top-9 z-20 w-40 bg-white rounded-xl border border-stone-200 shadow-lg py-1 text-sm">
+                <button onClick={() => { setExportOpen(false); exportCsv(); }} className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50"><FileText size={14} className="text-stone-400" /> CSV</button>
+                <button onClick={() => { setExportOpen(false); exportCharacterizationExcel(chars); }} className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50"><FileSpreadsheet size={14} className="text-[#2D6A4F]" /> Excel</button>
+                <button onClick={() => { setExportOpen(false); exportCharacterizationPdf(chars); }} className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50"><FileDown size={14} className="text-[#C4553A]" /> PDF</button>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <CharBars title="Por ocupación" buckets={chars.ocupacion} total={chars.total} />
+          <CharBars title="Por institución (5 principales)" buckets={chars.institucion} total={chars.total} />
+          <CharBars title="Por área de interés" buckets={chars.area} total={chars.total} />
+          <CharBars title="Por ciudad" buckets={chars.ciudad} total={chars.total} />
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ─────────────────────────────── Users ─────────────────────────────── */
 
+/** Menú de tres puntos con las acciones de una fila de usuario. */
+function RowMenu({ u, adminCount, onAction }: {
+  u: AdminUser; adminCount: number;
+  onAction: (a: 'role' | 'active' | 'delete') => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const isAdmin = u.role === 'admin';
+  const soleAdmin = isAdmin && adminCount <= 1;
+
+  return (
+    <div ref={ref} className="relative flex justify-end">
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600" aria-label="Acciones" title="Acciones">
+        <MoreVertical size={16} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-8 z-20 w-56 bg-white rounded-xl border border-stone-200 shadow-lg py-1 text-sm" onClick={e => e.stopPropagation()}>
+          <button
+            disabled={soleAdmin}
+            onClick={() => { setOpen(false); onAction('role'); }}
+            title={soleAdmin ? 'No puedes quitar el rol al único administrador' : undefined}
+            className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Shield size={14} className="text-stone-400" /> {isAdmin ? 'Quitar administrador' : 'Hacer administrador'}
+          </button>
+          <button
+            onClick={() => { setOpen(false); onAction('active'); }}
+            className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50">
+            {u.active ? <><UserX size={14} className="text-stone-400" /> Desactivar cuenta</> : <><UserCheck size={14} className="text-stone-400" /> Activar cuenta</>}
+          </button>
+          <div className="my-1 border-t border-stone-100" />
+          <button
+            disabled={soleAdmin}
+            onClick={() => { setOpen(false); onAction('delete'); }}
+            title={soleAdmin ? 'No puedes eliminar al único administrador' : undefined}
+            className="w-full text-left px-3 py-2 flex items-center gap-2 text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Trash2 size={14} /> Eliminar cuenta
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Panel lateral con el perfil completo de un usuario. */
+function UserDrawer({ u, onClose }: { u: AdminUser; onClose: () => void }) {
+  const row = (label: string, value: string) => (
+    <div>
+      <div className="text-[11px] font-semibold text-stone-500">{label}</div>
+      <div className="text-sm mt-0.5 text-[#1A1A2E]"><DisplayVal value={value} /></div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-[#1A1A2E]/40" onClick={onClose}>
+      <div className="w-full max-w-md h-full bg-white shadow-xl overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-stone-200/60 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-base font-black flex-shrink-0" style={{ backgroundColor: '#1A1A2E', color: '#FAFAF8' }}>
+              {(u.full_name || u.email).slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-[#1A1A2E] truncate">{u.full_name || 'Sin nombre'}</div>
+              <div className="text-xs text-stone-400 flex items-center gap-1 truncate"><Mail size={11} /> {u.email}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.role === 'admin' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ROLE_LABELS[u.role]}</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-500'}`}>{u.active ? 'Activo' : 'Desactivado'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {row('Ocupación', u.occupation)}
+            {row('Área de interés', u.research_area)}
+            {row('Institución', u.institution)}
+            {row('Ciudad', u.city)}
+            {row('País', u.country)}
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-stone-500">¿Para qué usa la plataforma?</div>
+            <div className="text-sm mt-0.5 text-[#1A1A2E]"><DisplayVal value={u.usage_purpose} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-stone-100">
+            <div>
+              <div className="text-[11px] font-semibold text-stone-500">Último acceso</div>
+              <div className="text-sm mt-0.5 text-stone-600">{u.last_login ? fmtDate(u.last_login, true) : 'Sin dato'}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-stone-500">Autorización de datos</div>
+              <div className="text-sm mt-0.5 text-stone-600">{longDate(u.data_authorization_at)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UsersTab({ users, meId, onChange, notify }: {
   users: AdminUser[]; meId?: string; onChange: () => void; notify: (m: string, t?: 'ok' | 'error') => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [occFilter, setOccFilter] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [drawer, setDrawer] = useState<AdminUser | null>(null);
+  // Confirmaciones: rol y activar/desactivar usan un modal simple; eliminar exige escribir el correo.
+  const [confirm, setConfirm] = useState<{ u: AdminUser; kind: 'role' | 'active' } | null>(null);
+  const [delUser, setDelUser] = useState<AdminUser | null>(null);
+  const [delEmail, setDelEmail] = useState('');
+
+  const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
+  const occupations = useMemo(
+    () => Array.from(new Set(users.map(u => u.occupation).filter(Boolean))).sort(),
+    [users],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    // Rango de fechas de registro (created_at). 'hasta' incluye todo el día.
+    const fromTs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
+    const toTs = toDate ? new Date(`${toDate}T23:59:59`).getTime() : null;
+    return users.filter(u => {
+      if (roleFilter && u.role !== roleFilter) return false;
+      if (occFilter && u.occupation !== occFilter) return false;
+      if (fromTs != null || toTs != null) {
+        const t = u.created_at ? new Date(u.created_at).getTime() : NaN;
+        if (isNaN(t)) return false;
+        if (fromTs != null && t < fromTs) return false;
+        if (toTs != null && t > toTs) return false;
+      }
+      if (!q) return true;
+      return [u.full_name, u.email, u.institution].some(v => (v ?? '').toLowerCase().includes(q));
+    });
+  }, [users, search, roleFilter, occFilter, fromDate, toDate]);
 
   const run = async (id: string, fn: () => Promise<void>, ok: string) => {
     setBusy(id);
@@ -147,55 +380,152 @@ function UsersTab({ users, meId, onChange, notify }: {
     setBusy(null);
   };
 
+  const onAction = (u: AdminUser, a: 'role' | 'active' | 'delete') => {
+    if (a === 'delete') { setDelUser(u); setDelEmail(''); }
+    else setConfirm({ u, kind: a });
+  };
+
+  const doConfirm = () => {
+    if (!confirm) return;
+    const { u, kind } = confirm;
+    setConfirm(null);
+    if (kind === 'role') run(u.id, () => setUserRole(u.id, u.role === 'admin' ? 'user' : 'admin'), 'Rol actualizado');
+    else run(u.id, () => setUserActive(u.id, !u.active), u.active ? 'Cuenta desactivada' : 'Cuenta activada');
+  };
+
+  const doDelete = () => {
+    if (!delUser) return;
+    const u = delUser;
+    setDelUser(null);
+    run(u.id, () => deleteUser(u.id), 'Cuenta eliminada');
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-stone-200/60 overflow-x-auto">
-      <table className="w-full text-sm min-w-[980px]">
-        <thead>
-          <tr className="bg-stone-50 border-b border-stone-200/60">
-            {['Investigador', 'Email', 'Institución · Ocupación', 'Área · Ciudad', 'Rol', 'Estado', 'Último acceso', 'Acciones'].map(h => (
-              <th key={h} className="text-left px-4 py-3 text-stone-500 font-semibold">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.id} className={`border-b border-stone-100 ${!u.active ? 'opacity-60' : ''}`}>
-              <td className="px-4 py-3 font-medium text-[#1A1A2E]">{u.full_name || '—'}{u.id === meId && <span className="ml-1 text-[10px] text-stone-400">(tú)</span>}</td>
-              <td className="px-4 py-3 text-stone-500">{u.email}</td>
-              <td className="px-4 py-3 text-stone-500">
-                <div>{u.institution || '—'}</div>
-                <div className="text-[11px] text-stone-400">{u.occupation || '—'}</div>
-              </td>
-              <td className="px-4 py-3 text-stone-500">
-                <div className="max-w-[180px] truncate" title={u.research_area}>{u.research_area || '—'}</div>
-                <div className="text-[11px] text-stone-400">{[u.city, u.country].filter(Boolean).join(', ') || '—'}</div>
-              </td>
-              <td className="px-4 py-3">
-                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.role === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ROLE_LABELS[u.role]}</span>
-              </td>
-              <td className="px-4 py-3">
-                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-500'}`}>{u.active ? 'Activa' : 'Inactiva'}</span>
-              </td>
-              <td className="px-4 py-3 text-stone-400 text-xs">{fmtDate(u.last_login, true)}</td>
-              <td className="px-4 py-3">
-                {u.id !== meId && (
-                  <div className="flex gap-3">
-                    <button disabled={busy === u.id} onClick={() => run(u.id, () => setUserRole(u.id, u.role === 'admin' ? 'user' : 'admin'), 'Rol actualizado')}
-                      className="text-xs text-[#C4553A] font-semibold flex items-center gap-1 disabled:opacity-50">
-                      <Shield size={12} /> {u.role === 'admin' ? 'Volver investigador' : 'Hacer administrador'}
-                    </button>
-                    <button disabled={busy === u.id} onClick={() => run(u.id, () => setUserActive(u.id, !u.active), u.active ? 'Cuenta desactivada' : 'Cuenta activada')}
-                      className={`text-xs font-semibold flex items-center gap-1 disabled:opacity-50 ${u.active ? 'text-red-500' : 'text-green-600'}`}>
-                      {u.active ? <><UserX size={12} /> Desactivar</> : <><UserCheck size={12} /> Activar</>}
-                    </button>
-                  </div>
-                )}
-              </td>
+    <div className="space-y-4">
+      {/* Buscador + filtros */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre, correo o institución…" className={`${inputCls} sm:max-w-xs`} />
+        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className={`${inputCls} sm:w-40`}>
+          <option value="">Todos los roles</option>
+          <option value="admin">Administrador</option>
+          <option value="user">Investigador</option>
+        </select>
+        <select value={occFilter} onChange={e => setOccFilter(e.target.value)} className={`${inputCls} sm:w-52`}>
+          <option value="">Todas las ocupaciones</option>
+          {occupations.map(o => <option key={o} value={o}>{titleCase(o)}</option>)}
+        </select>
+        <div className="flex items-center gap-1.5 text-xs text-stone-500">
+          <span>Registro:</span>
+          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} title="Desde" className={`${inputCls} w-[9.5rem]`} />
+          <span>a</span>
+          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} title="Hasta" className={`${inputCls} w-[9.5rem]`} />
+        </div>
+        {(search || roleFilter || occFilter || fromDate || toDate) && (
+          <button onClick={() => { setSearch(''); setRoleFilter(''); setOccFilter(''); setFromDate(''); setToDate(''); }} className={btnGhost}>Limpiar</button>
+        )}
+        <div className="flex-1" />
+        <span className="text-xs text-stone-400">{filtered.length} de {users.length}</span>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200/60 overflow-hidden">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-[24%]" /><col className="w-[22%]" /><col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[6%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-stone-50 border-b border-stone-200/60 text-left text-stone-500 font-semibold">
+              <th className="px-4 py-3">Usuario</th>
+              <th className="px-4 py-3">Perfil</th>
+              <th className="px-4 py-3">Institución y ubicación</th>
+              <th className="px-4 py-3">Rol y estado</th>
+              <th className="px-4 py-3">Último acceso</th>
+              <th className="px-4 py-3"></th>
             </tr>
-          ))}
-          {users.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-stone-400">No hay investigadores registrados</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filtered.map(u => (
+              <tr key={u.id} className="border-b border-stone-100 hover:bg-stone-50/60 cursor-pointer align-top" onClick={() => setDrawer(u)}>
+                <td className="px-4 py-3">
+                  <div className="font-medium text-[#1A1A2E] truncate">{u.full_name ? titleCase(u.full_name) : <span className="text-stone-300">Sin nombre</span>}{u.id === meId && <span className="ml-1 text-[10px] text-stone-400">(tú)</span>}</div>
+                  <div className="text-[11px] text-stone-400 truncate">{u.email}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-stone-600 truncate"><DisplayVal value={u.occupation} /></div>
+                  <div className="text-[11px] text-stone-400 truncate"><DisplayVal value={u.research_area} /></div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-stone-600 truncate"><DisplayVal value={u.institution} /></div>
+                  <div className="text-[11px] text-stone-400 truncate">
+                    {u.city || u.country ? titleCase([u.city, u.country].filter(Boolean).join(', ')) : <span className="text-stone-300">Sin dato</span>}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${u.role === 'admin' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ROLE_LABELS[u.role]}</span>
+                  <div className={`text-[11px] mt-1 ${u.active ? 'text-green-600' : 'text-red-500'}`}>{u.active ? 'Activo' : 'Desactivado'}</div>
+                </td>
+                <td className="px-4 py-3 text-stone-400 text-xs">{u.last_login ? fmtDate(u.last_login, true) : <span className="text-stone-300">Sin dato</span>}</td>
+                <td className="px-4 py-3">
+                  {u.id !== meId
+                    ? <div style={{ opacity: busy === u.id ? 0.4 : 1 }}><RowMenu u={u} adminCount={adminCount} onAction={a => onAction(u, a)} /></div>
+                    : <span className="block text-right text-[10px] text-stone-300">—</span>}
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-stone-400">{users.length === 0 ? 'No hay investigadores registrados' : 'Sin resultados para la búsqueda.'}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {drawer && <UserDrawer u={drawer} onClose={() => setDrawer(null)} />}
+
+      {/* Confirmación de rol / activar-desactivar */}
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setConfirm(null)}>
+          <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-black text-[#1A1A2E]">
+              {confirm.kind === 'role'
+                ? (confirm.u.role === 'admin' ? 'Quitar administrador' : 'Hacer administrador')
+                : (confirm.u.active ? 'Desactivar cuenta' : 'Activar cuenta')}
+            </h3>
+            <p className="text-sm mt-2 text-stone-500 leading-relaxed">
+              {confirm.kind === 'role'
+                ? (confirm.u.role === 'admin'
+                    ? <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> pasará a ser Investigador y perderá el acceso al panel.</>
+                    : <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> tendrá acceso completo al panel de administración.</>)
+                : (confirm.u.active
+                    ? <>La cuenta de <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> quedará desactivada y no podrá iniciar sesión.</>
+                    : <>La cuenta de <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> podrá volver a iniciar sesión.</>)}
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={doConfirm} className="flex-1 bg-[#C4553A] text-white py-2.5 rounded-xl font-bold text-sm btn-hover">Confirmar</button>
+              <button onClick={() => setConfirm(null)} className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmación de eliminación (escribir correo) */}
+      {delUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setDelUser(null)}>
+          <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center mb-3"><AlertTriangle size={22} className="text-red-500" /></div>
+            <h3 className="text-lg font-black text-[#1A1A2E]">Eliminar cuenta</h3>
+            <p className="text-sm mt-2 text-stone-500 leading-relaxed">
+              Se eliminarán de forma <b className="text-[#1A1A2E]">permanente</b> el perfil y los reportes de <b className="text-[#1A1A2E]">{delUser.full_name || delUser.email}</b>.
+            </p>
+            <p className="text-sm mt-3 text-stone-500">Para confirmar, escribe su correo <b className="text-[#1A1A2E]">{delUser.email}</b>:</p>
+            <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder={delUser.email} autoComplete="off"
+              className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50" />
+            <div className="flex gap-2 mt-4">
+              <button onClick={doDelete} disabled={delEmail.trim().toLowerCase() !== delUser.email.toLowerCase()}
+                className="flex-1 flex items-center justify-center gap-2 bg-red-500 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                Eliminar definitivamente <ArrowRight size={15} />
+              </button>
+              <button onClick={() => setDelUser(null)} className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -543,7 +873,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
             <div key={t.id} className={`p-4 flex items-start gap-3 ${!t.active ? 'opacity-50' : ''}`}>
               <span className="font-mono font-bold text-[#1A1A2E] w-14 flex-shrink-0">{t.year}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-[#1A1A2E]">{t.title} {t.magnitude && <span className="text-xs text-stone-400">Mw {t.magnitude}</span>}</div>
+                <div className="text-sm font-semibold text-[#1A1A2E]">{t.title} {t.magnitude && <span className="text-xs text-stone-400">ML {t.magnitude}</span>}</div>
                 <div className="text-xs text-stone-500 mt-0.5 line-clamp-2">{t.description}</div>
               </div>
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg flex-shrink-0 ${t.event_type === 'volcanic' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{t.event_type === 'volcanic' ? 'Volc.' : 'Tect.'}</span>
@@ -612,7 +942,7 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
         <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200/60">
-              {['Título', 'Usuario', 'Fuente', 'Mw', 'Prof.', 'Fecha', 'Acciones'].map(h => <th key={h} className="text-left px-4 py-3 text-stone-500 font-semibold">{h}</th>)}
+              {['Título', 'Usuario', 'Fuente', 'ML', 'Prof.', 'Fecha', 'Acciones'].map(h => <th key={h} className="text-left px-4 py-3 text-stone-500 font-semibold">{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -690,7 +1020,7 @@ export function AdminDashboard() {
             <Settings size={20} className="text-[#C4553A]" />
             Panel de Administración
           </h1>
-          <p className="text-stone-400 text-xs mt-0.5">Gestiona usuarios, eventos sísmicos, contenido educativo y reportes · {user?.full_name}</p>
+          <p className="text-stone-400 text-xs mt-0.5">Gestiona usuarios, eventos sísmicos, contenido educativo y reportes</p>
         </div>
       </div>
 
@@ -705,7 +1035,7 @@ export function AdminDashboard() {
           ))}
         </div>
 
-        {tab === 'overview' && <Overview stats={stats} onRefresh={reloadStats} />}
+        {tab === 'overview' && <Overview stats={stats} users={users} onRefresh={reloadStats} />}
         {tab === 'users' && <UsersTab users={users} meId={user?.id} onChange={() => { reloadUsers(); reloadStats(); }} notify={notify} />}
         {tab === 'events' && <EventsTab notify={notify} />}
         {tab === 'education' && <EducationTab notify={notify} />}

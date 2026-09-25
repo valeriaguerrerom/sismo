@@ -8,6 +8,7 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import type { AdminReport, AdminUser, DashboardStats } from './adminData';
+import type { Characterization } from './adminChars';
 
 export interface AdminReportInput {
   stats: DashboardStats;
@@ -196,4 +197,97 @@ export function exportAdminPdf(input: AdminReportInput): void {
 
   const stamp = new Date().toISOString().slice(0, 10);
   doc.save(`sismonarino_reporte_admin_${stamp}.pdf`);
+}
+
+// ─── Caracterización de usuarios (exportable en Excel y PDF) ───
+
+/** Secciones de la caracterización con su título para exportar. */
+function charSections(c: Characterization): { title: string; buckets: { label: string; count: number }[] }[] {
+  return [
+    { title: 'Por ocupación', buckets: c.ocupacion },
+    { title: 'Por institución', buckets: c.institucion },
+    { title: 'Por área de interés', buckets: c.area },
+    { title: 'Por ciudad', buckets: c.ciudad },
+  ];
+}
+
+/** Descarga la caracterización de usuarios como .xlsx (una hoja por dimensión). */
+export function exportCharacterizationExcel(c: Characterization): void {
+  const wb = XLSX.utils.book_new();
+  const pct = (n: number) => (c.total ? Math.round((n / c.total) * 100) : 0);
+
+  const resumen: (string | number)[][] = [
+    ['SismoNariño — Caracterización de usuarios'],
+    ['Generado', new Date().toLocaleString('es-CO')],
+    ['Total de usuarios', c.total],
+    [],
+    ['Dimensión', 'Categoría', 'Usuarios', '% del total'],
+  ];
+  for (const s of charSections(c)) {
+    for (const b of s.buckets) resumen.push([s.title.replace('Por ', ''), b.label, b.count, `${pct(b.count)}%`]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Caracterización');
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `sismonarino_caracterizacion_${stamp}.xlsx`);
+}
+
+/** Descarga la caracterización de usuarios como PDF con barras simples. */
+export function exportCharacterizationPdf(c: Characterization): void {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 15;
+  const W = 210 - M * 2;
+  let y = M;
+  const pct = (n: number) => (c.total ? Math.round((n / c.total) * 100) : 0);
+
+  doc.setFillColor(196, 85, 58);
+  doc.rect(0, 0, 210, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.text('SismoNariño — Caracterización de usuarios', M, 10);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Total: ${c.total} usuarios  ·  Generado: ${new Date().toLocaleString('es-CO')}`, M, 16);
+  y = 30;
+
+  for (const s of charSections(c)) {
+    if (y > 250) { doc.addPage(); y = M; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(45, 106, 79);
+    doc.text(s.title.toUpperCase(), M, y);
+    y += 1.5;
+    doc.setDrawColor(45, 106, 79);
+    doc.line(M, y, M + W, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(26, 26, 46);
+
+    const max = Math.max(1, ...s.buckets.map(b => b.count));
+    const barMaxW = 70;
+    for (const b of s.buckets) {
+      if (y > 282) { doc.addPage(); y = M; }
+      doc.text(b.label.length > 34 ? b.label.slice(0, 33) + '…' : b.label, M, y);
+      const bw = (b.count / max) * barMaxW;
+      doc.setFillColor(b.label === 'Sin dato' ? 214 : 196, b.label === 'Sin dato' ? 211 : 85, b.label === 'Sin dato' ? 209 : 58);
+      doc.rect(M + 90, y - 3, bw, 3.5, 'F');
+      doc.text(`${b.count} · ${pct(b.count)}%`, M + 90 + barMaxW + 4, y);
+      y += 6;
+    }
+    y += 4;
+  }
+
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFontSize(7);
+    doc.setTextColor(120, 113, 108);
+    doc.text('SismoNariño · Caracterización de usuarios · Universidad Mariana (2026)', M, 292);
+    doc.text(`Página ${p} de ${pages}`, 210 - M, 292, { align: 'right' });
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  doc.save(`sismonarino_caracterizacion_${stamp}.pdf`);
 }

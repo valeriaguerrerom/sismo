@@ -30,16 +30,22 @@ class HomeStats(BaseModel):
         anio_max: Año del evento más reciente.
         anios_registro: Cantidad de años cubiertos (anio_max - anio_min + 1).
         magnitud_maxima: Mayor magnitud observada en los datos (o None si ninguno la trae).
+        magnitud_minima: Menor magnitud observada (para la escala del mini gráfico).
         eventos_cm: Conteo de eventos de la red CM (tectónicos).
         eventos_galeras: Conteo de eventos del Volcán Galeras (volcánicos).
+        anio_cm_min: Año más antiguo de la red CM (inicio del tramo reciente).
+        anio_cm_max: Año más reciente de la red CM.
     """
     total_eventos: int
     anio_min: int | None
     anio_max: int | None
     anios_registro: int | None
     magnitud_maxima: float | None
+    magnitud_minima: float | None
     eventos_cm: int
     eventos_galeras: int
+    anio_cm_min: int | None
+    anio_cm_max: int | None
 
 
 def _load_index(path: Path) -> list[dict]:
@@ -80,6 +86,9 @@ def _stats_from_supabase() -> HomeStats | None:
             return None
         years = [int(r["event_date"][:4]) for r in rows
                  if r.get("event_date") and str(r["event_date"])[:4].isdigit()]
+        cm_years = [int(r["event_date"][:4]) for r in rows
+                    if r.get("event_type") == "tectonic"
+                    and r.get("event_date") and str(r["event_date"])[:4].isdigit()]
         mags = [float(r["magnitude"]) for r in rows if r.get("magnitude") is not None]
         anio_min = min(years) if years else None
         anio_max = max(years) if years else None
@@ -89,8 +98,11 @@ def _stats_from_supabase() -> HomeStats | None:
             anio_max=anio_max,
             anios_registro=(anio_max - anio_min + 1) if (anio_min and anio_max) else None,
             magnitud_maxima=round(max(mags), 1) if mags else None,
+            magnitud_minima=round(min(mags), 1) if mags else None,
             eventos_cm=sum(1 for r in rows if r.get("event_type") == "tectonic"),
             eventos_galeras=sum(1 for r in rows if r.get("event_type") == "volcanic"),
+            anio_cm_min=min(cm_years) if cm_years else None,
+            anio_cm_max=max(cm_years) if cm_years else None,
         )
     except Exception as e:
         print(f"[stats_home] Supabase falló, usando fallback JSON: {e}")
@@ -103,6 +115,7 @@ def _stats_from_json() -> HomeStats:
     galeras = _load_index(PUBLIC_DATA / "galeras" / "index.json")
     all_events = cm + galeras
     years = [y for y in (_year_of(e) for e in all_events) if y is not None]
+    cm_years = [y for y in (_year_of(e) for e in cm) if y is not None]
     mags = [float(e["magnitude"]) for e in all_events
             if isinstance(e.get("magnitude"), (int, float))]
     anio_min = min(years) if years else None
@@ -113,8 +126,11 @@ def _stats_from_json() -> HomeStats:
         anio_max=anio_max,
         anios_registro=(anio_max - anio_min + 1) if (anio_min and anio_max) else None,
         magnitud_maxima=round(max(mags), 1) if mags else None,
+        magnitud_minima=round(min(mags), 1) if mags else None,
         eventos_cm=len(cm),
         eventos_galeras=len(galeras),
+        anio_cm_min=min(cm_years) if cm_years else None,
+        anio_cm_max=max(cm_years) if cm_years else None,
     )
 
 

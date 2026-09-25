@@ -28,6 +28,7 @@ export interface AdminUser {
   active: boolean;
   created_at: string;
   last_login: string | null;
+  data_authorization_at: string | null;
 }
 
 export interface AdminReport {
@@ -166,6 +167,7 @@ export async function loadUsers(): Promise<AdminUser[]> {
     institution: d.institution ?? '', occupation: d.occupation ?? '', research_area: d.research_area ?? '',
     city: d.city ?? '', country: d.country ?? '', usage_purpose: d.usage_purpose ?? '',
     active: d.active ?? true, created_at: d.created_at, last_login: d.last_login ?? null,
+    data_authorization_at: d.data_authorization_at ?? null,
   }));
 }
 
@@ -174,9 +176,35 @@ export async function setUserRole(id: string, role: 'user' | 'admin'): Promise<v
   fail(error);
 }
 
+/** Activa o desactiva una cuenta (RF-05). Una cuenta inactiva no puede entrar. */
 export async function setUserActive(id: string, active: boolean): Promise<void> {
   const { error } = await ensure().from('profiles').update({ active }).eq('id', id);
   fail(error);
+}
+
+/**
+ * Elimina la cuenta de un usuario a través del backend seguro (el mismo
+ * mecanismo que la eliminación desde el perfil): verifica el JWT del admin y
+ * borra con la clave de servicio. Bloquea eliminar al único administrador.
+ */
+export async function deleteUser(id: string): Promise<void> {
+  const sb = ensure();
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('No hay una sesión activa. Vuelve a iniciar sesión.');
+
+  const base = import.meta.env.VITE_API_URL || '';
+  const res = await fetch(`${base}/api/admin/users/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.ok) return;
+  let detail = 'No se pudo eliminar la cuenta.';
+  try {
+    const body = await res.json();
+    if (body?.detail) detail = String(body.detail);
+  } catch { /* sin cuerpo JSON */ }
+  throw new Error(detail);
 }
 
 // ─── Eventos sísmicos (RF-15) ───
