@@ -5,8 +5,9 @@
 # En local: docker build --build-arg VITE_SUPABASE_URL=... etc.  y  docker run -p 8080:80
 
 # ── Etapa 1: build ──
-# node:20 (Debian/glibc). Se evita Alpine/musl, donde pnpm crashea al iniciar.
-FROM node:20 AS build
+# node:22 (Debian/glibc). pnpm 11 requiere Node >= 22.13 (usa node:sqlite);
+# con Node 20 pnpm crashea con ERR_UNKNOWN_BUILTIN_MODULE.
+FROM node:22 AS build
 WORKDIR /app
 
 ARG VITE_SUPABASE_URL
@@ -24,9 +25,7 @@ ENV CI=true \
 RUN corepack enable && corepack prepare pnpm@11.20.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# --reporter=append-only + --loglevel=debug hacen visible el error real de pnpm
-# en los logs de build (Railway trunca la salida por defecto).
-RUN pnpm --version && pnpm install --frozen-lockfile --config.strictDepBuilds=false --reporter=append-only
+RUN pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
 COPY . .
 RUN pnpm run build
