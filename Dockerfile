@@ -15,10 +15,20 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_API_URL=$VITE_API_URL
 
-# El proyecto usa pnpm (pnpm-lock.yaml). Se habilita vía corepack con versión fija.
-RUN corepack enable && corepack prepare pnpm@11.20.0 --activate
+# El proyecto usa pnpm (pnpm-lock.yaml). Se instala con npm para evitar la
+# verificación de firma de corepack, que falla de forma intermitente en Alpine.
+RUN npm install -g pnpm@11.20.0
+
+# pnpm 11 convierte "Ignored build scripts" en error fatal (ERR_PNPM_IGNORED_BUILDS)
+# en instalaciones limpias como la de Docker. Se desactiva strictDepBuilds para
+# que vuelva a ser una advertencia y no aborte el build. CI=true evita el prompt
+# interactivo de aprobación de builds. Los scripts que se saltan (esbuild,
+# core-js) no hacen falta para 'vite build'.
+ENV CI=true \
+    PNPM_CONFIG_STRICT_DEP_BUILDS=false
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
 COPY . .
 RUN pnpm run build
