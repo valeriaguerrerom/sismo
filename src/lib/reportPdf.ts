@@ -10,6 +10,7 @@
 import { jsPDF } from 'jspdf';
 import type { SimulationParams, WaveData } from './types';
 import { interpretSimulation } from './interpretation';
+import { LOGO_MARK_DATA_URL } from './logoDataUrl';
 
 /** Métricas persistidas de una simulación en `simulation_reports.results`. */
 export interface SavedResults {
@@ -23,6 +24,14 @@ export interface SavedResults {
   gridInfo?: { nx: number; nz: number; totalSteps: number; dtAdjusted?: boolean; dxAdjusted?: boolean };
   /** Series submuestreadas (≤ 600 puntos) para reconstruir las gráficas. */
   waveData?: WaveData;
+  /**
+   * true cuando `waveData` es un REGISTRO REAL (SGC/OVSP) cargado desde el
+   * Explorador, no el pseudo-sismograma simulado. En ese caso el PDF dibuja la
+   * señal real (mismos ejes que la pantalla) y no las llegadas P/S teóricas.
+   */
+  isRealRecord?: boolean;
+  /** Etiqueta del registro real (p. ej. "CM 2025-04-25 M6.3 — Est. BBAC"). */
+  realLabel?: string;
 }
 
 /** Datos de entrada para el reporte. */
@@ -146,15 +155,23 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   let y = MARGIN;
 
   // ── Encabezado ──
-  doc.setFillColor(...COLORS.primary);
+  doc.setFillColor(...COLORS.text);
   doc.rect(0, 0, PAGE_W, 22, 'F');
+  // Isotipo de la marca a la derecha, sobre un chip claro para que el pin y el
+  // volcán (tinta/terracota) contrasten con la banda oscura.
+  try {
+    const ls = 15, lx = PAGE_W - MARGIN - ls, ly = 3.5;
+    doc.setFillColor(250, 246, 242); // crema
+    doc.roundedRect(lx - 1.5, ly - 1.5, ls + 3, ls + 3, 2.5, 2.5, 'F');
+    doc.addImage(LOGO_MARK_DATA_URL, 'PNG', lx, ly, ls, ls);
+  } catch { /* si el visor no soporta la imagen, el encabezado sigue con texto */ }
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('SismoNariño — Reporte de Simulación', MARGIN, 10);
+  doc.text('SismoNariño, Reporte de Simulación', MARGIN, 10);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('Simulador Triaxial de Pseudo-Sismogramas · Universidad Mariana · Nariño, Colombia', MARGIN, 16);
+  doc.text('Simulador Triaxial de Pseudo-Sismogramas, Universidad Mariana, Nariño, Colombia', MARGIN, 16);
   y = 30;
 
   doc.setTextColor(...COLORS.text);
@@ -232,7 +249,16 @@ export function buildReportPdf(input: ReportInput): jsPDF {
 
   // ── Sismogramas ──
   if (results.waveData && results.waveData.time.length > 1) {
-    section('Sismogramas triaxiales');
+    const real = results.isRealRecord === true;
+    // Con registro real, el reporte muestra la MISMA señal que la pantalla y no
+    // las llegadas P/S teóricas del FDM (el registro real no las trae).
+    section(real ? 'Sismograma triaxial (registro real)' : 'Sismogramas triaxiales');
+    if (real && results.realLabel) {
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(results.realLabel, MARGIN, y);
+      y += 5;
+    }
     const wd = results.waveData;
     const traceH = 24;
     const gap = 7;
@@ -243,12 +269,19 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     ];
     for (const [vals, color, label] of traces) {
       if (y + traceH + gap > 285) { doc.addPage(); y = MARGIN; }
-      drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label, results.pArrival, results.sArrival);
+      // En registro real se omiten los marcadores P/S (undefined).
+      drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label,
+        real ? undefined : results.pArrival,
+        real ? undefined : results.sArrival);
       y += traceH + gap;
     }
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.muted);
-    doc.text('Líneas punteadas: arribo P (verde) y S (terracota). Amplitud normalizada por traza, unidades arbitrarias.', MARGIN, y);
+    doc.text(
+      real
+        ? 'Registro real de la red del SGC/OVSP, señal decimada. Amplitud normalizada por traza.'
+        : 'Líneas punteadas: arribo P (verde) y S (terracota). Amplitud normalizada por traza, unidades arbitrarias.',
+      MARGIN, y);
     y += 7;
   }
 

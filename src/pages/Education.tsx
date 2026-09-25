@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BookOpen, Waves, Zap, Award,
   CheckCircle, XCircle, RotateCcw, Layers, ArrowRight, Clock,
-  Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library
+  Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library, HelpCircle
 } from '../lib/icons';
 import { loadQuizQuestions, loadWaveFacts, loadTimelineEvents, QuizQuestion, TimelineEvent } from '../lib/educationData';
 import { FdmMethodology } from '../components/education/FdmMethodology';
 import { Glossary } from '../components/education/Glossary';
 import { References } from '../components/education/References';
+import { Tooltip } from '../components/ui/Tooltip';
+import { useAuth } from '../lib/auth';
+import { startTour } from '../tours/useTour';
+import { buildEducacionSteps } from '../tours/educacion';
 
 /* ─── Animated Wave SVG ─── */
 function AnimatedWave({ type, color, playing }: { type: string; color: string; playing: boolean }) {
@@ -549,7 +553,7 @@ function HistoricalTimeline() {
           <span className="text-xs font-bold" style={{ color: ev.event_type === 'volcanic' ? '#C4553A' : '#2D6A4F' }}>
             {ev.event_type === 'volcanic' ? '🌋 Evento Volcánico' : '⚡ Evento Tectónico'}
           </span>
-          {ev.magnitude !== '—' && <span className="text-xs text-stone-400">· Mw {ev.magnitude}</span>}
+          {ev.magnitude !== '—' && <span className="text-xs text-stone-400">· ML {ev.magnitude}</span>}
         </div>
         <h4 className="text-2xl font-black text-[#1A1A2E] mb-2">{ev.title}</h4>
         <p className="text-stone-600 text-sm leading-relaxed">{ev.description}</p>
@@ -560,7 +564,26 @@ function HistoricalTimeline() {
 
 /* ─── Main Education Page ─── */
 export function Education() {
+  const { user, markTourSeen } = useAuth();
   const [activeSection, setActiveSection] = useState<string>('waves');
+
+  // ── Tour guiado (Driver.js) ──
+  const tourRef = useRef(false); // evita relanzar el auto-tour
+  const launchTour = useCallback(() => {
+    // El tour puede cambiar de sección para mostrar el contenido de cada paso.
+    startTour(buildEducacionSteps({ openSection: setActiveSection }), {
+      onDone: () => { markTourSeen('educacion'); setActiveSection('waves'); },
+    });
+  }, [markTourSeen]);
+
+  // Lanza el tour la primera vez que el usuario entra al módulo.
+  useEffect(() => {
+    if (tourRef.current || !user) return;
+    if (user.tours_vistos?.educacion) return;
+    tourRef.current = true;
+    const id = requestAnimationFrame(() => setTimeout(launchTour, 500));
+    return () => cancelAnimationFrame(id);
+  }, [user, launchTour]);
 
   const sections = [
     { id: 'waves', label: 'Tipos de Ondas', icon: <Waves size={16} />, color: '#2D6A4F' },
@@ -580,16 +603,28 @@ export function Education() {
           <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
             <BookOpen size={20} className="text-[#C4553A]" />
             Centro de Aprendizaje Sísmico
+            {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+            <Tooltip content="Ver guía">
+              <button
+                type="button"
+                onClick={launchTour}
+                aria-label="Ver guía"
+                className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.educacion ? 'help-pulse' : ''}`}
+              >
+                <HelpCircle size={14} />
+              </button>
+            </Tooltip>
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">Explora, interactúa y aprende sobre sismología, volcanes y la geología de Nariño</p>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div data-tour="edu-tabs" className="flex flex-wrap gap-2 mb-6">
           {sections.map(s => (
             <button
               key={s.id}
+              data-tour={`edu-tab-${s.id}`}
               onClick={() => setActiveSection(s.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
                 activeSection === s.id
@@ -604,7 +639,7 @@ export function Education() {
           ))}
         </div>
 
-        <div key={activeSection} className="animate-fade-in-up">
+        <div data-tour="edu-contenido" key={activeSection} className="animate-fade-in-up">
           {activeSection === 'waves' && (
             <div>
               <div className="mb-4">

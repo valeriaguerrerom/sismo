@@ -75,12 +75,18 @@ export interface Map3dReportData {
   traces?: Map3dTrace[];
   /** Estación seleccionada, para resaltarla en mapa y registro. */
   selectedStation?: string | null;
+  /** Captura PNG (data URL) de la escena 3D, tomada al generar el reporte. */
+  sceneImage?: string | null;
+  /** Silueta del departamento de Nariño como anillo [lon, lat][] (opcional). */
+  outline?: [number, number][] | null;
 }
 
 /** Qué secciones incluir en el reporte. */
 export interface Map3dReportOptions {
   epicentro: boolean;
   parametros: boolean;
+  /** Captura de la vista 3D (bloque de terreno con ondas). */
+  vista3d: boolean;
   tiemposViaje: boolean;
   /** Mini-mapa de vista superior con estaciones y epicentro. */
   mapa: boolean;
@@ -93,6 +99,7 @@ export interface Map3dReportOptions {
 export const DEFAULT_MAP3D_OPTIONS: Map3dReportOptions = {
   epicentro: true,
   parametros: true,
+  vista3d: true,
   tiemposViaje: true,
   mapa: true,
   registro: true,
@@ -211,6 +218,33 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     ]);
   }
 
+  // ── Captura de la vista 3D (imagen del bloque de terreno con ondas) ──
+  if (opts.vista3d && data.sceneImage) {
+    section('Vista 3D de la propagación');
+    // Relación de aspecto de la escena (aprox 16:10); si la imagen es más alta,
+    // se limita por altura. Encaja dentro del ancho de contenido.
+    let imgW = CONTENT_W;
+    let imgH = imgW * 0.6;
+    const maxH = 105;
+    if (imgH > maxH) { imgH = maxH; imgW = imgH / 0.6; }
+    if (y + imgH + 8 > 285) { doc.addPage(); y = MARGIN; }
+    const imgX = MARGIN + (CONTENT_W - imgW) / 2;
+    // Marco sutil
+    doc.setDrawColor(...COLORS.line); doc.setLineWidth(0.3);
+    doc.rect(imgX, y, imgW, imgH);
+    try {
+      doc.addImage(data.sceneImage, 'PNG', imgX, y, imgW, imgH, undefined, 'FAST');
+    } catch (e) {
+      doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
+      doc.text('No se pudo insertar la captura de la escena 3D.', imgX + 3, y + 8);
+      console.warn('[map3dReport] addImage falló:', e);
+    }
+    y += imgH + 4;
+    doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
+    doc.text('Captura de la escena 3D en el momento de generar el reporte. Ondas P (rojo) y S (cian) sobre el relieve de Nariño.', MARGIN, y);
+    y += 6;
+  }
+
   // ── Mini-mapa de vista superior (estaciones + epicentro por lat/lon) ──
   const stationsWithCoords = data.stations.filter(s => s.latitude != null && s.longitude != null);
   if (opts.mapa && stationsWithCoords.length > 0) {
@@ -219,40 +253,79 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     if (y + mapH + 10 > 285) { doc.addPage(); y = MARGIN; }
     const mx = MARGIN, my = y, mw = CONTENT_W, mh = mapH;
 
-    // Límites geográficos: estaciones + epicentro, con margen.
-    const lats = [...stationsWithCoords.map(s => s.latitude!), data.epicenter.lat];
-    const lons = [...stationsWithCoords.map(s => s.longitude!), data.epicenter.lon];
+    // Límites geográficos: estaciones + epicentro + silueta de Nariño (si hay),
+    // con margen. Incluir la silueta hace que se vea el departamento completo.
+    const outline = data.outline && data.outline.length >= 3 ? data.outline : null;
+    const lats = [...stationsWithCoords.map(s => s.latitude!), data.epicenter.lat, ...(outline?.map(p => p[1]) ?? [])];
+    const lons = [...stationsWithCoords.map(s => s.longitude!), data.epicenter.lon, ...(outline?.map(p => p[0]) ?? [])];
     let minLat = Math.min(...lats), maxLat = Math.max(...lats);
     let minLon = Math.min(...lons), maxLon = Math.max(...lons);
-    const padLat = Math.max((maxLat - minLat) * 0.15, 0.1);
-    const padLon = Math.max((maxLon - minLon) * 0.15, 0.1);
+    const padLat = Math.max((maxLat - minLat) * 0.08, 0.05);
+    const padLon = Math.max((maxLon - minLon) * 0.08, 0.05);
     minLat -= padLat; maxLat += padLat; minLon -= padLon; maxLon += padLon;
     // Escala isométrica: usa la misma unidad en X e Y para no deformar.
     const spanLon = maxLon - minLon, spanLat = maxLat - minLat;
     const sc = Math.min(mw / spanLon, mh / spanLat);
-    const offX = mx + (mw - spanLon * sc) / 2;
-    const offY = my + (mh - spanLat * sc) / 2;
-    const gx2 = (lon: number) => offX + (lon - minLon) * sc;
-    const gy2 = (lat: number) => my + mh - (offY - my) - (lat - minLat) * sc;
+    const drawnW = spanLon * sc, drawnH = spanLat * sc;
+    const padX = (mw - drawnW) / 2, padY = (mh - drawnH) / 2;
+    const gx2 = (lon: number) => mx + padX + (lon - minLon) * sc;
+    const gy2 = (lat: number) => my + mh - padY - (lat - minLat) * sc;
 
     // Marco + fondo
     doc.setFillColor(248, 250, 252); doc.setDrawColor(...COLORS.line); doc.setLineWidth(0.3);
     doc.rect(mx, my, mw, mh, 'FD');
-    // Norte (flecha arriba-izquierda)
+
+    // Silueta del departamento de Nariño (relleno suave + borde).
+    if (outline) {
+      doc.setFillColor(233, 238, 234);           // verde muy claro
+      doc.setDrawColor(...COLORS.green); doc.setLineWidth(0.5);
+      const first = outline[0];
+      const lines: [number, number][] = outline.slice(1).map(p => [gx2(p[0]), gy2(p[1])]);
+      // jsPDF.lines dibuja segmentos relativos desde un punto inicial.
+      const rel: [number, number][] = [];
+      let prevX = gx2(first[0]), prevY = gy2(first[1]);
+      const startX = prevX, startY = prevY;
+      for (const [px, py] of lines) { rel.push([px - prevX, py - prevY]); prevX = px; prevY = py; }
+      rel.push([startX - prevX, startY - prevY]); // cerrar
+      doc.lines(rel, startX, startY, [1, 1], 'FD', true);
+    }
+
+    // Norte: una flecha dibujada (triángulo + asta) y la letra "N". La fuente
+    // base de jsPDF (Helvetica/Latin-1) no tiene el glifo ↑, por eso se dibuja.
+    doc.setFillColor(...COLORS.muted); doc.setDrawColor(...COLORS.muted); doc.setLineWidth(0.4);
+    const nx = mx + 5, ny = my + 5;
+    doc.triangle(nx, ny, nx - 1.4, ny + 2.4, nx + 1.4, ny + 2.4, 'F'); // punta
+    doc.line(nx, ny + 2.4, nx, ny + 6);                                 // asta
     doc.setFontSize(7); doc.setTextColor(...COLORS.muted); doc.setFont('helvetica', 'bold');
-    doc.text('N ↑', mx + 3, my + 6);
+    doc.text('N', nx + 2.5, ny + 3);
     doc.setFont('helvetica', 'normal');
 
-    // Estaciones (triángulos) con etiqueta
-    for (const s of stationsWithCoords) {
-      const px = gx2(s.longitude!), py = gy2(s.latitude!);
-      const sel = s.code === data.selectedStation;
-      doc.setFillColor(...(sel ? COLORS.gold : COLORS.primary));
-      // Triángulo apuntando arriba
-      doc.triangle(px, py - 2.2, px - 1.9, py + 1.6, px + 1.9, py + 1.6, 'F');
-      doc.setFontSize(6); doc.setTextColor(...COLORS.text);
-      doc.text(s.code, px + 2.5, py + 1.5);
+    // Estaciones: primero los triángulos, luego las etiquetas con anti-solape.
+    type Placed = { px: number; py: number; code: string; sel: boolean };
+    const placed: Placed[] = stationsWithCoords.map(s => ({
+      px: gx2(s.longitude!), py: gy2(s.latitude!),
+      code: s.code, sel: s.code === data.selectedStation,
+    }));
+    for (const p of placed) {
+      doc.setFillColor(...(p.sel ? COLORS.gold : COLORS.primary));
+      doc.triangle(p.px, p.py - 2.2, p.px - 1.9, p.py + 1.6, p.px + 1.9, p.py + 1.6, 'F');
     }
+    // Etiquetas: si dos quedan muy juntas verticalmente, se desplaza la segunda
+    // para que ambas se lean (evita el solapamiento tipo TUM/TUM3C).
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'normal');
+    const usedLabelY: { x: number; y: number }[] = [];
+    for (const p of [...placed].sort((a, b) => a.py - b.py)) {
+      let labelY = p.py + 1.5;
+      // Empuja hacia abajo mientras choque con una etiqueta ya colocada cercana.
+      while (usedLabelY.some(u => Math.abs(u.x - (p.px + 2.5)) < 14 && Math.abs(u.y - labelY) < 3.2)) {
+        labelY += 3.2;
+      }
+      usedLabelY.push({ x: p.px + 2.5, y: labelY });
+      doc.setTextColor(...COLORS.text);
+      doc.text(p.code, p.px + 2.5, labelY);
+    }
+
     // Epicentro (círculo con halo claro sólido, sin depender de opacidad/GState)
     const ex = gx2(data.epicenter.lon), ey = gy2(data.epicenter.lat);
     doc.setFillColor(240, 205, 195); doc.circle(ex, ey, 3, 'F');
@@ -263,7 +336,7 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
 
     y = my + mh + 4;
     doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
-    doc.text('▲ estaciones · ◉ epicentro · proyección equirectangular local (norte arriba).', MARGIN, y);
+    doc.text('Silueta: departamento de Nariño · Triángulos: estaciones · Círculo: epicentro · proyección equirectangular local (norte arriba).', MARGIN, y);
     y += 6;
   }
 
@@ -340,7 +413,7 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
       { h: 'Azimut (°)', w: 24 },
       { h: 'tP (s)', w: 22 },
       { h: 'tS (s)', w: 22 },
-      { h: 'S−P (s)', w: 22 },
+      { h: 'S-P (s)', w: 22 },
     ];
     // Cabecera
     doc.setFontSize(7.5);

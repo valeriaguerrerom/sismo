@@ -116,7 +116,10 @@ export function Scene3D({
     // para que las ondas P/S crezcan y se atenúen sin cortarse contra el borde.
     camera.position.set(33, 30, 41);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // preserveDrawingBuffer permite capturar el canvas con toDataURL() para el
+    // reporte PDF (sin él, la captura sale en negro). Costo de rendimiento
+    // despreciable para esta escena.
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);

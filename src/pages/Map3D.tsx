@@ -11,11 +11,13 @@
  */
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check,
+  Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check, HelpCircle,
 } from '../lib/icons';
+import { Tooltip } from '../components/ui/Tooltip';
 import { Scene3D } from '../components/map3d/Scene3D';
 import { Legend } from '../components/map3d/Legend';
 import { RecordSection } from '../components/map3d/RecordSection';
+import { loadNarinoRing } from '../components/map3d/narinoSilhouette';
 import {
   getStations, getTravelTimes, getSynthetic, getRayPath, getWaveform,
   getSceneGeometry, getSceneEvents,
@@ -26,6 +28,8 @@ import {
 import { loadCatalog } from '../lib/catalog';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
+import { startTour } from '../tours/useTour';
+import { buildMapa3dSteps } from '../tours/mapa3d';
 import {
   downloadMap3dPdf, downloadMap3dCsv, DEFAULT_MAP3D_OPTIONS,
   type Map3dReportData, type Map3dReportOptions,
@@ -95,12 +99,48 @@ export function Map3D() {
   const [showEventList, setShowEventList] = useState(false);
   const [loadingTT, setLoadingTT] = useState(false);
   // Reporte del Mapa 3D (modal de opciones + formato + guardado).
-  const { user } = useAuth();
+  const { user, markTourSeen } = useAuth();
+
+  // ── Tour guiado (Driver.js) ──
+  const tourRef = useRef(false); // evita relanzar el auto-tour
+  const launchTour = useCallback(() => {
+    startTour(buildMapa3dSteps(), { onDone: () => markTourSeen('mapa3d') });
+  }, [markTourSeen]);
+
+  // Lanza el tour la primera vez que el usuario entra al módulo.
+  useEffect(() => {
+    if (tourRef.current || !user) return;
+    if (user.tours_vistos?.mapa3d) return;
+    tourRef.current = true;
+    const id = requestAnimationFrame(() => setTimeout(launchTour, 500));
+    return () => cancelAnimationFrame(id);
+  }, [user, launchTour]);
+
   const [showReport, setShowReport] = useState(false);
   const [reportOpts, setReportOpts] = useState<Map3dReportOptions>(DEFAULT_MAP3D_OPTIONS);
   const [reportFormat, setReportFormat] = useState<'pdf' | 'csv'>('pdf');
   const [savingReport, setSavingReport] = useState(false);
   const [reportMsg, setReportMsg] = useState<string | null>(null);
+  // Contenedor de la escena 3D (para capturar su canvas en el reporte PDF).
+  const sceneContainerRef = useRef<HTMLDivElement>(null);
+  // Silueta del departamento de Nariño para el mapa del reporte (se carga una vez).
+  const narinoRingRef = useRef<[number, number][] | null>(null);
+
+  /**
+   * Captura el canvas WebGL de la escena 3D como PNG (data URL).
+   * Requiere preserveDrawingBuffer en el renderer (activado en Scene3D).
+   * Devuelve null si no encuentra el canvas o falla la captura.
+   */
+  const captureScene = useCallback((): string | null => {
+    const canvas = sceneContainerRef.current?.querySelector('canvas');
+    if (!canvas) return null;
+    try {
+      return canvas.toDataURL('image/png');
+    } catch (e) {
+      console.warn('[Map3D] No se pudo capturar la escena 3D:', e);
+      return null;
+    }
+  }, []);
   const [viewCommand, setViewCommand] = useState<{ view: 'north' | 'cut' | 'top' | 'fit'; nonce: number } | null>(null);
   const setView = (view: 'north' | 'cut' | 'top' | 'fit') => setViewCommand({ view, nonce: Date.now() });
   // Filtros de la lista de eventos.
@@ -135,6 +175,9 @@ export function Map3D() {
     getStations()
       .then(setStations)
       .catch((e: ApiError) => setMessage(e.message));
+
+    // Silueta de Nariño para el mapa del reporte PDF (mismo polígono del 3D).
+    loadNarinoRing().then(ring => { narinoRingRef.current = ring; }).catch(() => {});
 
     // Geometría de escena calculada por el backend. Si falla, Scene3D usa el
     // fallback local de domain.ts (regla: el cálculo vive en el backend).
@@ -376,6 +419,10 @@ export function Map3D() {
       })),
       seismogram,
       selectedStation,
+      // Captura de la escena 3D en el momento de generar el reporte.
+      sceneImage: captureScene(),
+      // Silueta del departamento para el mapa de vista superior.
+      outline: narinoRingRef.current,
       // Trazas de todas las estaciones con señal (componente vertical) para el
       // registro sísmico multi-estación. La distancia sirve para ordenarlas.
       traces: travelTimes
@@ -393,7 +440,7 @@ export function Map3D() {
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
     };
-  }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes]);
+  }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes, captureScene]);
 
   /** Descarga el reporte en el formato elegido (PDF o CSV). */
   const handleDownloadReport = () => {
@@ -410,11 +457,15 @@ export function Map3D() {
     setSavingReport(true);
     setReportMsg(null);
     // Se guarda con report_type='map3d' + los datos y opciones para regenerar.
+    // La captura de la escena 3D (sceneImage) NO se persiste: es una imagen
+    // pesada que solo tiene sentido en la descarga inmediata; al regenerar
+    // desde "Mis Reportes" no hay escena en pantalla que capturar.
+    const dataToStore = { ...data, sceneImage: null };
     const { error } = await supabase.from('simulation_reports').insert({
       user_id: user.id,
       title: data.title,
       params: { sourceType, magnitude, depth: epicenter?.depthKm, model, vp, vs, density },
-      results: { report_type: 'map3d', map3d: data, options: reportOpts },
+      results: { report_type: 'map3d', map3d: dataToStore, options: reportOpts },
     });
     if (error) {
       setReportMsg('No se pudo guardar. Inténtalo de nuevo.');
@@ -457,6 +508,17 @@ export function Map3D() {
           </h1>
           <div className="flex items-center gap-3">
             <span className="font-mono text-[11px] text-stone-400 hidden md:inline">{currentEventTitle}</span>
+            {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+            <Tooltip content="Ver guía">
+              <button
+                type="button"
+                onClick={launchTour}
+                aria-label="Ver guía"
+                className={`flex items-center justify-center w-6 h-6 rounded-full border border-white/10 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.mapa3d ? 'help-pulse' : ''}`}
+              >
+                <HelpCircle size={14} />
+              </button>
+            </Tooltip>
             <button
               onClick={() => setPanelsCollapsed(c => !c)}
               className="font-mono text-[10px] font-bold px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-stone-300"
@@ -472,7 +534,7 @@ export function Map3D() {
         panelsCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-[320px_1fr_300px]'
       }`}>
         {/* ── IZQUIERDA: Sismogramas ── */}
-        <div className={`bg-black/30 rounded-xl border border-white/10 p-3 ${panelsCollapsed ? 'hidden' : ''}`}>
+        <div data-tour="m3d-sismogramas" className={`bg-black/30 rounded-xl border border-white/10 p-3 ${panelsCollapsed ? 'hidden' : ''}`}>
           <div className="flex items-center gap-2 mb-2">
             <Radio size={13} className="text-[#C4553A]" />
             <h2 className="font-mono text-xs font-bold text-stone-200">SISMOGRAMAS</h2>
@@ -517,7 +579,7 @@ export function Map3D() {
         </div>
 
         {/* ── CENTRO: Escena 3D ── */}
-        <div className="relative bg-black/30 rounded-xl border border-white/10 overflow-hidden min-h-[560px]">
+        <div ref={sceneContainerRef} data-tour="m3d-escena" className="relative bg-black/30 rounded-xl border border-white/10 overflow-hidden min-h-[560px]">
           <Scene3D
             stations={stations}
             epicenter={epicenter}
@@ -534,11 +596,11 @@ export function Map3D() {
             onPlaceEpicenter={placeEpicenter}
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
-          <div className="absolute top-2 left-2 z-10 font-mono text-[10px] text-stone-400 bg-black/40 rounded px-2 py-1">
+          <div data-tour="m3d-hint" className="absolute top-2 left-2 z-10 font-mono text-[10px] text-stone-400 bg-black/40 rounded px-2 py-1">
             clic en el terreno = colocar epicentro · clic en ▲ = seleccionar estación
           </div>
           {/* Botones de vista de cámara */}
-          <div className="absolute bottom-3 left-3 z-10 flex gap-1.5 font-mono">
+          <div data-tour="m3d-vistas" className="absolute bottom-3 left-3 z-10 flex gap-1.5 font-mono">
             {([['north', 'Norte'], ['cut', 'Corte'], ['top', 'Superior']] as const).map(([v, label]) => (
               <button
                 key={v}
@@ -568,9 +630,9 @@ export function Map3D() {
         </div>
 
         {/* ── DERECHA: Controles ── */}
-        <div className={`bg-black/30 rounded-xl border border-white/10 p-3 space-y-3 font-mono ${panelsCollapsed ? 'hidden' : ''}`}>
+        <div data-tour="m3d-controles" className={`bg-black/30 rounded-xl border border-white/10 p-3 space-y-3 font-mono ${panelsCollapsed ? 'hidden' : ''}`}>
           {/* Transporte */}
-          <div>
+          <div data-tour="m3d-transporte">
             <h2 className="text-xs font-bold text-stone-200 mb-2">CONTROLES</h2>
             <div className="flex items-center gap-2">
               <button
@@ -612,7 +674,7 @@ export function Map3D() {
               <div className="text-sm text-stone-200 font-bold">{speed}×</div>
             </div>
           </div>
-          <div className="flex gap-1.5">
+          <div data-tour="m3d-velocidad" className="flex gap-1.5">
             {[1, 2, 5, 10, 20].map(s => (
               <button
                 key={s}
@@ -627,7 +689,7 @@ export function Map3D() {
           </div>
 
           {/* Modelo de tiempos */}
-          <div>
+          <div data-tour="m3d-modelo">
             <div className="text-[9px] text-stone-500 uppercase mb-1">modelo de tiempos</div>
             <div className="flex gap-1.5">
               {(['homogeneous', 'iasp91'] as TravelModel[]).map(m => (
@@ -646,6 +708,7 @@ export function Map3D() {
 
           {/* Cargar evento */}
           <button
+            data-tour="m3d-evento"
             onClick={() => setShowEventList(s => !s)}
             className="w-full flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 text-stone-200 text-xs font-bold py-2 rounded-lg"
           >
@@ -788,6 +851,7 @@ export function Map3D() {
                   {([
                     ['epicentro', 'Epicentro y fuente'],
                     ['parametros', 'Parámetros del medio (Vp, Vs, ρ)'],
+                    ['vista3d', 'Vista 3D de la propagación (captura)'],
                     ['mapa', 'Mapa de estaciones (vista superior)'],
                     ['tiemposViaje', 'Tabla de tiempos de viaje por estación'],
                     ['registro', 'Registro sísmico por estación'],

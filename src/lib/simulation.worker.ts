@@ -54,7 +54,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     const snapshotMeta = result.snapshots.map((s: WavefieldSnapshot) => ({
       time: s.time, nx: s.nx, nz: s.nz,
     }));
-    const snapshotFields = result.snapshots.map((s: WavefieldSnapshot) => s.field.buffer);
+    const snapshotFields = result.snapshots.map((s: WavefieldSnapshot) => s.field.buffer as ArrayBuffer);
 
     const msg: DoneMsg = {
       type: 'done',

@@ -1,13 +1,16 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Badge } from '../components/ui/Badge';
 import { SeismicMap, MapPoint } from '../components/explorer/SeismicMap';
 import {
   Database, MapPin, Search, Waves, Flame, Clock, Activity, Radio,
-  X, ChevronLeft, ChevronRight, Mountain, Upload,
+  X, ChevronLeft, ChevronRight, Mountain, Upload, HelpCircle,
 } from '../lib/icons';
 import { MseedUpload } from '../components/explorer/MseedUpload';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
 import { loadCatalog } from '../lib/catalog';
+import { startTour } from '../tours/useTour';
+import { buildExploradorSteps } from '../tours/explorador';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -210,7 +213,23 @@ function Pager({ page, total, pageSize, onChange, accent }: {
 // ═══════════════════════════════════════════════════════════════
 
 export function Explorer({ onLoadRealData }: Props) {
-  const { user } = useAuth();
+  const { user, markTourSeen } = useAuth();
+
+  // ── Tour guiado (Driver.js) ──
+  const tourRef = useRef(false); // evita relanzar el auto-tour
+  const launchTour = useCallback(() => {
+    startTour(buildExploradorSteps({ canUpload: Boolean(user) }), { onDone: () => markTourSeen('explorador') });
+  }, [markTourSeen, user]);
+
+  // Lanza el tour la primera vez que el usuario entra al módulo.
+  useEffect(() => {
+    if (tourRef.current || !user) return;
+    if (user.tours_vistos?.explorador) return;
+    tourRef.current = true;
+    const id = requestAnimationFrame(() => setTimeout(launchTour, 500));
+    return () => cancelAnimationFrame(id);
+  }, [user, launchTour]);
+
   // Fuente activa (filtro primario)
   const [source, setSource] = useState<SourceKind>('volcanic');
 
@@ -455,6 +474,17 @@ export function Explorer({ onLoadRealData }: Props) {
           <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
             <Database size={20} className="text-[#C4553A]" />
             Explorador de Registros Sísmicos
+            {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+            <Tooltip content="Ver guía">
+              <button
+                type="button"
+                onClick={launchTour}
+                aria-label="Ver guía"
+                className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.explorador ? 'help-pulse' : ''}`}
+              >
+                <HelpCircle size={14} />
+              </button>
+            </Tooltip>
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">
             Sismogramas triaxiales reales de Nariño · Volcán Galeras (OVSP) y Red Sismológica Nacional (SGC)
@@ -465,8 +495,9 @@ export function Explorer({ onLoadRealData }: Props) {
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
         {/* ═══ SELECTOR DE FUENTE (filtro primario) ═══ */}
-        <div className={`grid gap-3 ${user ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+        <div data-tour="exp-fuente" className={`grid gap-3 ${user ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
           <button
+            data-tour="exp-fuente-volcanic"
             onClick={() => setSource('volcanic')}
             className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
               source === 'volcanic'
@@ -484,6 +515,7 @@ export function Explorer({ onLoadRealData }: Props) {
           </button>
 
           <button
+            data-tour="exp-fuente-tectonic"
             onClick={() => setSource('tectonic')}
             className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
               source === 'tectonic'
@@ -502,6 +534,7 @@ export function Explorer({ onLoadRealData }: Props) {
 
           {user && (
             <button
+              data-tour="exp-fuente-upload"
               onClick={() => setSource('upload')}
               className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
                 source === 'upload'
@@ -526,7 +559,7 @@ export function Explorer({ onLoadRealData }: Props) {
 
         {/* ═══ SUB-FILTROS CONTEXTUALES ═══ */}
         {source !== 'upload' && (
-        <div className="bg-white rounded-xl border border-stone-200/60 p-3 flex flex-wrap items-center gap-2">
+        <div data-tour="exp-filtros" className="bg-white rounded-xl border border-stone-200/60 p-3 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
@@ -587,7 +620,7 @@ export function Explorer({ onLoadRealData }: Props) {
         {source !== 'upload' && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4">
           {/* Lista */}
-          <div className="bg-white rounded-xl border border-stone-200/60 p-3">
+          <div data-tour="exp-lista" className="bg-white rounded-xl border border-stone-200/60 p-3">
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-8 h-8 rounded-full border-4 border-stone-200 border-t-[#C4553A] animate-spin" />
@@ -750,7 +783,7 @@ export function Explorer({ onLoadRealData }: Props) {
           </div>
 
           {/* Mapa */}
-          <div className="lg:sticky lg:top-20 h-[380px] lg:h-[calc(100vh-140px)]">
+          <div data-tour="exp-mapa" className="lg:sticky lg:top-20 h-[380px] lg:h-[calc(100vh-140px)]">
             <div className="bg-white rounded-xl border border-stone-200/60 p-2 h-full flex flex-col">
               <div className="flex items-center gap-1.5 px-2 py-1.5">
                 <MapPin size={13} className={source === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />

@@ -73,26 +73,29 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
   // Rampa de color por capa. Devuelve [r,g,b] en 0..255.
   const colorFor = useCallback((val: number, peak: number, key: LayerKey): [number, number, number] => {
     if (key === 'mag') {
-      // Magnitud: rampa oscuro → terracota → dorado → blanco (tipo "inferno").
+      // Magnitud: rampa cálida tipo "inferno" pero con piso brillante (el alpha
+      // ya oculta las zonas nulas, así que no necesitamos empezar en negro).
+      // púrpura profundo → magenta → terracota → dorado → blanco.
       const t = Math.pow(Math.min(Math.abs(val) / (peak + 1e-30), 1), 0.4);
-      if (t < 0.2) { const u = t / 0.2; return [Math.round(20 + u * 80), Math.round(10 + u * 20), Math.round(30 + u * 20)]; }
-      if (t < 0.5) { const u = (t - 0.2) / 0.3; return [Math.round(100 + u * 96), Math.round(30 + u * 55), Math.round(50 - u * 20)]; }
-      if (t < 0.8) { const u = (t - 0.5) / 0.3; return [Math.round(196 + u * 56), Math.round(85 + u * 83), Math.round(30 + u * 20)]; }
-      const u = (t - 0.8) / 0.2; return [255, Math.round(168 + u * 87), Math.round(50 + u * 205)];
+      if (t < 0.25) { const u = t / 0.25; return [Math.round(90 + u * 90), Math.round(30 + u * 20), Math.round(90 + u * 10)]; }
+      if (t < 0.55) { const u = (t - 0.25) / 0.3; return [Math.round(180 + u * 16), Math.round(50 + u * 35), Math.round(100 - u * 55)]; }
+      if (t < 0.8) { const u = (t - 0.55) / 0.25; return [Math.round(196 + u * 56), Math.round(85 + u * 83), Math.round(45 + u * 10)]; }
+      const u = (t - 0.8) / 0.2; return [255, Math.round(168 + u * 87), Math.round(55 + u * 200)];
     }
-    // Ux / Uz: divergente. Negativo = frío, positivo = cálido, cero = neutro.
+    // Ux / Uz: divergente sobre fondo oscuro. Negativo = frío, positivo = cálido.
+    // Colores plenos y luminosos (el alpha ya atenúa las zonas de campo débil).
     const n = Math.max(-1, Math.min(1, val / (peak + 1e-30)));
     const t = Math.pow(Math.abs(n), 0.45);
     if (key === 'ux') {
-      // frío verde-azulado ↔ verde bosque
+      // cian brillante (−) ↔ verde bosque brillante (+)
       return n < 0
-        ? [Math.round(240 - t * 200), Math.round(250 - t * 90), Math.round(245 - t * 100)]
-        : [Math.round(240 - t * 195), Math.round(250 - t * 144), Math.round(245 - t * 166)];
+        ? [Math.round(70 + (1 - t) * 120), Math.round(200 + t * 30), Math.round(190 + t * 30)]
+        : [Math.round(90 + (1 - t) * 100), Math.round(200 + t * 20), Math.round(120 + (1 - t) * 60)];
     }
-    // uz: azul ↔ terracota
+    // uz: azul cielo (−) ↔ terracota/naranja (+)
     return n < 0
-      ? [Math.round(240 - t * 200), Math.round(245 - t * 130), Math.round(250 - t * 40)]
-      : [Math.round(245 - t * 49), Math.round(245 - t * 160), Math.round(240 - t * 182)];
+      ? [Math.round(90 + (1 - t) * 110), Math.round(170 + t * 40), Math.round(240)]
+      : [Math.round(240), Math.round(120 + (1 - t) * 60), Math.round(70 + (1 - t) * 80)];
   }, []);
 
   // Dibuja el frame indicado en el canvas.
@@ -123,9 +126,14 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
       for (let j = 0; j < nz; j++) {
         const v = snap.field[off + i * nz + j];
         const [r, g, b] = colorFor(v, peak, layer);
+        // Alpha proporcional a la intensidad: donde el campo es ~0 el heatmap es
+        // transparente y deja ver el relleno del territorio (clave para t=0 y
+        // para que la onda se lea como un frente que "ilumina" el mapa).
+        const intensity = Math.min(Math.abs(v) / (peak + 1e-30), 1);
+        const alpha = Math.round(Math.pow(intensity, 0.6) * 255);
         // Pixel destino: x = i, y = j (profundidad hacia abajo).
         const p = (j * nx + i) * 4;
-        img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = 255;
+        img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = alpha;
       }
     }
 
@@ -160,9 +168,17 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
       }
     }
 
-    // Fondo tenue del recuadro completo.
-    ctx.fillStyle = '#160e1e';
+    // Fondo del recuadro completo (azul noche muy oscuro, mejor que negro puro).
+    ctx.fillStyle = '#0f1424';
     ctx.fillRect(0, 0, W, H);
+
+    // Relleno tenue de la silueta de Nariño: así en t=0 (campo casi nulo) se ve
+    // el "lienzo" con la forma del departamento, no una pantalla negra. Se pinta
+    // ANTES del heatmap para que la propagación quede por encima.
+    if (silPath) {
+      ctx.fillStyle = '#1c2438'; // territorio en reposo (gris azulado)
+      ctx.fill(silPath);
+    }
 
     // Heatmap recortado a la silueta (o al canvas si no hay silueta).
     ctx.save();
@@ -172,7 +188,7 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
 
     // Contorno de la silueta encima, para que se lea la forma de Nariño.
     if (silPath) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
       ctx.lineWidth = 1.5;
       ctx.stroke(silPath);
     }
@@ -236,7 +252,7 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
       <div className="relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-[440px] rounded-xl overflow-hidden border border-stone-200/60 shadow-lg bg-[#1a1020]"
+          className="w-full h-[clamp(260px,44vh,440px)] rounded-xl overflow-hidden border border-stone-200/60 shadow-lg bg-[#0f1424]"
         />
         {/* Etiqueta de contexto geográfico */}
         {silhouette && (
@@ -244,6 +260,10 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
             Departamento de Nariño
           </div>
         )}
+        {/* Etiqueta explícita: es un resultado físico real de la simulación */}
+        <div className="absolute bottom-3 left-3 text-[9px] font-medium text-white/70 bg-black/40 px-2 py-1 rounded backdrop-blur-sm border border-white/10 max-w-[60%] leading-tight">
+          Campo de onda simulado (Ux, Uz, |u|) · motor de diferencias finitas
+        </div>
         {/* Capa activa */}
         <div className="absolute top-2 right-3">
           <span className="text-[9px] font-bold px-2 py-1 rounded-md text-white backdrop-blur-sm border border-white/10" style={{ backgroundColor: activeLayer.color + 'dd' }}>
@@ -296,8 +316,10 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
         <div className="flex items-center gap-1.5">
           <span>Baja</span>
           <span className="inline-block w-24 h-2.5 rounded-full" style={{ background: layer === 'mag'
-            ? 'linear-gradient(90deg,#140a1e,#64203c,#c4553a,#ffa832,#ffffff)'
-            : 'linear-gradient(90deg,#2D6A4F,#f0faf5,#C4553A)' }} />
+            ? 'linear-gradient(90deg,#5a1e5a,#b43255,#c4553a,#ffa832,#ffffff)'
+            : layer === 'ux'
+              ? 'linear-gradient(90deg,#46c8be,#1c2438,#5ac878)'
+              : 'linear-gradient(90deg,#5aaaf0,#1c2438,#f0783c)' }} />
           <span>Alta</span>
         </div>
       </div>
