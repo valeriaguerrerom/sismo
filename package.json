@@ -12,10 +12,11 @@
     "test": "vitest run",
     "docs:frontend": "typedoc --entryPointStrategy expand src --out docs/frontend --name \"SismoNariño Frontend\" --readme none",
     "docs:backend": "cd backend && py -m pdoc main simulation --output-dir ../docs/backend --html --force",
-    "docs": "npm run docs:frontend"
+    "docs": "pnpm docs:frontend"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "driver.js": "^1.8.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",

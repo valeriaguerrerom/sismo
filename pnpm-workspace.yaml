@@ -1,2 +1,9 @@
+# Paquetes cuyos scripts de instalación (postinstall) se permiten ejecutar.
+# pnpm 11 los bloquea por defecto (strictDepBuilds); estos los necesitan.
 allowBuilds:
-  esbuild: false
+  core-js: true
+  esbuild: true
+
+# No re-verificar/reinstalar dependencias antes de cada script (pnpm dev/build).
+# Evita que el chequeo automático dispare un install que falla por builds.
+verifyDepsBeforeRun: false

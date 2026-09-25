@@ -38,3 +38,8 @@ backend/data_raw/*
 backend/.env
 *.pem
 *.key
+
+# Python: caché de bytecode y artefactos de test
+__pycache__/
+*.pyc
+.pytest_cache/
