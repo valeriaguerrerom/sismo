@@ -19,8 +19,14 @@ export interface HomeStats {
   anio_max: number | null;
   anios_registro: number | null;
   magnitud_maxima: number | null;
+  /** Menor magnitud observada (para la escala del mini gráfico de magnitud). */
+  magnitud_minima: number | null;
   eventos_cm: number;
   eventos_galeras: number;
+  /** Año más antiguo de la red CM (inicio del tramo reciente en la línea de tiempo). */
+  anio_cm_min: number | null;
+  /** Año más reciente de la red CM. */
+  anio_cm_max: number | null;
 }
 
 const QUERY_TIMEOUT_MS = 6000;
@@ -44,11 +50,14 @@ function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
 const FALLBACK: HomeStats = {
   total_eventos: 166,
   anio_min: 2006,
-  anio_max: 2025,
-  anios_registro: 20,
-  magnitud_maxima: 4.4,
+  anio_max: 2026,
+  anios_registro: 21,
+  magnitud_maxima: 6.3,
+  magnitud_minima: 2.5,
   eventos_cm: 134,
   eventos_galeras: 32,
+  anio_cm_min: 2023,
+  anio_cm_max: 2026,
 };
 
 /**
@@ -71,10 +80,15 @@ export async function loadHomeStats(): Promise<HomeStats> {
     const rows = (data ?? []) as { event_date: string | null; magnitude: number | null; event_type: string | null }[];
     if (rows.length === 0) return FALLBACK;
 
-    const years = rows
-      .map(r => (r.event_date && String(r.event_date).slice(0, 4)))
-      .filter((y): y is string => !!y && /^\d{4}$/.test(y))
-      .map(Number);
+    const yearOf = (v: string | null) => {
+      const s = v && String(v).slice(0, 4);
+      return s && /^\d{4}$/.test(s) ? Number(s) : null;
+    };
+    const years = rows.map(r => yearOf(r.event_date)).filter((y): y is number => y != null);
+    const cmYears = rows
+      .filter(r => r.event_type === 'tectonic')
+      .map(r => yearOf(r.event_date))
+      .filter((y): y is number => y != null);
     const mags = rows
       .map(r => r.magnitude)
       .filter((m): m is number => typeof m === 'number' && !Number.isNaN(m));
@@ -88,8 +102,11 @@ export async function loadHomeStats(): Promise<HomeStats> {
       anio_max,
       anios_registro: anio_min != null && anio_max != null ? anio_max - anio_min + 1 : null,
       magnitud_maxima: mags.length ? Math.round(Math.max(...mags) * 10) / 10 : null,
+      magnitud_minima: mags.length ? Math.round(Math.min(...mags) * 10) / 10 : null,
       eventos_cm: rows.filter(r => r.event_type === 'tectonic').length,
       eventos_galeras: rows.filter(r => r.event_type === 'volcanic').length,
+      anio_cm_min: cmYears.length ? Math.min(...cmYears) : null,
+      anio_cm_max: cmYears.length ? Math.max(...cmYears) : null,
     };
   } catch (err) {
     console.warn('[Home] Stats fallback:', err);
