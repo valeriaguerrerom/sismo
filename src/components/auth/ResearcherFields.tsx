@@ -33,7 +33,7 @@ interface Props {
 
 export function ResearcherFields({ form, onChange, showName = true }: Props) {
   return (
-    <div className="grid sm:grid-cols-2 gap-4">
+    <div className="grid sm:grid-cols-2 gap-3">
       {showName && (
         <div className="sm:col-span-2">
           <Field icon={<User size={16} />} label="Nombre completo">

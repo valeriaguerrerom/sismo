@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { ClipboardList, ArrowRight, ShieldCheck } from '../lib/icons';
 import { useAuth, ResearcherSignUp } from '../lib/auth';
 import { ResearcherFields } from '../components/auth/ResearcherFields';
+import { ConsentCheckbox } from '../components/auth/ConsentCheckbox';
 
 interface Props {
   onDone: () => void;
@@ -26,6 +27,7 @@ export function CompleteProfile({ onDone }: Props) {
     country: user?.country || 'Colombia',
     usagePurpose: user?.usage_purpose ?? '',
   });
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -36,9 +38,11 @@ export function CompleteProfile({ onDone }: Props) {
     setError('');
     if (!form.fullName.trim()) { setError('Ingresa tu nombre completo'); return; }
     if (!form.occupation) { setError('Selecciona tu ocupación'); return; }
+    if (!consent) { setError('Debes autorizar el tratamiento de tus datos para continuar.'); return; }
     setSaving(true);
     try {
-      const err = await updateProfile(form);
+      // recordConsent=true: guarda la fecha de autorización (cuentas de Google).
+      const err = await updateProfile(form, true);
       if (err) setError(err);
       else onDone();
     } catch (e) {
@@ -52,34 +56,32 @@ export function CompleteProfile({ onDone }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-5">
       <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#2D6A4F] flex items-center justify-center mx-auto mb-4">
-            <ClipboardList size={28} className="text-white" />
+        <div className="text-center mb-4">
+          <div className="w-11 h-11 rounded-2xl bg-[#2D6A4F] flex items-center justify-center mx-auto mb-2">
+            <ClipboardList size={22} className="text-white" />
           </div>
           <h1 className="text-2xl font-black text-[#1A1A2E]">Completa tu perfil de investigador</h1>
           <p className="text-stone-400 text-sm mt-1">
             Hola{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}. Tu cuenta <b>{user?.email}</b> ya está creada;
-            solo faltan algunos datos para habilitar el acceso a los módulos.
-          </p>
-          <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-[#2D6A4F] bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-full px-3 py-1">
-            <ShieldCheck size={13} /> Paso obligatorio · se hace una sola vez
+            completa estos datos una sola vez para habilitar los módulos.
+            <span className="inline-flex items-center gap-1 ml-1 text-[#2D6A4F] font-semibold">
+              <ShieldCheck size={12} /> Paso obligatorio.
+            </span>
           </p>
         </div>
 
-        <form onSubmit={submit} className="bg-white rounded-2xl border border-stone-200/60 shadow-sm p-6 space-y-4">
+        <form onSubmit={submit} className="bg-white rounded-2xl border border-stone-200/60 shadow-sm p-5 space-y-3">
           <ResearcherFields form={form} onChange={set} />
 
-          <p className="text-[11px] text-stone-400 leading-relaxed">
-            Los datos se usan únicamente para caracterizar a los usuarios de la plataforma en el marco del trabajo de grado.
-          </p>
+          <ConsentCheckbox checked={consent} onChange={setConsent} />
 
           {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
 
           <div className="flex flex-col sm:flex-row gap-2">
-            <button type="submit" disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#2D6A4F] text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 btn-hover">
+            <button type="submit" disabled={saving || !consent}
+              className="flex-1 flex items-center justify-center gap-2 bg-[#2D6A4F] text-white py-3 rounded-xl font-bold text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-hover">
               {saving ? 'Guardando…' : 'Guardar y continuar'} <ArrowRight size={16} />
             </button>
             <button type="button" onClick={signOut} className="px-4 py-3 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">
