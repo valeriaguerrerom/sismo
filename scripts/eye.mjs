@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ channel: 'chrome', headless: true });
+const p = await b.newPage({ viewport: { width: 1366, height: 768 } });
+await p.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
+await p.getByRole('button', { name: /Iniciar sesión/ }).first().click();
+await p.waitForTimeout(600);
+await p.getByPlaceholder('Tu contraseña').fill('Sismo2026!');
+const before = await p.getByPlaceholder('Tu contraseña').getAttribute('type');
+await p.getByRole('button', { name: /Mostrar contraseña/ }).click();
+await p.waitForTimeout(300);
+const after = await p.getByPlaceholder('Tu contraseña').getAttribute('type');
+console.log('type antes:', before, '-> despues:', after);
+await b.close();

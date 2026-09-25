@@ -9,6 +9,7 @@
  */
 export {
   Activity,
+  ThreeDotsVertical as MoreVertical,
   ExclamationCircle as AlertCircle,
   ExclamationTriangle as AlertTriangle,
   ArrowRight,
@@ -34,6 +35,7 @@ export {
   Download,
   BoxArrowUpRight as ExternalLink,
   Eye,
+  EyeSlash,
   FileEarmarkMusic as FileAudio,
   FileEarmarkArrowDown as FileDown,
   FileEarmarkSpreadsheet as FileSpreadsheet,
@@ -43,6 +45,7 @@ export {
   GlobeAmericas as Globe,
   Mortarboard as GraduationCap,
   Grid3x3 as Grid3X3,
+  QuestionCircle as HelpCircle,
   HouseDoor as Home,
   Image,
   InfoCircle as Info,
