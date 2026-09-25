@@ -1,13 +1,20 @@
+import { useState, useEffect } from 'react';
 import { SimulationParams } from '../../lib/types';
 import { computeLame } from '../../lib/simulation';
 import { Tooltip } from '../ui/Tooltip';
 import { Play, Loader } from '../../lib/icons';
+import { AccordionSection } from './AccordionSection';
+
+/** Identificadores de las secciones del panel de parámetros. */
+type ParamSection = 'elasticas' | 'fuente' | 'config';
 
 interface Props {
   params: SimulationParams;
   onChange: (p: SimulationParams) => void;
   onRun: () => void;
   loading: boolean;
+  /** Sección que el tour guiado quiere abrir (cambia por paso). */
+  forceSection?: ParamSection | null;
 }
 
 function SliderRow({
@@ -62,7 +69,16 @@ function SliderRow({
   );
 }
 
-export function ParametersPanel({ params, onChange, onRun, loading }: Props) {
+export function ParametersPanel({ params, onChange, onRun, loading, forceSection }: Props) {
+  // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
+  const [openSection, setOpenSection] = useState<ParamSection>('elasticas');
+  const toggle = (s: ParamSection) => setOpenSection(prev => (prev === s ? ('' as ParamSection) : s));
+
+  // El tour guiado puede forzar la apertura de una sección durante un paso.
+  useEffect(() => {
+    if (forceSection) setOpenSection(forceSection);
+  }, [forceSection]);
+
   const update = (key: keyof SimulationParams, val: number | string) => {
     const next = { ...params, [key]: val };
     if (['vp', 'vs', 'density'].includes(key as string)) {
@@ -78,9 +94,10 @@ export function ParametersPanel({ params, onChange, onRun, loading }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1">
-      <div className="bg-white rounded-xl border border-stone-200/60 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3">Variables Elásticas</h3>
+    <div className="flex flex-col gap-3 h-full min-h-0">
+      {/* Zona scrolleable: acordeones. El botón Generar queda fijo abajo. */}
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
+      <AccordionSection title="Variables Elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
         <div className="space-y-4">
           <SliderRow
             label="Velocidad de Onda P (Vp)"
@@ -131,10 +148,9 @@ export function ParametersPanel({ params, onChange, onRun, loading }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </AccordionSection>
 
-      <div className="bg-white rounded-xl border border-stone-200/60 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3">Fuente Sísmica</h3>
+      <AccordionSection title="Fuente Sísmica" dataTour="params-fuente" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
         <div className="space-y-4">
           <div>
             <span className="text-xs font-medium text-stone-600">Tipo de Fuente</span>
@@ -199,10 +215,9 @@ export function ParametersPanel({ params, onChange, onRun, loading }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </AccordionSection>
 
-      <div className="bg-white rounded-xl border border-stone-200/60 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3">Configuración</h3>
+      <AccordionSection title="Configuración" open={openSection === 'config'} onToggle={() => toggle('config')}>
         <div className="space-y-4">
           <SliderRow
             label="Tiempo de Simulación"
@@ -241,12 +256,15 @@ export function ParametersPanel({ params, onChange, onRun, loading }: Props) {
             </p>
           )}
         </div>
+      </AccordionSection>
       </div>
 
+      {/* Botón Generar: fijo abajo, siempre visible (fuera del scroll). */}
       <button
+        data-tour="btn-generar"
         onClick={onRun}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#C4553A] text-white font-bold text-sm shadow-lg shadow-[#C4553A]/20 disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#C4553A] text-white font-bold text-sm shadow-lg shadow-[#C4553A]/20 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
       >
         {loading ? (
           <>

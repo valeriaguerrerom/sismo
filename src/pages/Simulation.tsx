@@ -7,9 +7,12 @@ import { ResultsPanel } from '../components/simulation/ResultsPanel';
 import { WaveChart } from '../components/simulation/WaveChart';
 import { TriaxialPlane } from '../components/simulation/TriaxialPlane';
 import { ProgressBar } from '../components/simulation/ProgressBar';
-import { Activity, Info, Waves, Grid3X3, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check } from '../lib/icons';
+import { Activity, Info, Waves, Grid3X3, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle } from '../lib/icons';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
+import { Tooltip } from '../components/ui/Tooltip';
+import { startTour } from '../tours/useTour';
+import { buildSimulacionSteps, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
 
 interface Props {
   initialParams?: Partial<SimulationParams> | null;
@@ -42,7 +45,37 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const workerRef = useRef<Worker | null>(null);
 
   // Guardado de reportes
-  const { user } = useAuth();
+  const { user, markTourSeen } = useAuth();
+
+  // ── Tour guiado (Driver.js) ──
+  // Secciones de acordeón que el tour fuerza a abrir en cada paso.
+  const [tourParam, setTourParam] = useState<ParamSectionId | null>(null);
+  const [tourResult, setTourResult] = useState<ResultSectionId | null>(null);
+  const tourRef = useRef(false); // evita relanzar el auto-tour
+
+  const launchTour = useCallback(() => {
+    const steps = buildSimulacionSteps({
+      openParam: (s) => setTourParam(s),
+      openResult: (s) => setTourResult(s),
+    });
+    startTour(steps, {
+      onDone: () => {
+        markTourSeen('simulacion');
+        setTourParam(null);
+        setTourResult(null);
+      },
+    });
+  }, [markTourSeen]);
+
+  // Lanza el tour automáticamente la primera vez que el usuario entra al
+  // módulo, tras el primer render (rAF asegura que el DOM ya está pintado).
+  useEffect(() => {
+    if (tourRef.current || !user) return;
+    if (user.tours_vistos?.simulacion) return;
+    tourRef.current = true;
+    const id = requestAnimationFrame(() => setTimeout(launchTour, 350));
+    return () => cancelAnimationFrame(id);
+  }, [user, launchTour]);
   const [reportTitle, setReportTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
@@ -51,9 +84,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     if (!supabase || !user || !result) return;
     setSaving(true);
     setSaveMsg(null);
-    const title = reportTitle.trim() || `Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`;
+    const title = reportTitle.trim() || (realData
+      ? `Registro real ${realData.label}`
+      : `Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`);
     // Guardamos las métricas, la malla y una versión submuestreada de las series
     // (≤ 600 puntos) para poder regenerar el reporte PDF desde "Mis Reportes".
+    // Con registro real cargado, se guarda la señal REAL que ve el usuario (no
+    // el pseudo-sismograma FDM), para que el PDF coincida con la pantalla.
     // Los snapshots del campo de onda no se guardan (demasiado pesados).
     const { error } = await supabase.from('simulation_reports').insert({
       user_id: user.id,
@@ -74,7 +111,9 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           dtAdjusted: result.gridInfo.dtAdjusted,
           dxAdjusted: result.gridInfo.dxAdjusted,
         },
-        waveData: downsampleWave(result.waveData, 600),
+        waveData: downsampleWave(realData ? realData.waveData : result.waveData, 600),
+        isRealRecord: Boolean(realData),
+        realLabel: realData?.label,
       },
     });
     if (error) {
@@ -257,30 +296,44 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
-      <div className="bg-white border-b border-stone-200/60 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="bg-white border-b border-stone-200/60 px-6 py-2.5">
+        <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
-              <Activity size={20} className="text-[#C4553A]" />
+            <h1 className="text-[#1A1A2E] font-bold text-lg flex items-center gap-2">
+              <Activity size={18} className="text-[#C4553A]" />
               Módulo de Simulación Triaxial
+              {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+              <Tooltip content="Ver guía">
+                <button
+                  type="button"
+                  onClick={launchTour}
+                  aria-label="Ver guía"
+                  className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.simulacion ? 'help-pulse' : ''}`}
+                >
+                  <HelpCircle size={14} />
+                </button>
+              </Tooltip>
             </h1>
-            <p className="text-stone-400 text-xs mt-0.5">Diferencias Finitas 2D · Ecuación de Onda Elástica · Pseudo-sismogramas del subsuelo de Nariño</p>
+            <p className="hidden sm:block text-stone-400 text-[11px] mt-0.5">Diferencias Finitas 2D · Ecuación de Onda Elástica · Pseudo-sismogramas del subsuelo de Nariño</p>
           </div>
-          <div className="hidden lg:flex items-center gap-2 bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-2 text-xs text-stone-400">
+          <div className="hidden lg:flex items-center gap-2 bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-1.5 text-xs text-stone-400">
             <Info size={12} />
             Pase el cursor sobre los parámetros para ver su descripción
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-4 h-full">
-          <div className="lg:h-[calc(100vh-180px)] lg:overflow-y-auto scrollbar-thin">
-            <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} />
+      <div className="max-w-[1440px] mx-auto px-4 pt-4 pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-4 items-start">
+          {/* Columna de parámetros: sticky en desktop, sin recortar contenido.
+              Con acordeón exclusivo el contenido es corto; si una sección larga
+              excede la altura, hay scroll interno suave (nunca corte). */}
+          <div className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+            <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} />
           </div>
 
-          <div className="flex flex-col gap-4">
-            <div data-viz-area className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
+          <div className="flex flex-col gap-4 lg:max-h-[calc(100dvh-154px)] lg:overflow-y-auto scrollbar-thin lg:pr-1">
+            <div data-viz-area data-tour="viz-area" className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-bold text-[#1A1A2E]">Visualización</h2>
@@ -313,13 +366,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               {/* Progress bar */}
               {loading && progress && <ProgressBar progress={progress} />}
 
-              {/* Empty state */}
+              {/* Empty state (compacto: no reserva altura enorme) */}
               {!loading && !result && !realData && (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="w-20 h-20 rounded-2xl bg-stone-100 flex items-center justify-center mb-4">
-                    <Activity size={32} className="text-stone-300" />
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
+                    <Activity size={26} className="text-stone-300" />
                   </div>
-                  <h3 className="font-semibold text-stone-400 mb-2">Esperando simulación</h3>
+                  <h3 className="font-semibold text-stone-400 mb-1">Esperando simulación</h3>
                   <p className="text-stone-400 text-sm max-w-xs leading-relaxed">
                     Configure los parámetros y presione "Generar Pseudo-Sismograma"
                   </p>
@@ -518,8 +571,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
             )}
           </div>
 
-          <div className="lg:h-[calc(100vh-180px)] lg:overflow-y-auto scrollbar-thin">
-            <ResultsPanel result={result} />
+          {/* Columna de resultados: sticky con altura acotada. El scroll vive
+              DENTRO de ResultsPanel (zona de acordeones), para que los botones
+              de exportación queden fijos abajo, siempre visibles. */}
+          <div data-tour="results-panel" className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} />
           </div>
         </div>
       </div>

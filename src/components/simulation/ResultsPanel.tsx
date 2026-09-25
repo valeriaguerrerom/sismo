@@ -1,11 +1,23 @@
-import { SimulationResult } from '../../lib/types';
+import { useState, useEffect } from 'react';
+import { SimulationResult, WaveData } from '../../lib/types';
 import { Download, FileText, AlertCircle, Grid3X3, Image, FileDown } from '../../lib/icons';
 import { interpretSimulation } from '../../lib/interpretation';
 import { downloadReportPdf, downsampleWave } from '../../lib/reportPdf';
 import { exportPNG } from '../../lib/exportImage';
+import { AccordionSection } from './AccordionSection';
+
+/** Identificadores de las secciones del panel de resultados. */
+type ResultSection = 'metricas' | 'malla' | 'interpretacion';
+
+/** Registro real cargado en el simulador (para que el reporte lo use). */
+export interface RealRecordInfo { waveData: WaveData; label: string; }
 
 interface Props {
   result: SimulationResult | null;
+  /** Si hay un registro real cargado, el PDF muestra esa señal (no el FDM). */
+  realRecord?: RealRecordInfo | null;
+  /** Sección que el tour guiado quiere abrir (cambia por paso). */
+  forceSection?: ResultSection | null;
 }
 
 function exportCSV(result: SimulationResult) {
@@ -32,11 +44,17 @@ function interpretResult(result: SimulationResult): string {
   return interpretSimulation(result);
 }
 
-/** Exporta la simulación actual como reporte PDF (RF-19). */
-function exportPDF(result: SimulationResult) {
+/**
+ * Exporta el reporte PDF (RF-19). Si hay un registro real cargado, el PDF
+ * muestra esa señal (la misma que la pantalla), no el pseudo-sismograma FDM.
+ */
+function exportPDF(result: SimulationResult, realRecord?: RealRecordInfo | null) {
   const { params } = result;
+  const title = realRecord
+    ? `Registro real ${realRecord.label}`
+    : `Simulación ${params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${params.magnitude.toFixed(1)}`;
   downloadReportPdf({
-    title: `Simulación ${params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${params.magnitude.toFixed(1)}`,
+    title,
     params,
     results: {
       maxAmplitude: result.maxAmplitude,
@@ -47,12 +65,24 @@ function exportPDF(result: SimulationResult) {
       pArrivalDetected: result.pArrivalDetected,
       sArrivalDetected: result.sArrivalDetected,
       gridInfo: result.gridInfo,
-      waveData: downsampleWave(result.waveData, 1200),
+      // Con registro real: la señal real que se ve en pantalla, sin marcas P/S.
+      waveData: downsampleWave(realRecord ? realRecord.waveData : result.waveData, 1200),
+      isRealRecord: Boolean(realRecord),
+      realLabel: realRecord?.label,
     },
   }, 'sismograma_narino');
 }
 
-export function ResultsPanel({ result }: Props) {
+export function ResultsPanel({ result, realRecord, forceSection }: Props) {
+  // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
+  const [openSection, setOpenSection] = useState<ResultSection>('metricas');
+  const toggle = (s: ResultSection) => setOpenSection(prev => (prev === s ? ('' as ResultSection) : s));
+
+  // El tour guiado puede forzar la apertura de una sección durante un paso.
+  useEffect(() => {
+    if (forceSection) setOpenSection(forceSection);
+  }, [forceSection]);
+
   if (!result) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -69,10 +99,12 @@ export function ResultsPanel({ result }: Props) {
   const impedance = params.density * params.vp;
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1 scrollbar-thin">
+    <div className="flex flex-col gap-3 h-full min-h-0">
+      {/* Zona scrolleable: acordeones. Scrollbar sutil (scrollbar-thin) que en
+          escritorio solo se hace notorio al interactuar. */}
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       {/* Metrics */}
-      <div className="bg-white rounded-xl border border-stone-200/60 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3">Métricas</h3>
+      <AccordionSection title="Métricas" open={openSection === 'metricas'} onToggle={() => toggle('metricas')}>
         <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'Amplitud Máx.', value: formatAmplitude(maxAmplitude) },
@@ -98,13 +130,10 @@ export function ResultsPanel({ result }: Props) {
         <p className="text-[10px] text-stone-400 mt-1">
           Amplitud en unidades arbitrarias (desplazamiento no calibrado).
         </p>
-      </div>
+      </AccordionSection>
 
       {/* Grid info */}
-      <div className="bg-white rounded-xl border border-stone-200/60 p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E] mb-3 flex items-center gap-1.5">
-          <Grid3X3 size={12} /> Malla FDM
-        </h3>
+      <AccordionSection title="Malla FDM" icon={<Grid3X3 size={12} />} open={openSection === 'malla'} onToggle={() => toggle('malla')}>
         <div className="space-y-2">
           {[
             { label: 'Tamaño malla', value: `${gridInfo.nx} × ${gridInfo.nz}` },
@@ -136,25 +165,23 @@ export function ResultsPanel({ result }: Props) {
             ⚠️ dx fue aumentado automáticamente para representar la profundidad focal solicitada dentro de la malla.
           </p>
         )}
-      </div>
+      </AccordionSection>
 
       {/* Interpretation */}
-      <div className="bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-xl p-4">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#2D6A4F] mb-2 flex items-center gap-1.5">
-          <FileText size={12} /> Interpretación
-        </h3>
+      <AccordionSection title="Interpretación" icon={<FileText size={12} />} open={openSection === 'interpretacion'} onToggle={() => toggle('interpretacion')}>
         <p className="text-xs text-stone-600 leading-relaxed">{interpretResult(result)}</p>
+      </AccordionSection>
       </div>
 
-      {/* Export buttons */}
-      <div className="flex gap-2">
+      {/* Botones de exportación: fijos abajo, siempre visibles (fuera del scroll). */}
+      <div className="flex gap-2 pt-3 border-t border-stone-200/60 shrink-0">
         <button onClick={() => exportCSV(result)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <Download size={14} /> CSV
         </button>
         <button onClick={() => exportPNG()} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <Image size={14} /> PNG
         </button>
-        <button onClick={() => exportPDF(result)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-[#C4553A]/30 bg-[#C4553A]/5 text-[#C4553A] font-semibold text-sm">
+        <button onClick={() => exportPDF(result, realRecord)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-[#C4553A]/30 bg-[#C4553A]/5 text-[#C4553A] font-semibold text-sm">
           <FileDown size={14} /> PDF
         </button>
       </div>

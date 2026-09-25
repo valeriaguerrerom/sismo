@@ -1,0 +1,143 @@
+/*
+ * Estilo de los tours guiados (Driver.js) acorde a la paleta de SismoNariño.
+ * Reemplaza por completo el aspecto por defecto de la librería: tarjeta blanca,
+ * texto azul noche, botón "Siguiente" en terracota, "Omitir"/"Anterior" como
+ * enlaces discretos en gris, bordes redondeados como el resto de tarjetas.
+ * La clase `sismo-tour` se pasa vía `popoverClass` al crear el driver.
+ */
+
+/* Popover (tarjeta) */
+.driver-popover.sismo-tour {
+  background: #ffffff;
+  color: #1a1a2e;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(26, 26, 46, 0.14);
+  padding: 18px 18px 14px;
+  max-width: 320px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Título */
+.driver-popover.sismo-tour .driver-popover-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1a1a2e;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+/* Descripción */
+.driver-popover.sismo-tour .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5a5a5a;
+}
+
+/* Flecha del popover en el mismo blanco de la tarjeta */
+.driver-popover.sismo-tour .driver-popover-arrow {
+  border-color: #ffffff;
+}
+
+/* Pie: progreso a la izquierda, botones a la derecha */
+.driver-popover.sismo-tour .driver-popover-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Indicador de progreso "2 de 5" */
+.driver-popover.sismo-tour .driver-popover-progress-text {
+  font-size: 12px;
+  color: #8a8a8a;
+  font-weight: 600;
+}
+
+/* Contenedor de botones a la derecha */
+.driver-popover.sismo-tour .driver-popover-navigation-btns {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Botón base (quita el aspecto por defecto de la librería) */
+.driver-popover.sismo-tour button {
+  all: unset;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 10px;
+  transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+/* "Siguiente" / "Terminar": botón terracota relleno */
+.driver-popover.sismo-tour .driver-popover-next-btn {
+  background: #c4553a;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  text-shadow: none;
+}
+.driver-popover.sismo-tour .driver-popover-next-btn:hover {
+  background: #ad4831;
+}
+
+/* "Anterior": enlace discreto en gris */
+.driver-popover.sismo-tour .driver-popover-prev-btn {
+  color: #5a5a5a;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 6px;
+}
+.driver-popover.sismo-tour .driver-popover-prev-btn:hover {
+  color: #1a1a2e;
+}
+/* Oculta el botón anterior deshabilitado (primer paso) */
+.driver-popover.sismo-tour .driver-popover-prev-btn.driver-popover-btn-disabled {
+  display: none;
+}
+
+/* Botón de cierre (X) discreto */
+.driver-popover.sismo-tour .driver-popover-close-btn {
+  color: #a8a29e;
+  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  border-radius: 8px;
+}
+.driver-popover.sismo-tour .driver-popover-close-btn:hover {
+  color: #1a1a2e;
+  background: #f5f5f4;
+}
+
+/* "Omitir": enlace discreto en gris, a la izquierda de los botones nav.
+   Se inyecta como botón con la clase driver-popover-footer-btn (custom). */
+.driver-popover.sismo-tour .sismo-skip-btn {
+  color: #8a8a8a;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.driver-popover.sismo-tour .sismo-skip-btn:hover {
+  color: #5a5a5a;
+}
+
+/* Overlay: transición suave */
+.driver-overlay {
+  transition: opacity 0.3s ease;
+}
+
+/* Respeta prefers-reduced-motion: sin transiciones ni animaciones */
+@media (prefers-reduced-motion: reduce) {
+  .driver-popover.sismo-tour,
+  .driver-popover.sismo-tour *,
+  .driver-overlay {
+    transition: none !important;
+    animation: none !important;
+  }
+}
