@@ -15,11 +15,13 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
     VITE_API_URL=$VITE_API_URL
 
-COPY package.json package-lock.json ./
-RUN npm ci
+# El proyecto usa pnpm (pnpm-lock.yaml). Se habilita vía corepack con versión fija.
+RUN corepack enable && corepack prepare pnpm@11.20.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # ── Etapa 2: servir con Nginx ──
 FROM nginx:1.27-alpine
