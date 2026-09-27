@@ -1,15 +1,19 @@
 """
-Autogestión de la cuenta del usuario autenticado.
+Autogestión y administración de cuentas.
 
-Endpoint:
-    DELETE /api/account  (requiere Authorization: Bearer <access_token>)
+Endpoints:
+    DELETE /api/account            — el usuario elimina su propia cuenta.
+    DELETE /api/admin/users/{id}   — un administrador elimina otra cuenta.
 
-Elimina de forma permanente la cuenta del propio usuario:
-    - Verifica el JWT del usuario contra Supabase (con la clave anon).
-    - Impide eliminar la cuenta si es el único administrador de la plataforma.
-    - Elimina al usuario de ``auth.users`` usando la clave de servicio
-      (service_role). Por las claves foráneas ``ON DELETE CASCADE`` esto
-      arrastra su perfil (``profiles``) y sus reportes (``simulation_reports``).
+Ambos ELIMINAN con ANONIMIZACIÓN de reportes (habeas data, Ley 1581):
+    - Verifican el JWT contra Supabase (clave anon).
+    - Anonimizan las simulaciones del usuario: quitan textos identificables y
+      dejan user_id en NULL (la FK es ON DELETE SET NULL), conservando solo los
+      parámetros y resultados técnicos con fines estadísticos.
+    - Eliminan al usuario de ``auth.users`` (cascada al perfil).
+    - Registran la baja en ``account_deletions`` SIN datos personales del
+      eliminado (solo origen, admin ejecutor, motivo y nº de reportes).
+    - Impiden eliminar al único administrador.
 
 La clave de servicio (``SUPABASE_SERVICE_ROLE_KEY``) NUNCA se expone al
 frontend: vive solo como variable de entorno del servidor.
@@ -18,19 +22,21 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Body, Header, HTTPException
 from supabase import create_client, Client
 
 router = APIRouter(tags=["Cuenta"])
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
-# En Railway crea SUPABASE_SERVICE_ROLE_KEY. Como respaldo local se acepta
-# SUPABASE_SERVICE_KEY (nombre usado por el script de subida a Storage).
-SUPABASE_SERVICE_ROLE_KEY = (
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-    or os.getenv("SUPABASE_SERVICE_KEY", "")
-)
+# Las variables se leen en tiempo de request (dentro de las funciones), no al
+# importar el módulo: así no dependen de que load_dotenv() ya se haya ejecutado.
+def _env() -> tuple[str, str, str]:
+    """Devuelve (url, anon_key, service_key). service_key acepta ambos nombres."""
+    url = os.getenv("SUPABASE_URL", "")
+    anon = os.getenv("SUPABASE_ANON_KEY", "")
+    # En Railway crea SUPABASE_SERVICE_ROLE_KEY. Como respaldo local se acepta
+    # SUPABASE_SERVICE_KEY (nombre usado por el script de subida a Storage).
+    service = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("SUPABASE_SERVICE_KEY", "")
+    return url, anon, service
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -54,39 +60,113 @@ def _verified_user_id(anon: Client, token: str) -> str:
 
 def _admin_clients() -> tuple[Client, Client]:
     """Crea los clientes anon y de servicio, validando la configuración."""
-    if not (SUPABASE_URL and SUPABASE_ANON_KEY):
+    url, anon_key, service_key = _env()
+    if not (url and anon_key):
         raise HTTPException(status_code=503, detail="Servicio no configurado.")
-    if not SUPABASE_SERVICE_ROLE_KEY:
+    if not service_key:
         raise HTTPException(
             status_code=503,
             detail="Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.",
         )
     return (
-        create_client(SUPABASE_URL, SUPABASE_ANON_KEY),
-        create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY),
+        create_client(url, anon_key),
+        create_client(url, service_key),
     )
 
 
-def _delete_user_cascade(admin: Client, user_id: str) -> None:
-    """Elimina al usuario de auth.users (cascada a perfil y reportes)."""
+def _anonymize_reports(admin: Client, user_id: str) -> int:
+    """
+    Anonimiza los reportes del usuario ANTES de borrarlo: quita cualquier texto
+    que pueda identificar a la persona y conserva solo parámetros y resultados
+    técnicos. Devuelve cuántos reportes se anonimizaron.
+
+    Campos que se limpian:
+      - title  -> 'Simulación anonimizada'
+      - notes  -> ''
+      - results.map3d.options.title / .author / .institution -> '' (si existen)
+    Se conservan: params (Vp, Vs, densidad, magnitud, etc.) y results técnicos
+    (amplitud, llegadas P/S, frecuencia dominante, gridInfo).
+    """
+    rows = (
+        admin.table("simulation_reports")
+        .select("id, results")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    reports = rows.data or []
+    for r in reports:
+        results = r.get("results")
+        # Limpiar posibles textos libres dentro de results (reportes del Mapa 3D).
+        if isinstance(results, dict):
+            opts = (results.get("map3d") or {}).get("options") if isinstance(results.get("map3d"), dict) else None
+            if isinstance(opts, dict):
+                for k in ("title", "author", "institution", "notes"):
+                    if k in opts:
+                        opts[k] = ""
+        admin.table("simulation_reports").update({
+            "user_id": None,
+            "title": "Simulación anonimizada",
+            "notes": "",
+            "results": results,
+        }).eq("id", r["id"]).execute()
+    return len(reports)
+
+
+def _log_deletion(admin: Client, origin: str, admin_id: str | None, reason: str | None, count: int) -> None:
+    """Registra la eliminación en la bitácora SIN datos personales del eliminado."""
+    try:
+        admin.table("account_deletions").insert({
+            "origin": origin,
+            "admin_id": admin_id,
+            "reason": reason,
+            "anonymized_reports_count": count,
+        }).execute()
+    except Exception:  # pragma: no cover - la bitácora no debe bloquear el borrado
+        pass
+
+
+def _delete_account(admin: Client, user_id: str, origin: str, admin_id: str | None, reason: str | None) -> int:
+    """
+    Anonimiza los reportes, elimina al usuario de auth.users (cascada al perfil;
+    los reportes quedan con user_id NULL por ON DELETE SET NULL) y registra la
+    eliminación en la bitácora. Devuelve el nº de reportes anonimizados.
+    """
+    count = _anonymize_reports(admin, user_id)
     try:
         admin.auth.admin.delete_user(user_id)
     except Exception as exc:  # pragma: no cover - depende del servicio remoto
         raise HTTPException(status_code=500, detail=f"No se pudo eliminar la cuenta: {exc}")
+    _log_deletion(admin, origin, admin_id, reason, count)
+    return count
+
+
+def _is_sole_admin(admin: Client, user_id: str) -> bool:
+    """True si el usuario es administrador y es el único de la plataforma."""
+    try:
+        row = admin.table("profiles").select("role").eq("id", user_id).single().execute()
+        if (row.data or {}).get("role") != "admin":
+            return False
+    except Exception:
+        return False
+    admins = admin.table("profiles").select("id", count="exact").eq("role", "admin").execute()
+    admin_count = admins.count if admins.count is not None else len(admins.data or [])
+    return admin_count <= 1
 
 
 @router.delete("/api/admin/users/{target_id}", summary="Eliminar una cuenta (admin)")
-def admin_delete_user(target_id: str, authorization: str | None = Header(default=None)):
+def admin_delete_user(
+    target_id: str,
+    authorization: str | None = Header(default=None),
+    reason: str | None = Body(default=None, embed=True),
+):
     """
-    Un administrador elimina la cuenta de otro usuario.
-
-    Verifica que quien llama tenga rol de administrador, impide eliminar al
-    único administrador y elimina al usuario objetivo con la clave de servicio
-    (arrastra perfil y reportes por las claves foráneas en cascada).
+    Un administrador elimina la cuenta de otro usuario, anonimizando sus
+    reportes (se conservan sin datos personales) y registrando la eliminación.
 
     Args:
         target_id: id del usuario a eliminar.
         authorization: encabezado ``Bearer`` con el access token del admin.
+        reason: motivo de la eliminación (opcional).
 
     Raises:
         HTTPException 401: token ausente o inválido.
@@ -97,36 +177,28 @@ def admin_delete_user(target_id: str, authorization: str | None = Header(default
     anon, admin = _admin_clients()
     caller_id = _verified_user_id(anon, token)
 
-    # Quien llama debe ser administrador.
     caller = admin.table("profiles").select("role").eq("id", caller_id).single().execute()
     if (caller.data or {}).get("role") != "admin":
         raise HTTPException(status_code=403, detail="Solo un administrador puede eliminar cuentas.")
 
-    # No permitir eliminar al único administrador de la plataforma.
-    target = admin.table("profiles").select("role").eq("id", target_id).single().execute()
-    if (target.data or {}).get("role") == "admin":
-        admins = admin.table("profiles").select("id", count="exact").eq("role", "admin").execute()
-        admin_count = admins.count if admins.count is not None else len(admins.data or [])
-        if admin_count <= 1:
-            raise HTTPException(
-                status_code=409,
-                detail="No puedes eliminar al único administrador de la plataforma.",
-            )
+    if _is_sole_admin(admin, target_id):
+        raise HTTPException(
+            status_code=409,
+            detail="No puedes eliminar al único administrador de la plataforma.",
+        )
 
-    _delete_user_cascade(admin, target_id)
-    return {"deleted": True}
+    count = _delete_account(admin, target_id, origin="administrador", admin_id=caller_id, reason=reason)
+    return {"deleted": True, "anonymized_reports": count}
 
 
 @router.delete("/api/account", summary="Eliminar la propia cuenta")
 def delete_own_account(authorization: str | None = Header(default=None)):
     """
-    Elimina la cuenta del usuario autenticado (perfil, reportes y credenciales).
+    El usuario elimina su propia cuenta: anonimiza sus reportes (se conservan
+    sin datos personales), borra su perfil/credenciales y registra la baja.
 
     Args:
         authorization: Encabezado ``Bearer`` con el access token del usuario.
-
-    Returns:
-        dict: ``{"deleted": True}`` cuando la cuenta se elimina.
 
     Raises:
         HTTPException 401: token ausente o inválido.
@@ -137,24 +209,14 @@ def delete_own_account(authorization: str | None = Header(default=None)):
     anon, admin = _admin_clients()
     user_id = _verified_user_id(anon, token)
 
-    # Regla de negocio: no permitir eliminar al ÚNICO administrador.
-    try:
-        me = admin.table("profiles").select("role").eq("id", user_id).single().execute()
-        my_role = (me.data or {}).get("role")
-    except Exception:
-        my_role = None
+    if _is_sole_admin(admin, user_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Eres el único administrador. Asigna otro administrador "
+                "antes de eliminar tu cuenta."
+            ),
+        )
 
-    if my_role == "admin":
-        admins = admin.table("profiles").select("id", count="exact").eq("role", "admin").execute()
-        admin_count = admins.count if admins.count is not None else len(admins.data or [])
-        if admin_count <= 1:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Eres el único administrador. Asigna otro administrador "
-                    "antes de eliminar tu cuenta."
-                ),
-            )
-
-    _delete_user_cascade(admin, user_id)
-    return {"deleted": True}
+    count = _delete_account(admin, user_id, origin="usuario", admin_id=None, reason=None)
+    return {"deleted": True, "anonymized_reports": count}

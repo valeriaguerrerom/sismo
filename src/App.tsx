@@ -15,6 +15,7 @@ import { MyReports } from './pages/MyReports';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { CompleteProfile } from './pages/CompleteProfile';
 import { ResetPassword } from './pages/ResetPassword';
+import { DeactivatedAccount } from './pages/DeactivatedAccount';
 import { Profile } from './pages/Profile';
 
 /** Páginas visibles sin sesión. El resto requiere investigador o administrador. */
@@ -47,7 +48,7 @@ function useWideScreenZoom(): number {
 }
 
 function AppContent() {
-  const { user, loading, recoveryMode, signOut } = useAuth();
+  const { user, loading, recoveryMode, deactivatedInfo, signOut } = useAuth();
   const [page, setPage] = useState<Page>('home');
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   /** Aviso a mostrar en Iniciar sesión (p. ej. tras actualizar la contraseña). */
@@ -120,14 +121,29 @@ function AppContent() {
     await signOut();
   }, [go, signOut]);
 
+  // Tras desactivar la cuenta: cerrar sesión, ir a Inicio y avisar.
+  const handleAccountDeactivated = useCallback(async () => {
+    setHomeNotice('Tu cuenta fue desactivada');
+    go('home');
+    await signOut();
+  }, [go, signOut]);
+
   const renderPage = () => {
     // Enlace de recuperación de contraseña: pantalla "Nueva contraseña" con
     // prioridad sobre todo lo demás (la sesión de recuperación es temporal).
     if (recoveryMode) {
       return <ResetPassword
         onHome={() => navigate('home')}
-        onDone={(msg) => { setAuthNotice(msg); setAuthMode('login'); go('auth'); }}
+        onDone={(msg) => { setAuthNotice(msg); setAuthMode('login'); setPage('auth'); window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); }}
         onRequestNew={() => { setAuthMode('forgot'); go('auth'); }}
+      />;
+    }
+    // Cuenta desactivada: pantalla con prioridad. El usuario no entra a la
+    // plataforma; puede reactivar (si la desactivó él) o ver el contacto.
+    if (deactivatedInfo) {
+      return <DeactivatedAccount
+        onHome={() => { setPage('home'); window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); }}
+        onReactivated={() => { setPage('home'); window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); }}
       />;
     }
     // Perfil incompleto (registro nuevo, Google o cuentas antiguas): apenas
@@ -173,7 +189,7 @@ function AppContent() {
       case 'education': return <Education />;
       case 'map3d': return <Map3D />;
       case 'reports': return <MyReports />;
-      case 'profile': return <Profile onDeleted={handleAccountDeleted} />;
+      case 'profile': return <Profile onDeleted={handleAccountDeleted} onDeactivated={handleAccountDeactivated} />;
       case 'admin': return user?.role === 'admin' ? <AdminDashboard /> : <Home onNavigate={navigate} />;
       default: return <Home onNavigate={navigate} />;
     }

@@ -26,6 +26,9 @@ export interface AdminUser {
   country: string;
   usage_purpose: string;
   active: boolean;
+  /** 'usuario' | 'administrador' | null (activa). Origen de la desactivación. */
+  deactivated_by: string | null;
+  deactivation_reason: string | null;
   created_at: string;
   last_login: string | null;
   data_authorization_at: string | null;
@@ -79,6 +82,8 @@ export interface DashboardStats {
   facts: number;
   timeline: number;
   roles: { admin: number; user: number };
+  /** Total de cuentas eliminadas (bitácora account_deletions). */
+  deletedAccounts: number;
   /** Reportes por mes (últimos 6 meses), en orden cronológico. */
   reportsPerMonth: { label: string; count: number }[];
   /** Últimos accesos (10 más recientes). */
@@ -113,8 +118,9 @@ export async function loadDashboardStats(): Promise<DashboardStats> {
     sb.from('quiz_questions').select('*', head),
     sb.from('wave_facts').select('*', head),
     sb.from('timeline_events').select('*', head),
+    sb.from('account_deletions').select('*', head),
   ]);
-  const [users, activeUsers, admins, events, tectonic, reports, questions, facts, timeline] = results.map(r => r.count || 0);
+  const [users, activeUsers, admins, events, tectonic, reports, questions, facts, timeline, deletedAccounts] = results.map(r => r.count || 0);
 
   // Reportes por mes: últimos 6 meses.
   const since = new Date();
@@ -150,6 +156,7 @@ export async function loadDashboardStats(): Promise<DashboardStats> {
     facts,
     timeline,
     roles: { admin: admins, user: users - admins },
+    deletedAccounts,
     reportsPerMonth: buckets.map(({ label, count }) => ({ label, count })),
     lastLogins: (logins || []) as DashboardStats['lastLogins'],
     eventsByType: { tectonic, volcanic: events - tectonic },
@@ -166,7 +173,9 @@ export async function loadUsers(): Promise<AdminUser[]> {
     id: d.id, email: d.email, full_name: d.full_name ?? '', role: d.role as UserRole,
     institution: d.institution ?? '', occupation: d.occupation ?? '', research_area: d.research_area ?? '',
     city: d.city ?? '', country: d.country ?? '', usage_purpose: d.usage_purpose ?? '',
-    active: d.active ?? true, created_at: d.created_at, last_login: d.last_login ?? null,
+    active: d.active ?? true,
+    deactivated_by: d.deactivated_by ?? null, deactivation_reason: d.deactivation_reason ?? null,
+    created_at: d.created_at, last_login: d.last_login ?? null,
     data_authorization_at: d.data_authorization_at ?? null,
   }));
 }
@@ -176,9 +185,22 @@ export async function setUserRole(id: string, role: 'user' | 'admin'): Promise<v
   fail(error);
 }
 
-/** Activa o desactiva una cuenta (RF-05). Una cuenta inactiva no puede entrar. */
-export async function setUserActive(id: string, active: boolean): Promise<void> {
-  const { error } = await ensure().from('profiles').update({ active }).eq('id', id);
+/** Desactiva una cuenta por decisión del administrador, con motivo (RF-05). */
+export async function deactivateUser(id: string, reason: string): Promise<void> {
+  const { error } = await ensure().from('profiles').update({
+    active: false,
+    deactivated_by: 'administrador',
+    deactivated_at: new Date().toISOString(),
+    deactivation_reason: reason,
+  }).eq('id', id);
+  fail(error);
+}
+
+/** Reactiva cualquier cuenta (la haya desactivado quien sea). */
+export async function reactivateUser(id: string): Promise<void> {
+  const { error } = await ensure().from('profiles').update({
+    active: true, deactivated_by: null, deactivated_at: null, deactivation_reason: null,
+  }).eq('id', id);
   fail(error);
 }
 
@@ -187,7 +209,7 @@ export async function setUserActive(id: string, active: boolean): Promise<void> 
  * mecanismo que la eliminación desde el perfil): verifica el JWT del admin y
  * borra con la clave de servicio. Bloquea eliminar al único administrador.
  */
-export async function deleteUser(id: string): Promise<void> {
+export async function deleteUser(id: string, reason?: string): Promise<void> {
   const sb = ensure();
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
@@ -196,7 +218,8 @@ export async function deleteUser(id: string): Promise<void> {
   const base = import.meta.env.VITE_API_URL || '';
   const res = await fetch(`${base}/api/admin/users/${id}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason ?? null }),
   });
   if (res.ok) return;
   let detail = 'No se pudo eliminar la cuenta.';

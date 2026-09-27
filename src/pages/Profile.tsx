@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import {
   ShieldCheck, Pencil, Check, X, Lock, Trash2, AlertTriangle, ArrowRight,
-  Calendar, Mail, Eye, EyeSlash,
+  Calendar, Mail, Eye, EyeSlash, UserX,
 } from '../lib/icons';
 import { useAuth, ResearcherSignUp, ROLE_LABELS } from '../lib/auth';
 import { ResearcherFields } from '../components/auth/ResearcherFields';
@@ -20,6 +20,8 @@ const C = { terracotta: '#C4553A', forest: '#2D6A4F', ink: '#1A1A2E', cream: '#F
 interface Props {
   /** Se llama tras eliminar la cuenta: la app cierra sesión y va a Inicio. */
   onDeleted: () => void;
+  /** Se llama tras desactivar la cuenta: la app cierra sesión y va a Inicio. */
+  onDeactivated: () => void;
 }
 
 /** Iniciales (1-2 letras) a partir del nombre o el correo. */
@@ -56,8 +58,8 @@ function ReadField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function Profile({ onDeleted }: Props) {
-  const { user, updateProfile, updatePassword } = useAuth();
+export function Profile({ onDeleted, onDeactivated }: Props) {
+  const { user, updateProfile, updatePassword, deactivateOwnAccount } = useAuth();
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<ResearcherSignUp>(blankForm());
@@ -71,6 +73,11 @@ export function Profile({ onDeleted }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
+
+  // Desactivación de cuenta
+  const [deacOpen, setDeacOpen] = useState(false);
+  const [deacBusy, setDeacBusy] = useState(false);
+  const [deacError, setDeacError] = useState('');
 
   // Eliminación de cuenta
   const [delOpen, setDelOpen] = useState(false);
@@ -132,6 +139,18 @@ export function Profile({ onDeleted }: Props) {
       setTimeout(() => setToast(''), 3000);
     } finally {
       setPwSaving(false);
+    }
+  };
+
+  const confirmDeactivate = async () => {
+    setDeacError('');
+    setDeacBusy(true);
+    try {
+      const err = await deactivateOwnAccount();
+      if (err) { setDeacError(err); return; }
+      onDeactivated();
+    } finally {
+      setDeacBusy(false);
     }
   };
 
@@ -294,12 +313,19 @@ export function Profile({ onDeleted }: Props) {
           </div>
         </div>
 
-        {/* ── Eliminar cuenta (separado, discreto) ── */}
-        <div className="mt-8 pt-5 border-t border-stone-200/60 flex justify-center">
-          <button onClick={() => { setDelEmail(''); setDelError(''); setDelOpen(true); }}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-            <Trash2 size={13} /> Eliminar mi cuenta
-          </button>
+        {/* ── Tu cuenta (desactivar / eliminar) ── */}
+        <div className="mt-8 pt-5 border-t border-stone-200/60">
+          <h2 className="text-sm font-bold mb-3" style={{ color: C.ink }}>Tu cuenta</h2>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => { setDeacError(''); setDeacOpen(true); }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:border-[#C4553A]/40 hover:text-[#C4553A] transition-colors">
+              <UserX size={13} /> Desactivar mi cuenta
+            </button>
+            <button onClick={() => { setDelEmail(''); setDelError(''); setDelOpen(true); }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+              <Trash2 size={13} /> Eliminar mi cuenta
+            </button>
+          </div>
         </div>
       </div>
 
@@ -307,6 +333,32 @@ export function Profile({ onDeleted }: Props) {
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-[#2D6A4F] text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg">
           <Check size={15} /> {toast}
+        </div>
+      )}
+
+      {/* Diálogo: desactivar cuenta */}
+      {deacOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => !deacBusy && setDeacOpen(false)}>
+          <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="w-11 h-11 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
+              <UserX size={22} className="text-[#C4553A]" />
+            </div>
+            <h3 className="text-lg font-black" style={{ color: C.ink }}>Desactivar mi cuenta</h3>
+            <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
+              Tus datos y tus simulaciones se conservan. Mientras esté desactivada no podrás usar la plataforma, pero puedes reactivarla cuando quieras iniciando sesión.
+            </p>
+            {deacError && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{deacError}</p>}
+            <div className="flex gap-2 mt-4">
+              <button onClick={confirmDeactivate} disabled={deacBusy}
+                className="flex-1 flex items-center justify-center gap-2 bg-[#C4553A] text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
+                {deacBusy ? 'Desactivando…' : 'Desactivar mi cuenta'} <ArrowRight size={15} />
+              </button>
+              <button onClick={() => setDeacOpen(false)} disabled={deacBusy}
+                className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold disabled:opacity-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -319,12 +371,8 @@ export function Profile({ onDeleted }: Props) {
             </div>
             <h3 className="text-lg font-black" style={{ color: C.ink }}>Eliminar mi cuenta</h3>
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
-              Esta acción es <b style={{ color: C.ink }}>permanente</b> y no se puede deshacer. Se eliminarán:
+              Se eliminarán el perfil y los datos personales de forma permanente. Las simulaciones se conservarán sin ningún dato que identifique a la persona, solo con fines estadísticos del proyecto.
             </p>
-            <ul className="text-sm mt-2 space-y-1 list-disc pl-5" style={{ color: C.muted }}>
-              <li>Tu perfil de investigador</li>
-              <li>Tus reportes de simulación guardados</li>
-            </ul>
             <p className="text-sm mt-3" style={{ color: C.muted }}>
               Para confirmar, escribe tu correo <b style={{ color: C.ink }}>{user.email}</b>:
             </p>
