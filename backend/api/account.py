@@ -131,7 +131,20 @@ def _delete_account(admin: Client, user_id: str, origin: str, admin_id: str | No
     los reportes quedan con user_id NULL por ON DELETE SET NULL) y registra la
     eliminación en la bitácora. Devuelve el nº de reportes anonimizados.
     """
-    count = _anonymize_reports(admin, user_id)
+    # Anonimizar reportes. Si la migración 20260920 no está aplicada (user_id
+    # sigue NOT NULL o la FK es ON DELETE CASCADE), este UPDATE falla; damos un
+    # mensaje claro para no dejar un 500 opaco.
+    try:
+        count = _anonymize_reports(admin, user_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "No se pudieron anonimizar los reportes del usuario. "
+                "Verifica que la migración 20260920 esté aplicada en la base. "
+                f"Detalle: {exc}"
+            ),
+        )
     try:
         admin.auth.admin.delete_user(user_id)
     except Exception as exc:  # pragma: no cover - depende del servicio remoto

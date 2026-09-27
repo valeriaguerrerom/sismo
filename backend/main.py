@@ -22,8 +22,9 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 
 from simulation import SimulationParams, SimulationResult, run_fdm, compute_lame
@@ -109,6 +110,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Manejador global de errores no controlados. Sin esto, una excepción cruda
+# produce un 500 SIN headers CORS, y el navegador lo reporta como "bloqueado por
+# CORS / Failed to fetch" ocultando el error real. Aquí devolvemos un JSON con
+# el detalle y con Access-Control-Allow-Origin, para que el frontend lo lea.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno del servidor: {exc}"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
 # Routers del Mapa 3D (cálculo geo, geometría de escena, tiempos, síntesis, MiniSEED)
 app.include_router(travel_times_router)
