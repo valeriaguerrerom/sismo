@@ -1,4 +1,5 @@
-import { Activity, Database, BookOpen, Home, LogIn, Settings, FileText, LogOut, Box, Info, UserPlus } from '../../lib/icons';
+import { useState, useEffect } from 'react';
+import { Activity, Database, BookOpen, Home, LogIn, Settings, FileText, LogOut, Box, Info, UserPlus, List, X } from '../../lib/icons';
 import { Logo } from '../ui/Logo';
 import { Page } from '../../lib/types';
 import { useAuth, ROLE_LABELS } from '../../lib/auth';
@@ -10,6 +11,11 @@ interface NavbarProps {
 
 export function Navbar({ currentPage, onNavigate }: NavbarProps) {
   const { user, signOut } = useAuth();
+  // Menú desplegable en móvil (bajo el botón hamburguesa).
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Cerrar el menú móvil al cambiar de página.
+  useEffect(() => { setMenuOpen(false); }, [currentPage]);
 
   const publicNav: { id: Page; label: string; icon: React.ReactNode }[] = [
     { id: 'home', label: 'Inicio', icon: <Home size={15} /> },
@@ -25,15 +31,18 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
 
   const mainNav = user ? [publicNav[0], ...moduleNav, publicNav[1]] : publicNav;
 
+  const go = (page: Page, opts?: { register?: boolean }) => { setMenuOpen(false); onNavigate(page, opts); };
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-[#FAFAF8]/90 backdrop-blur-md border-b border-stone-200/60">
       <div className="app-container">
-        <div className="flex items-center justify-between h-16">
-          <button onClick={() => onNavigate('home')} className="flex items-center">
+        <div className="flex items-center justify-between h-16 gap-2">
+          <button onClick={() => go('home')} className="flex items-center flex-shrink-0">
             <Logo size={38} />
           </button>
 
-          <div className="flex items-center gap-0.5">
+          {/* ─── Navegación desktop (md+) ─── */}
+          <div className="hidden md:flex items-center gap-0.5">
             {mainNav.map(item => {
               const active = currentPage === item.id;
               return (
@@ -42,7 +51,7 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
                     active ? 'text-[#C4553A]' : 'text-stone-500 nav-link'
                   }`}>
                   {item.icon}
-                  <span className="hidden md:inline">{item.label}</span>
+                  <span>{item.label}</span>
                   {active && (
                     <span className="absolute left-2.5 right-2.5 lg:left-3.5 lg:right-3.5 -bottom-px h-0.5 rounded-full bg-[#C4553A]" />
                   )}
@@ -59,7 +68,7 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
                     currentPage === 'reports' ? 'bg-[#2D6A4F] text-white' : 'text-stone-500'
                   }`}>
                   <FileText size={15} />
-                  <span className="hidden md:inline">Reportes</span>
+                  <span className="hidden lg:inline">Reportes</span>
                 </button>
 
                 {user.role === 'admin' && (
@@ -68,7 +77,7 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
                       currentPage === 'admin' ? 'bg-[#6B5B95] text-white' : 'text-stone-500'
                     }`}>
                     <Settings size={15} />
-                    <span className="hidden md:inline">Admin</span>
+                    <span className="hidden lg:inline">Admin</span>
                   </button>
                 )}
 
@@ -93,7 +102,6 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
                     aria-label="Cerrar sesión"
                   >
                     <LogOut size={15} />
-                    {/* Tooltip visible al pasar el cursor (anclado a la derecha para no salirse). */}
                     <span className="pointer-events-none absolute top-full right-0 mt-2 whitespace-nowrap rounded-lg bg-[#1A1A2E] px-2.5 py-1.5 text-[11px] font-medium text-white opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 z-50">
                       Cerrar sesión
                     </span>
@@ -105,12 +113,12 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
                 <button onClick={() => onNavigate('auth', { register: true })} title="Registrarse"
                   className="nav-link nav-link-forest flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium text-[#2D6A4F]">
                   <UserPlus size={15} />
-                  <span className="hidden sm:inline">Registrarse</span>
+                  <span>Registrarse</span>
                 </button>
                 <button onClick={() => onNavigate('auth')} title="Iniciar sesión"
                   className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium text-[#C4553A] ${currentPage === 'auth' ? '' : 'nav-link'}`}>
                   <LogIn size={15} />
-                  <span className="hidden sm:inline">Iniciar sesión</span>
+                  <span>Iniciar sesión</span>
                   {currentPage === 'auth' && (
                     <span className="absolute left-3.5 right-3.5 -bottom-px h-0.5 rounded-full bg-[#C4553A]" />
                   )}
@@ -118,8 +126,82 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
               </div>
             )}
           </div>
+
+          {/* ─── Botón hamburguesa (solo móvil, <md) ─── */}
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-stone-600 hover:bg-stone-100"
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X size={22} /> : <List size={22} />}
+          </button>
         </div>
       </div>
+
+      {/* ─── Menú desplegable móvil ─── */}
+      {menuOpen && (
+        <div className="md:hidden border-t border-stone-200/60 bg-[#FAFAF8]">
+          <div className="app-container py-3 flex flex-col gap-1">
+            {mainNav.map(item => {
+              const active = currentPage === item.id;
+              return (
+                <button key={item.id} onClick={() => go(item.id)}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
+                    active ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'text-stone-600 hover:bg-stone-100'
+                  }`}>
+                  {item.icon} {item.label}
+                </button>
+              );
+            })}
+
+            <div className="h-px bg-stone-200 my-1.5" />
+
+            {user ? (
+              <>
+                <button onClick={() => go('reports')}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
+                    currentPage === 'reports' ? 'bg-[#2D6A4F]/10 text-[#2D6A4F]' : 'text-stone-600 hover:bg-stone-100'
+                  }`}>
+                  <FileText size={15} /> Reportes
+                </button>
+                {user.role === 'admin' && (
+                  <button onClick={() => go('admin')}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
+                      currentPage === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'text-stone-600 hover:bg-stone-100'
+                    }`}>
+                    <Settings size={15} /> Admin
+                  </button>
+                )}
+                <button onClick={() => go('profile')}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
+                    currentPage === 'profile' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'text-stone-600 hover:bg-stone-100'
+                  }`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${user.role === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}>
+                    {user.full_name?.charAt(0)?.toUpperCase() || user.email.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="truncate">{user.full_name || user.email}</span>
+                </button>
+                <button onClick={() => { setMenuOpen(false); signOut(); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left text-stone-600 hover:bg-[#C4553A]/10 hover:text-[#C4553A]">
+                  <LogOut size={15} /> Cerrar sesión
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => go('auth', { register: true })}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left text-[#2D6A4F] hover:bg-[#2D6A4F]/10">
+                  <UserPlus size={15} /> Registrarse
+                </button>
+                <button onClick={() => go('auth')}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left text-[#C4553A] hover:bg-[#C4553A]/10">
+                  <LogIn size={15} /> Iniciar sesión
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

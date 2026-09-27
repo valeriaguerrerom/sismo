@@ -45,9 +45,9 @@ interface LogoProps {
 export function Logo({ size = 36, className = '', wordmark = true, textClassName = 'text-[#1A1A2E]' }: LogoProps) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <LogoMark size={size} />
+      <LogoMark size={size} className="flex-shrink-0" />
       {wordmark && (
-        <span className="text-left leading-none">
+        <span className="text-left leading-none whitespace-nowrap">
           <span className={`font-bold text-base tracking-tight block ${textClassName}`}>SismoNariño</span>
           <span className="text-[#2D6A4F] text-[10px] leading-none block mt-0.5">
             Simulador triaxial

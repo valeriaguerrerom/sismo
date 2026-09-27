@@ -197,6 +197,18 @@ function AppContent() {
 
   const wideZoom = useWideScreenZoom();
 
+  // Mientras se resuelve la sesión (recarga/token) no pintamos la barra ni la
+  // página: así no se ve por un instante el estado "sin sesión" (navbar público)
+  // antes de que llegue el usuario. Se muestra un loader breve y neutro.
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: '#FAFAF8' }}>
+        <div className="w-9 h-9 border-2 border-stone-200 border-t-[#C4553A] rounded-full animate-spin" />
+        <span className="text-sm text-stone-400">Cargando…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col relative" style={wideZoom !== 1 ? { zoom: wideZoom } : undefined}>
       <Navbar currentPage={page} onNavigate={navigate} />
