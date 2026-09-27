@@ -8,6 +8,9 @@
 /** URL institucional de la política de protección de datos. */
 export const DATA_POLICY_URL = 'https://www.umariana.edu.co/politicas-proteccion-datos.html';
 
+/** Correo de contacto del proyecto (p. ej. cuentas desactivadas por un admin). */
+export const CONTACT_EMAIL = 'valeriaso.guerrero@umariana.edu.co';
+
 /** Un requisito de contraseña con su verificación. */
 export interface PasswordRule {
   label: string;

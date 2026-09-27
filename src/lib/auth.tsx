@@ -28,7 +28,7 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   institution: string;
-  /** false cuando un administrador desactivó la cuenta (RF-05). */
+  /** false cuando la cuenta está desactivada (por el usuario o un admin). */
   active: boolean;
   occupation: string;
   research_area: string;
@@ -52,11 +52,23 @@ export function isProfileComplete(p: { institution?: string | null; occupation?:
   return Boolean(p.institution?.trim()) && Boolean(p.occupation?.trim());
 }
 
+/** Info de una cuenta desactivada que intenta entrar. */
+export interface DeactivatedInfo {
+  /** Quién la desactivó: el propio usuario o un administrador. */
+  by: 'usuario' | 'administrador';
+}
+
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   /** Mensaje de bloqueo cuando la cuenta está desactivada (RF-05). */
   blockedMessage: string | null;
+  /** Info de cuenta desactivada (para la pantalla de reactivación). */
+  deactivatedInfo: DeactivatedInfo | null;
+  /** El usuario reactiva su propia cuenta (solo si la desactivó él mismo). */
+  reactivateOwnAccount: () => Promise<string | null>;
+  /** El usuario desactiva su propia cuenta (conserva datos y reportes). */
+  deactivateOwnAccount: () => Promise<string | null>;
   /** true cuando el usuario llegó desde un enlace de recuperación de contraseña. */
   recoveryMode: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<string | null>;
@@ -83,6 +95,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: false,
   blockedMessage: null,
+  deactivatedInfo: null,
+  reactivateOwnAccount: async () => 'Auth no disponible',
+  deactivateOwnAccount: async () => 'Auth no disponible',
   recoveryMode: false,
   signUp: async () => 'Auth no disponible',
   signIn: async () => 'Auth no disponible',
@@ -135,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const [deactivatedInfo, setDeactivatedInfo] = useState<DeactivatedInfo | null>(null);
   const [recoveryMode, setRecoveryMode] = useState(false);
 
   /** Carga el perfil desde la tabla profiles para una sesión dada. */
@@ -182,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await withTimeout(
         supabase
           .from('profiles')
-          .select('id, email, full_name, role, institution, active, occupation, research_area, city, country, usage_purpose, tours_vistos, created_at, data_authorization_at')
+          .select('id, email, full_name, role, institution, active, occupation, research_area, city, country, usage_purpose, tours_vistos, created_at, data_authorization_at, deactivated_by')
           .eq('id', authUser.id)
           .maybeSingle(),
         8000, 'perfil',
@@ -202,15 +218,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         research_area: string | null; city: string | null; country: string | null;
         usage_purpose: string | null; tours_vistos: Record<string, boolean> | null;
         created_at: string | null; data_authorization_at: string | null;
+        deactivated_by: string | null;
       };
-      // Cuenta desactivada por un administrador (RF-05): cerrar sesión y avisar.
+      // Cuenta desactivada (RF-05): no se entra a la plataforma.
       if (p.active === false) {
+        const by = p.deactivated_by === 'usuario' ? 'usuario' : 'administrador';
         setUser(null);
-        setBlockedMessage('Tu cuenta fue desactivada por un administrador. Escribe al equipo de SismoNariño para reactivarla.');
-        await supabase.auth.signOut();
+        setDeactivatedInfo({ by });
+        if (by === 'administrador') {
+          // La desactivó un admin: el usuario no puede reactivarla → cerrar sesión.
+          await supabase.auth.signOut();
+        }
+        // Si la desactivó el propio usuario, se CONSERVA la sesión para permitir
+        // que pulse "Reactivar mi cuenta" (necesita sesión para el UPDATE).
         return;
       }
       setBlockedMessage(null);
+      setDeactivatedInfo(null);
       setUser({
         id: p.id,
         email: p.email,
@@ -413,11 +437,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setRecoveryMode(false);
     setBlockedMessage(null);
+    setDeactivatedInfo(null);
     if (!supabase) return;
     try {
       await withTimeout(supabase.auth.signOut(), 5000, 'cierre de sesión');
     } catch {
       // La sesión local ya se cerró; no se registra el detalle.
+    }
+  }, []);
+
+  /**
+   * Reactiva la cuenta del propio usuario (solo válido si él mismo la
+   * desactivó). Limpia las marcas de desactivación y recarga el perfil.
+   */
+  const reactivateOwnAccount = useCallback(async (): Promise<string | null> => {
+    if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    try {
+      const { data: sess } = await withTimeout(supabase.auth.getSession(), 8000, 'sesión');
+      const authUser = sess.session?.user;
+      if (!authUser) return 'Tu sesión expiró. Vuelve a intentarlo.';
+      const { error } = await withTimeout(
+        supabase.from('profiles').update({
+          active: true, deactivated_by: null, deactivated_at: null, deactivation_reason: null,
+        }).eq('id', authUser.id),
+        8000, 'reactivación',
+      );
+      if (error) return translateError(error.message);
+      setDeactivatedInfo(null);
+      await loadProfile(sess.session);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'No se pudo reactivar la cuenta. Revisa tu conexión.';
+    }
+  }, [loadProfile]);
+
+  /** El usuario desactiva su propia cuenta. Conserva perfil y reportes. */
+  const deactivateOwnAccount = useCallback(async (): Promise<string | null> => {
+    if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    try {
+      const { data: sess } = await withTimeout(supabase.auth.getSession(), 8000, 'sesión');
+      const authUser = sess.session?.user;
+      if (!authUser) return 'No hay una sesión activa. Vuelve a iniciar sesión.';
+      const { error } = await withTimeout(
+        supabase.from('profiles').update({
+          active: false, deactivated_by: 'usuario', deactivated_at: new Date().toISOString(), deactivation_reason: null,
+        }).eq('id', authUser.id),
+        8000, 'desactivación',
+      );
+      if (error) return translateError(error.message);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'No se pudo desactivar la cuenta. Revisa tu conexión.';
     }
   }, []);
 
@@ -469,7 +539,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(prev => {
       if (!prev || prev.tours_vistos?.[module]) return prev;
       const tours_vistos = { ...prev.tours_vistos, [module]: true };
-      if (supabase && prev.id !== 'mock') {
+      if (supabase) {
         withTimeout(
           supabase.from('profiles').update({ tours_vistos }).eq('id', prev.id),
           8000, 'tour',
@@ -480,7 +550,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, blockedMessage, recoveryMode, signUp, signIn, signInWithGoogle, signOut, updateProfile, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
+    <AuthContext.Provider value={{ user, loading, blockedMessage, deactivatedInfo, reactivateOwnAccount, deactivateOwnAccount, recoveryMode, signUp, signIn, signInWithGoogle, signOut, updateProfile, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
       {children}
     </AuthContext.Provider>
   );

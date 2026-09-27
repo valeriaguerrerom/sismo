@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
-  const { updatePassword, clearRecovery } = useAuth();
+  const { updatePassword, clearRecovery, signOut } = useAuth();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [expired, setExpired] = useState(false);
@@ -34,11 +34,16 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
     setError('');
     setLoading(true);
     const err = await updatePassword(password);
+    if (err === 'EXPIRED') { setLoading(false); setExpired(true); return; }
+    if (err) { setLoading(false); setError(err); return; }
+    // Primero llevamos la app al login (fija page='auth' de forma síncrona) y
+    // LUEGO cerramos la sesión de recuperación. Así, cuando recoveryMode pase a
+    // false, la página ya es 'auth' y no se alcanza a ver ningún panel.
     setLoading(false);
-    if (err === 'EXPIRED') { setExpired(true); return; }
-    if (err) { setError(err); return; }
-    clearRecovery();
     onDone('Tu contraseña se actualizó. Ya puedes iniciar sesión.');
+    // Cerrar la sesión temporal de recuperación para obligar a iniciar sesión
+    // con la nueva contraseña (si no, se quedaba con acceso sin volver a entrar).
+    await signOut();
   };
 
   const requestNew = () => { clearRecovery(); onRequestNew(); };
