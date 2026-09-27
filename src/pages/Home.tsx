@@ -5,7 +5,7 @@
  * módulos (simulador, explorador, educación, mapa 3D) requiere sesión, por lo
  * que los botones cambian según el estado de autenticación.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { Activity, ChevronRight, LogIn, UserPlus, Database, BookOpen, HelpCircle } from '../lib/icons';
 import { Page } from '../lib/types';
 import { useAuth } from '../lib/auth';
@@ -133,9 +133,9 @@ function RealSeis({ record, animate, replay = 0 }: { record: RealRecord | null; 
     const start = Date.now();
     // Curva ease-in-out: el barrido arranca y frena suave (no de golpe).
     const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    // Barrido único de ~7 s que revela la señal y la deja fija a opacidad plena.
+    // Barrido único de ~3.5 s que revela la señal y la deja fija a opacidad plena.
     const loop = () => {
-      const p = Math.min((Date.now() - start) / 7000, 1);
+      const p = Math.min((Date.now() - start) / 3500, 1);
       setRatio(easeInOut(p));
       if (p < 1) raf = requestAnimationFrame(loop);
     };
@@ -385,18 +385,40 @@ function useFillProgress(inView: boolean, animate: boolean, replay: number, dela
  * usan la MISMA proyección que el contorno, así caen en su lugar real.
  */
 /** Elemento resaltado en el mapa, enlazado con las cifras de la derecha. */
-type MapHighlight = 'epicenter' | 'galeras' | 'volcanoes' | null;
+type MapHighlight = 'epicenter' | 'volcanoes' | { volc: string } | null;
+
+/** true si el resaltado apunta a un volcán concreto por nombre. */
+function isVolcHi(h: MapHighlight, nombre: string): boolean {
+  return typeof h === 'object' && h !== null && h.volc === nombre;
+}
+
+/** Un volcán del mapa (nombre, coordenadas y altura opcional). */
+interface Volcano { nombre: string; lat: number; lon: number; altura: number | null }
+/** Grupo de volcanes que caen casi encima en el mapa (se dibujan como uno). */
+interface VGroup { xs: Volcano[]; x: number; y: number }
 
 /** Tooltip activo del mapa: texto + posición (fracción 0..1 del recuadro). */
 interface MapTip { text: string; fx: number; fy: number }
 
-function NarinoMiniMap({ outline, highlight, onHighlight }: {
+/** Dominio geográfico del relieve (public/terrain/narino_hillshade.png).
+ *  Debe coincidir con LON/LAT de scripts/make_terrain.py. La imagen es cuadrada
+ *  (1024×1024) y estira este dominio, así que se coloca con preserveAspectRatio
+ *  = none entre estas cuatro esquinas. */
+const HILLSHADE_BBOX = { lonMin: -79.6, lonMax: -76.6, latMin: 0.3, latMax: 2.7 };
+
+function NarinoMiniMap({ outline, coast, border, reducedMotion, highlight, onHighlight }: {
   outline: number[][][] | null;
+  coast: number[][][] | null;
+  border: number[][][] | null;
+  reducedMotion: boolean;
   highlight: MapHighlight;
   onHighlight: (h: MapHighlight) => void;
 }) {
-  const W = 210, H = 230;
+  const W = 230, H = 230;
+  const clipId = useId();
   const [tip, setTip] = useState<MapTip | null>(null);
+  // Clave del grupo (2 volcanes) abierto en abanico al pasar el cursor.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   if (!outline || outline.length === 0) {
     return <div className="rounded-lg bg-stone-50 border border-stone-100" style={{ width: '100%', aspectRatio: `${W}/${H}` }} />;
@@ -424,37 +446,40 @@ function NarinoMiniMap({ outline, highlight, onHighlight }: {
 
   const ringPath = (ring: number[][]) =>
     'M ' + ring.map(([lon, lat]) => `${px(lon).toFixed(1)},${py(lat).toFixed(1)}`).join(' L ') + ' Z';
+  // Polilínea abierta (costa / límites), sin cierre.
+  const linePath = (line: number[][]) =>
+    'M ' + line.map(([lon, lat]) => `${px(lon).toFixed(1)},${py(lat).toFixed(1)}`).join(' L ');
 
   const galeras = VOLCANES_COORDS.find(v => v.nombre === 'Galeras');
-  const volcHi = highlight === 'volcanoes' || highlight === 'galeras';
+  // ¿Está activo el resaltado de "todos los volcanes" (desde la cifra 7)?
+  const allVolc = highlight === 'volcanoes';
 
-  // Posiciones de los 7 volcanes en píxeles, separando los que quedan muy
-  // juntos (p. ej. Chiles/Cumbal, Las Ánimas/Galeras) para que se distingan
-  // los 7 triángulos. Solo afecta al dibujo; las coordenadas reales no cambian.
-  const MIN_SEP = 11; // separación mínima en px entre marcadores
-  const volcanoPts = VOLCANES_COORDS.map(v => ({ v, x: px(v.lon), y: py(v.lat) }));
-  for (let iter = 0; iter < 12; iter++) {
-    let moved = false;
-    for (let i = 0; i < volcanoPts.length; i++) {
-      for (let j = i + 1; j < volcanoPts.length; j++) {
-        const a = volcanoPts[i], b = volcanoPts[j];
-        let dx = b.x - a.x, dy = b.y - a.y;
-        let dist = Math.hypot(dx, dy);
-        if (dist < MIN_SEP) {
-          if (dist < 0.01) { dx = 0.5; dy = -0.5; dist = Math.hypot(dx, dy); }
-          const ux = dx / dist, uy = dy / dist;
-          const gap = MIN_SEP - dist;
-          // Galeras queda anclado en su sitio real; el otro se aparta el total.
-          const aFixed = a.v.nombre === 'Galeras', bFixed = b.v.nombre === 'Galeras';
-          const aPush = aFixed ? 0 : bFixed ? gap : gap / 2;
-          const bPush = bFixed ? 0 : aFixed ? gap : gap / 2;
-          a.x -= ux * aPush; a.y -= uy * aPush;
-          b.x += ux * bPush; b.y += uy * bPush;
-          moved = true;
-        }
-      }
+  // Etiqueta legible de un volcán con su altura ("Galeras, 4,276 m s. n. m.").
+  const volcLabel = (v: Volcano) =>
+    v.altura != null
+      ? `${v.nombre}, ${v.altura.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} m s. n. m.`
+      : v.nombre;
+
+  // Agrupa los volcanes que caen casi encima en el mapa (Doña Juana/Las Ánimas
+  // en el NE; Chiles/Cerro Negro en el sur) en un único marcador cuyo tooltip
+  // nombra a todos. Se dibujan en su posición real (promedio del grupo), sin
+  // desplazarlos artificialmente. El resto queda como marcador individual.
+  // Distancia (px) por debajo de la cual dos volcanes se muestran como uno.
+  // 9 px agrupa solo los pares realmente encimados (Chiles/Cerro Negro y
+  // Doña Juana/Las Ánimas) y deja Cumbal como marcador aparte.
+  const GROUP_PX = 9;
+  const groups: VGroup[] = [];
+  for (const v of VOLCANES_COORDS) {
+    const x = px(v.lon), y = py(v.lat);
+    const g = groups.find(gr => Math.hypot(gr.x - x, gr.y - y) < GROUP_PX);
+    if (g) {
+      g.xs.push(v);
+      // Recalcular el centro del grupo (promedio).
+      g.x = (g.x * (g.xs.length - 1) + x) / g.xs.length;
+      g.y = (g.y * (g.xs.length - 1) + y) / g.xs.length;
+    } else {
+      groups.push({ xs: [v], x, y });
     }
-    if (!moved) break;
   }
 
   const show = (text: string, lon: number, lat: number, h: MapHighlight) => {
@@ -467,64 +492,197 @@ function NarinoMiniMap({ outline, highlight, onHighlight }: {
   // continente) con una línea guía corta, para que quede dentro del margen.
   const epiX = px(TUMACO_1979.lon), epiY = py(TUMACO_1979.lat);
 
+  // Recuadro del relieve (hillshade) en píxeles: la imagen cuadrada estira el
+  // dominio HILLSHADE_BBOX entre sus cuatro esquinas (norte arriba).
+  const hsX = px(HILLSHADE_BBOX.lonMin);
+  const hsY = py(HILLSHADE_BBOX.latMax);
+  const hsW = px(HILLSHADE_BBOX.lonMax) - px(HILLSHADE_BBOX.lonMin);
+  const hsH = py(HILLSHADE_BBOX.latMin) - py(HILLSHADE_BBOX.latMax);
+
+  // Barra de escala: cuántos px equivalen a 50 km. 1° de latitud ≈ 111.32 km.
+  const kmPerDeg = 111.32;
+  const scaleKm = 50;
+  const scalePx = (scaleKm / kmPerDeg) * s;
+
+  // Anillos animados del epicentro (respetan prefers-reduced-motion).
+  const epiRings = [0, 1, 2];
+
   return (
     <div className="relative h-full w-full flex items-center justify-center select-none">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full overflow-visible" preserveAspectRatio="xMidYMid meet" role="img"
         aria-label="Mapa de Nariño con el epicentro de Tumaco 1979 y los 7 volcanes activos vigilados por el OVSP">
-        {/* Etiquetas de orientación, gris de texto algo más legible. */}
-        <text x={px(TUMACO_1979.lon - 0.05)} y={py(1.15)} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Océano</text>
-        <text x={px(TUMACO_1979.lon - 0.05)} y={py(1.15) + 12} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Pacífico</text>
-        {/* "Ecuador" al sur, fuera del contorno. */}
-        <text x={px(-77.7)} y={py(contourMinLat) + 16} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Ecuador</text>
+        <defs>
+          {/* Recorte con la forma exacta del departamento (relieve dentro). */}
+          <clipPath id={clipId}>
+            {outline.map((ring, i) => <path key={i} d={ringPath(ring)} />)}
+          </clipPath>
+          {/* Relieve cálido: (1) desatura por completo el hillshade para eliminar
+              el azul del tinte de elevación (las zonas planas del NO ya no se ven
+              como agua); (2) sube el brillo; (3) lo lleva a tono tierra claro con
+              una tabla de transferencia por canal (R>G>B => crema/ocre suave). */}
+          <filter id={`${clipId}-warm`} colorInterpolationFilters="sRGB">
+            <feColorMatrix type="saturate" values="0" />
+            <feComponentTransfer>
+              <feFuncR type="linear" slope="0.72" intercept="0.30" />
+              <feFuncG type="linear" slope="0.72" intercept="0.26" />
+              <feFuncB type="linear" slope="0.62" intercept="0.20" />
+            </feComponentTransfer>
+          </filter>
+        </defs>
 
-        {/* Polígono de Nariño: relleno verde bosque muy claro + borde fino. */}
-        {outline.map((ring, i) => (
-          <path key={i} d={ringPath(ring)} fill={`${C.forest}14`} stroke={C.forest} strokeWidth="1" strokeLinejoin="round" opacity="0.9" />
+        {/* Contexto geográfico tenue (costa, frontera con Ecuador y límites con
+            Cauca/Putumayo). Datos reales de Natural Earth, en gris muy claro. */}
+        {coast?.map((line, i) => (
+          <path key={`c${i}`} d={linePath(line)} fill="none" stroke="#D6D3D1" strokeWidth="0.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+        ))}
+        {border?.map((line, i) => (
+          <path key={`b${i}`} d={linePath(line)} fill="none" stroke="#E7E5E4" strokeWidth="0.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
         ))}
 
-        {/* 7 volcanes activos: triángulos verdes (se resaltan enlazados).
-            Se usan las posiciones separadas para que no se solapen. */}
-        {volcanoPts.map(({ v, x: cx, y: cy }) => {
-          const isGaleras = v.nombre === 'Galeras';
-          const hot = highlight === 'volcanoes' || (highlight === 'galeras' && isGaleras);
+        {/* Relleno con relieve real recortado al contorno. El filtro warm lo
+            desatura (quita el azul de las zonas planas) y lo lleva a tono tierra
+            claro; encima, un velo verde muy suave y otro crema lo integran con la
+            paleta del Home. Fuera del contorno no se pinta. */}
+        <g clipPath={`url(#${clipId})`}>
+          {/* Base cálida clara bajo el relieve. */}
+          <rect x={hsX} y={hsY} width={hsW} height={hsH} fill="#EFE9DD" />
+          <image
+            href="/terrain/narino_hillshade.png"
+            x={hsX} y={hsY} width={hsW} height={hsH}
+            preserveAspectRatio="none"
+            opacity="0.55"
+            style={{ filter: `url(#${clipId}-warm)` }}
+          />
+          {/* Verde bosque muy tenue para el matiz vegetal de la paleta. */}
+          <rect x={hsX} y={hsY} width={hsW} height={hsH} fill={C.forest} opacity="0.07" />
+          {/* Velo crema que sube la luminosidad y descansa el conjunto. */}
+          <rect x={hsX} y={hsY} width={hsW} height={hsH} fill={C.cream} opacity="0.22" />
+        </g>
+
+        {/* Contorno de Nariño (mayor resolución): trazo fino verde bosque. */}
+        {outline.map((ring, i) => (
+          <path key={i} d={ringPath(ring)} fill="none" stroke={C.forest} strokeWidth="1" strokeLinejoin="round" strokeLinecap="round" opacity="0.95" />
+        ))}
+
+        {/* Etiquetas de orientación. */}
+        <text x={px(TUMACO_1979.lon - 0.05)} y={py(1.15)} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Océano</text>
+        <text x={px(TUMACO_1979.lon - 0.05)} y={py(1.15) + 12} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Pacífico</text>
+        <text x={px(-77.7)} y={py(contourMinLat) + 16} textAnchor="middle" fontSize="11" fill={C.muted} opacity="0.7">Ecuador</text>
+
+        {/* Volcanes activos: todos en verde bosque. Los que caen casi encima se
+            muestran como un marcador con un círculo "N"; al pasar el cursor el
+            grupo se abre en abanico (cada volcán a un lado con su etiqueta). */}
+        {groups.map((g) => {
+          const grouped = g.xs.length > 1;
+          const hot = allVolc || g.xs.some(v => isVolcHi(highlight, v.nombre));
+          // Resaltado individual sobre OTRO marcador → atenuar este.
+          const otherActive = !allVolc && typeof highlight === 'object' && highlight !== null && !hot;
           const r = hot ? 6 : 4;
-          const label = v.altura != null ? `${v.nombre}, ${v.altura.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} m s. n. m.` : v.nombre;
-          // El tooltip se ancla a la posición dibujada (separada), no a la real.
-          const tipLon = minLon + (cx - offX) / s;
-          const tipLat = maxLat - (cy - offY) / s;
+          const label = g.xs.map(volcLabel).join('\n');
+          const tipLon = minLon + (g.x - offX) / s;
+          const tipLat = maxLat - (g.y - offY) / s;
+          const key = g.xs.map(v => v.nombre).join('+');
+          const hi: MapHighlight = { volc: g.xs[0].nombre };
+          // El grupo se abre en abanico al pasar el cursor (o siempre, si el
+          // usuario prefiere movimiento reducido: sin animación, ya separados).
+          const open = grouped && (openGroup === key || reducedMotion);
+
+          // Al abrir un grupo: separa los dos triángulos (se nota que son dos) y
+          // muestra la info en el tooltip HTML, que se posiciona solo y no se
+          // sale del recuadro (las etiquetas SVG largas del NE se encimaban).
+          const enter = () => {
+            if (grouped) { show(label, tipLon, tipLat, hi); setOpenGroup(key); }
+            else show(label, tipLon, tipLat, hi);
+          };
+          const leave = () => { clear(); if (grouped) setOpenGroup(null); };
+
+          if (grouped && open) {
+            // Abierto: dos triángulos separados en vertical (sin etiquetas SVG;
+            // el nombre y la altitud van en el tooltip HTML).
+            const SPREAD = 9;
+            return (
+              <g key={key} style={{ cursor: 'pointer' }} onMouseEnter={enter} onMouseLeave={leave} onClick={enter}>
+                <rect x={g.x - 14} y={g.y - SPREAD - 14} width={28} height={SPREAD * 2 + 28} fill="transparent" />
+                <line x1={g.x} y1={g.y - SPREAD} x2={g.x} y2={g.y + SPREAD} stroke={C.muted} strokeWidth="0.6" opacity="0.5" />
+                {g.xs.map((v, i) => {
+                  const fy2 = i === 0 ? g.y - SPREAD : g.y + SPREAD;
+                  return (
+                    <polygon key={v.nombre}
+                      points={`${g.x},${fy2 - r} ${g.x - r},${fy2 + r} ${g.x + r},${fy2 + r}`}
+                      fill={C.forest} stroke="#FFFFFF" strokeWidth="1"
+                      style={{ transition: reducedMotion ? 'none' : 'all 0.2s ease-in-out' }}
+                    />
+                  );
+                })}
+              </g>
+            );
+          }
+
+          // Cerrado: un solo triángulo verde; si es grupo, con el círculo "N".
           return (
-            <polygon key={v.nombre}
-              points={`${cx},${cy - r} ${cx - r},${cy + r} ${cx + r},${cy + r}`}
-              fill={C.forest} stroke="#FFFFFF" strokeWidth="0.7"
-              opacity={volcHi && !hot ? 0.45 : 1}
-              style={{ transition: 'all 0.2s ease-in-out', cursor: 'pointer' }}
-              onMouseEnter={() => show(label, tipLon, tipLat, isGaleras ? 'galeras' : 'volcanoes')}
-              onMouseLeave={clear}
-              onClick={() => show(label, tipLon, tipLat, isGaleras ? 'galeras' : 'volcanoes')}
-            />
+            <g key={key} style={{ cursor: 'pointer' }} onMouseEnter={enter} onMouseLeave={leave} onClick={enter}>
+              <polygon
+                points={`${g.x},${g.y - r} ${g.x - r},${g.y + r} ${g.x + r},${g.y + r}`}
+                fill={C.forest} stroke="#FFFFFF" strokeWidth={hot ? 1 : 0.8}
+                opacity={otherActive ? 0.35 : 1}
+                style={{ transition: 'all 0.2s ease-in-out' }}
+              />
+              {grouped && (
+                <>
+                  <circle cx={g.x + r + 3} cy={g.y - r} r="4.5" fill={C.forest} stroke="#FFFFFF" strokeWidth="0.8" />
+                  <text x={g.x + r + 3} y={g.y - r + 2.6} textAnchor="middle" fontSize="6.5" fontWeight="700" fill="#FFFFFF">{g.xs.length}</text>
+                </>
+              )}
+            </g>
           );
         })}
 
-        {/* Pasto: punto de referencia neutro, etiqueta a la DERECHA con guía. */}
+        {/* Pasto: punto de referencia. Etiqueta ABAJO-derecha para no tapar
+            Doña Juana (que está al noreste, arriba de Pasto). */}
         <circle cx={px(PASTO_REF.lon)} cy={py(PASTO_REF.lat)} r="1.8" fill={C.muted} />
-        <MapLabel x={px(PASTO_REF.lon)} y={py(PASTO_REF.lat)} dx={13} dy={-9} anchor="start" text="Pasto" muted />
+        <MapLabel x={px(PASTO_REF.lon)} y={py(PASTO_REF.lat)} dx={12} dy={12} anchor="start" text="Pasto" muted />
 
-        {/* Galeras: etiqueta a la IZQUIERDA con guía (separada de Pasto). */}
-        {galeras && <MapLabel x={px(galeras.lon)} y={py(galeras.lat)} dx={-13} dy={13} anchor="end" text="Galeras" />}
+        {/* Galeras: etiqueta ARRIBA (zona despejada) para no tapar Azufral,
+            que queda abajo a la izquierda de Galeras. */}
+        {galeras && <MapLabel x={px(galeras.lon)} y={py(galeras.lat)} dx={-2} dy={-9} anchor="middle" text="Galeras" />}
 
-        {/* Epicentro del terremoto de 1979, mar adentro (se resalta enlazado). */}
+        {/* Epicentro del terremoto de 1979, mar adentro (se resalta enlazado).
+            Anillos que se expanden y desvanecen; sin animación si el usuario
+            prefiere movimiento reducido. */}
         <g style={{ cursor: 'pointer' }}
           onMouseEnter={() => show(TUMACO_1979.tooltip, TUMACO_1979.lon, TUMACO_1979.lat, 'epicenter')}
           onMouseLeave={clear}
           onClick={() => show(TUMACO_1979.tooltip, TUMACO_1979.lon, TUMACO_1979.lat, 'epicenter')}>
-          <circle cx={epiX} cy={epiY} r={highlight === 'epicenter' ? 11 : 8}
-            fill="none" stroke={C.terracotta} strokeWidth="1" opacity="0.5" style={{ transition: 'all 0.2s ease-in-out' }} />
+          {!reducedMotion && epiRings.map(k => (
+            <circle key={k} cx={epiX} cy={epiY} r={4} fill="none" stroke={C.terracotta} strokeWidth="1">
+              <animate attributeName="r" values="4;16" dur="4s" begin={`${k * 1.33}s`} repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0" dur="4s" begin={`${k * 1.33}s`} repeatCount="indefinite" />
+            </circle>
+          ))}
+          {highlight === 'epicenter' && (
+            <circle cx={epiX} cy={epiY} r={11} fill="none" stroke={C.terracotta} strokeWidth="1" opacity="0.5" style={{ transition: 'all 0.2s ease-in-out' }} />
+          )}
           <circle cx={epiX} cy={epiY} r={highlight === 'epicenter' ? 5 : 3.6}
             fill={C.terracotta} stroke="#FFFFFF" strokeWidth="0.7" style={{ transition: 'all 0.2s ease-in-out' }} />
         </g>
 
         {/* Etiqueta del epicentro: a la derecha del punto, dentro del margen. */}
         <MapLabel x={epiX} y={epiY} dx={12} dy={-9} anchor="start" text="Epicentro, 1979" />
+
+        {/* Barra de escala (50 km) abajo a la izquierda, con la proyección real. */}
+        <g transform={`translate(${pad}, ${H - pad - 4})`} style={{ pointerEvents: 'none' }}>
+          <line x1="0" y1="0" x2={scalePx} y2="0" stroke={C.muted} strokeWidth="1.2" />
+          <line x1="0" y1="-3" x2="0" y2="0" stroke={C.muted} strokeWidth="1.2" />
+          <line x1={scalePx} y1="-3" x2={scalePx} y2="0" stroke={C.muted} strokeWidth="1.2" />
+          <text x={scalePx / 2} y="-4" textAnchor="middle" fontSize="8.5" fill={C.muted}>50 km</text>
+        </g>
+
+        {/* Flecha de norte mínima, arriba a la derecha. */}
+        <g transform={`translate(${W - pad - 6}, ${pad + 12})`} style={{ pointerEvents: 'none' }}>
+          <line x1="0" y1="2" x2="0" y2="-9" stroke={C.muted} strokeWidth="1.1" />
+          <polygon points="0,-12 -2.6,-6 2.6,-6" fill={C.muted} />
+          <text x="0" y="12" textAnchor="middle" fontSize="8.5" fontWeight="700" fill={C.muted}>N</text>
+        </g>
       </svg>
 
       {/* Tooltip HTML (texto nítido, no escalado por el SVG). Se ancla dentro
@@ -535,8 +693,8 @@ function NarinoMiniMap({ outline, highlight, onHighlight }: {
         const translateX = alignLeft ? '0' : alignRight ? '-100%' : '-50%';
         return (
           <div
-            className="pointer-events-none absolute z-10 rounded-lg bg-[#1A1A2E] px-2 py-1 text-[11px] font-medium leading-snug text-white shadow-lg"
-            style={{ left: `${tip.fx * 100}%`, top: `${tip.fy * 100}%`, maxWidth: 170, transform: `translate(${translateX}, calc(-100% - 8px))` }}
+            className="pointer-events-none absolute z-10 rounded-lg bg-[#1A1A2E] px-3 py-2 text-[11px] font-medium leading-snug text-white shadow-lg whitespace-pre-line"
+            style={{ left: `${tip.fx * 100}%`, top: `${tip.fy * 100}%`, minWidth: 120, maxWidth: 240, width: 'max-content', transform: `translate(${translateX}, calc(-100% - 8px))` }}
           >
             {tip.text}
           </div>
@@ -598,6 +756,8 @@ function SiglaTip({ sigla, texto }: { sigla: string; texto: string }) {
 /** Textos de los tooltips de las siglas de magnitud. */
 const SIGLA_ML = 'Magnitud local. La calcula la red del SGC para sismos pequeños y moderados.';
 const SIGLA_MW = 'Magnitud de momento. Se usa para terremotos grandes porque mide la energía liberada por la falla.';
+/** Qué es la estación BBAC (código de estación sismológica de la red del SGC). */
+const SIGLA_BBAC = 'Código de la estación sismológica de la red del SGC ubicada en Nariño que registró este sismo. Cada estación tiene una sigla de cuatro letras.';
 
 export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen }: Props) {
   const { user, markTourSeen } = useAuth();
@@ -640,6 +800,9 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
   const [stats, setStats] = useState<HomeStats | null>(null);
   const [record, setRecord] = useState<RealRecord | null>(null);
   const [outline, setOutline] = useState<number[][][] | null>(null);
+  // Contexto geográfico del mini mapa: costa y límites (Natural Earth), en gris.
+  const [coast, setCoast] = useState<number[][][] | null>(null);
+  const [border, setBorder] = useState<number[][][] | null>(null);
   // Elemento resaltado en el mini mapa, compartido entre el mapa y las cifras.
   const [mapHi, setMapHi] = useState<MapHighlight>(null);
   const reducedMotion = usePrefersReducedMotion();
@@ -671,13 +834,44 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
     return () => { active = false; };
   }, []);
 
-  // Polígono cerrado de Nariño para el mini mapa.
+  // Contorno de Nariño para el mini mapa. Se prefiere narino_polygon.json (mayor
+  // resolución, ~381 puntos); si falla, se cae a narino_outline.json (simplificado).
+  // NOTA: cuando esté disponible el contorno del MGN del DANE, sustituir el
+  // polígono por ese (misma estructura de anillos [lon,lat]).
   useEffect(() => {
     let active = true;
-    fetch('/terrain/narino_outline.json')
+    fetch('/terrain/narino_polygon.json')
       .then(r => (r.ok ? r.json() : null))
-      .then((d: number[][][] | null) => { if (active && Array.isArray(d)) setOutline(d); })
-      .catch(() => { /* sin contorno: el mini mapa queda como caja vacía */ });
+      .then((d: number[][] | null) => {
+        // polygon.json es un solo anillo [[lon,lat],...]; se envuelve como [[...]]
+        if (active && Array.isArray(d) && d.length > 2 && Array.isArray(d[0])) {
+          setOutline([d as number[][]]);
+        } else {
+          throw new Error('polygon inválido');
+        }
+      })
+      .catch(() => {
+        // Respaldo: contorno simplificado.
+        fetch('/terrain/narino_outline.json')
+          .then(r => (r.ok ? r.json() : null))
+          .then((d: number[][][] | null) => { if (active && Array.isArray(d)) setOutline(d); })
+          .catch(() => { /* sin contorno: el mini mapa queda como caja vacía */ });
+      });
+    return () => { active = false; };
+  }, []);
+
+  // Contexto geográfico tenue: costa y límites departamentales/fronterizos
+  // (Natural Earth, mismos datos del Mapa 3D). Se dibujan en gris muy claro.
+  useEffect(() => {
+    let active = true;
+    fetch('/terrain/narino_coast.json')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: number[][][] | null) => { if (active && Array.isArray(d)) setCoast(d); })
+      .catch(() => { /* sin costa: se omite el contexto */ });
+    fetch('/terrain/narino_border.json')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: number[][][] | null) => { if (active && Array.isArray(d)) setBorder(d); })
+      .catch(() => { /* sin límites: se omite el contexto */ });
     return () => { active = false; };
   }, []);
 
@@ -812,11 +1006,13 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
               <div className="bg-white rounded-2xl p-4 border border-stone-200/60 shadow-lg shadow-stone-200/50">
                 <div className="mb-1">
                   <span className="text-sm font-semibold" style={{ color: C.ink }}>
-                    Registro real, estación {REAL_EVENT.station}
+                    Registro real, estación{' '}
+                    <SiglaTip sigla={REAL_EVENT.station} texto={SIGLA_BBAC} />
                   </span>
                 </div>
                 <p className="text-[11px] mb-2" style={{ color: C.muted }}>
                   Sismo ML {REAL_EVENT.magnitude.toFixed(1)} del {REAL_EVENT.date}, {REAL_EVENT.place}, red CM del SGC.
+                  Estación sismológica de banda ancha de la red del SGC en Nariño.
                 </p>
                 <RealSeis record={record} animate={animate} replay={replayNonce} />
                 <p className="text-[9px] mt-2" style={{ color: C.muted }}>
@@ -829,28 +1025,42 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
                 <p className="text-[11px] mb-3" style={{ color: C.muted }}>Fuente: Servicio Geológico Colombiano</p>
                 <div className="flex items-stretch gap-3">
                   {/* Mini mapa de Nariño (ocupa toda la altura de la tarjeta) */}
-                  <div className="w-[52%] min-h-[220px] flex">
-                    <NarinoMiniMap outline={outline} highlight={mapHi} onHighlight={setMapHi} />
+                  <div className="w-[58%] min-h-[240px] flex">
+                    <NarinoMiniMap outline={outline} coast={coast} border={border} reducedMotion={reducedMotion} highlight={mapHi} onHighlight={setMapHi} />
                   </div>
                   {/* Cifras apiladas, enlazadas con el mapa (resaltado mutuo) */}
-                  <div className="w-[48%] flex flex-col justify-center gap-2">
-                    {[
-                      { key: 'epicenter' as const, valor: <><SiglaTip sigla="Mw" texto={SIGLA_MW} /> 8.1</>, label: 'Terremoto de Tumaco, 1979', dot: <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: C.terracotta }} />, title: `Fuente: ${SISMO_MAS_FUERTE.fuente}` },
-                      { key: 'galeras' as const, valor: ALTURA_GALERAS.valor, label: 'Volcán Galeras', dot: <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true"><polygon points="5,1 1,9 9,9" fill={C.forest} /></svg>, title: `Fuente: ${ALTURA_GALERAS.fuente}` },
-                      { key: 'volcanoes' as const, valor: VOLCANES_ACTIVOS.valor, label: 'Volcanes activos vigilados por el OVSP', dot: <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true"><polygon points="5,1 1,9 9,9" fill={C.forest} /></svg>, title: `${VOLCANES_ACTIVOS.detalle}, Fuente: ${VOLCANES_ACTIVOS.fuente}` },
-                    ].map(f => (
-                      <div key={f.key} title={f.title}
-                        className="text-left rounded-lg px-2 py-1 -mx-2 transition-colors duration-200"
-                        style={{ backgroundColor: mapHi === f.key ? `${C.terracotta}12` : 'transparent' }}
-                        onMouseEnter={() => setMapHi(f.key)}
-                        onMouseLeave={() => setMapHi(null)}>
-                        <div className="flex items-baseline gap-1.5">
-                          {f.dot}
-                          <span className="text-lg font-black" style={{ color: C.ink }}>{f.valor}</span>
+                  <div className="w-[42%] flex flex-col justify-center gap-2">
+                    {([
+                      { id: 'epicenter', hi: 'epicenter' as MapHighlight, valor: <><SiglaTip sigla="Mw" texto={SIGLA_MW} /> 8.1</>, label: 'Terremoto de Tumaco, 1979', dot: <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: C.terracotta }} />, title: `Fuente: ${SISMO_MAS_FUERTE.fuente}` },
+                      { id: 'galeras', hi: { volc: 'Galeras' } as MapHighlight, valor: ALTURA_GALERAS.valor, label: 'Volcán Galeras', dot: <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true"><polygon points="5,1 1,9 9,9" fill={C.forest} /></svg>, title: `Fuente: ${ALTURA_GALERAS.fuente}` },
+                      { id: 'volcanoes', hi: 'volcanoes' as MapHighlight, valor: VOLCANES_ACTIVOS.valor, label: 'Volcanes activos vigilados por el OVSP', dot: <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true"><polygon points="5,1 1,9 9,9" fill={C.forest} /></svg>, title: `${VOLCANES_ACTIVOS.detalle}, Fuente: ${VOLCANES_ACTIVOS.fuente}` },
+                    ]).map(f => {
+                      const active = JSON.stringify(mapHi) === JSON.stringify(f.hi);
+                      return (
+                        <div key={f.id} title={f.title}
+                          className="relative text-left rounded-lg px-2 py-1 -mx-2 transition-colors duration-200"
+                          style={{ backgroundColor: active ? `${C.forest}14` : 'transparent' }}
+                          onMouseEnter={() => setMapHi(f.hi)}
+                          onMouseLeave={() => setMapHi(null)}>
+                          <div className="flex items-baseline gap-1.5">
+                            {f.dot}
+                            <span className="text-lg font-black" style={{ color: C.ink }}>{f.valor}</span>
+                          </div>
+                          <div className="text-[11px] leading-tight" style={{ color: C.muted }}>{f.label}</div>
+                          {/* Al pasar por "7": lista de los volcanes con su altitud. */}
+                          {f.id === 'volcanoes' && active && (
+                            <div className="absolute right-0 top-full mt-1 z-20 w-max max-w-[220px] rounded-lg bg-[#1A1A2E] px-3 py-2 text-[10.5px] leading-snug text-white shadow-lg">
+                              {VOLCANES_COORDS.map(v => (
+                                <div key={v.nombre} className="flex justify-between gap-3">
+                                  <span>{v.nombre}</span>
+                                  <span className="text-stone-300">{v.altura != null ? `${v.altura.toLocaleString('es-CO')} m` : '—'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-[11px] leading-tight" style={{ color: C.muted }}>{f.label}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
