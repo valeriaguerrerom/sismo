@@ -44,20 +44,38 @@ export const VOLCANES_ACTIVOS = {
  * volcánico) y catálogo SGC/USGS para el sismo de Tumaco.
  */
 /*
- * Alturas (m s. n. m.) tomadas del catálogo del Global Volcanism Program
- * (Smithsonian) — cifras consistentes con las publicadas por el SGC/OVSP.
- * Las Ánimas no tiene altura oficial publicada por el SGC ni el GVP: se deja en
- * null y en la interfaz solo se muestra su nombre (no se inventa).
- * Coordenadas: Global Volcanism Program (edificio volcánico principal).
+ * Coordenadas (lat, lon) y altura (m s. n. m.) de cada volcán, tomadas de la
+ * página de "Generalidades" del volcán en el Servicio Geológico Colombiano
+ * (SGC). Donde el SGC publica las coordenadas en grados/minutos, se convierten
+ * a decimales. Cuando el SGC no publica el par exacto en decimales, se usa el
+ * valor del Global Volcanism Program (Smithsonian), que el propio SGC referencia
+ * para el edificio volcánico; se indica en el comentario de cada uno.
  */
 export const VOLCANES_COORDS = [
-  { nombre: 'Galeras', lat: 1.217, lon: -77.367, altura: 4276 },
-  { nombre: 'Cumbal', lat: 0.82, lon: -77.96, altura: 4764 },
-  { nombre: 'Doña Juana', lat: 1.47, lon: -76.92, altura: 4137 },
-  { nombre: 'Azufral', lat: 1.08, lon: -77.68, altura: 4070 },
-  { nombre: 'Las Ánimas', lat: 1.24, lon: -77.60, altura: null },
-  { nombre: 'Chiles', lat: 0.798, lon: -77.951, altura: 4756 },
-  { nombre: 'Cerro Negro', lat: 0.98, lon: -77.88, altura: 4445 },
+  // SGC: 1°13'43,8"N, 77°21'33,0"W; 4276 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanGaleras/Paginas/generalidades-volcan-galeras.aspx
+  { nombre: 'Galeras', lat: 1.2288, lon: -77.3592, altura: 4276 },
+  // SGC (Complejo Volcánico Cumbal): ~0°57'N, 77°52'W; 4764 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanCumbal/Paginas/generalidades-volcan-cumbal.aspx
+  { nombre: 'Cumbal', lat: 0.95, lon: -77.87, altura: 4764 },
+  // SGC (Complejo Volcánico Doña Juana–Cascabel): ~1.50°N, 76.94°W; 4150 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanDonaJuana/Paginas/generalidades-volcan-dona-juana.aspx
+  { nombre: 'Doña Juana', lat: 1.50, lon: -76.94, altura: 4150 },
+  // SGC: 1°05'N, 77°43'W; 4070 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanAzufral/Paginas/generalidades-volcan-azufral.aspx
+  { nombre: 'Azufral', lat: 1.083, lon: -77.717, altura: 4070 },
+  // SGC (Volcán Ánimas): extremo NE de Nariño, límite con Cauca, ~11 km al NE de
+  // Doña Juana; ~1.564°N, 76.854°W; 4200 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanAnimas/Paginas/generalidades.aspx
+  { nombre: 'Las Ánimas', lat: 1.564, lon: -76.854, altura: 4200 },
+  // SGC (Complejo Volcánico Chiles–Cerro Negro), frontera con Ecuador: ~0.817°N,
+  // 77.938°W; 4698 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanChilesCerroNegro/Paginas/generalidades-volcan-chiles-cerro-negro.aspx
+  { nombre: 'Chiles', lat: 0.817, lon: -77.938, altura: 4698 },
+  // SGC/GVP (Cerro Negro de Mayasquer), 3 km al NO de Chiles, frontera con
+  // Ecuador: ~0.828°N, 77.964°W; 4470 m.
+  // https://www2.sgc.gov.co/sgc/volcanes/VolcanChilesCerroNegro/Paginas/generalidades-volcan-chiles-cerro-negro.aspx
+  { nombre: 'Cerro Negro', lat: 0.828, lon: -77.964, altura: 4470 },
 ] as const;
 
 /**

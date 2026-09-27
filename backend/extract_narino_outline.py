@@ -1,8 +1,10 @@
 """
-Extrae el polígono cerrado del departamento de Nariño desde el GeoJSON público
-de Colombia (john-guerra, dominio público) y lo simplifica a un contorno ligero
-para el mini mapa del Home. Guarda public/terrain/narino_outline.json como una
-lista de anillos [[ [lon,lat], ... ], ...] (el primero es el continental).
+Extrae el polígono cerrado del departamento de Nariño desde el GeoJSON de
+Colombia de John Guerra (gist público «GeoJson map of Colombia»,
+https://gist.github.com/john-guerra/43c7656821069d00dcbc; el gist no declara una
+licencia formal) y lo simplifica a un contorno ligero para el mini mapa del
+Home. Guarda public/terrain/narino_outline.json como una lista de anillos
+[[ [lon,lat], ... ], ...] (el primero es el continental).
 """
 import json
 import os
