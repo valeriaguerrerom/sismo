@@ -98,10 +98,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS: la API no usa cookies (la sesión viaja en el header Authorization:
+# Bearer), así que allow_credentials debe ser False. Con credentials=True el
+# navegador RECHAZA la combinación con allow_origins=["*"] (spec CORS) y las
+# peticiones fallan con "Failed to fetch", sobre todo en los DELETE (preflight).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
