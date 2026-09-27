@@ -19,19 +19,12 @@ export interface StartTourOptions {
   onDone?: () => void;
 }
 
-/** True si el usuario prefiere movimiento reducido. */
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 /**
  * Lanza un tour con los pasos dados. Aplica el tema de la app, los botones en
  * español y un indicador de progreso "N de M". `onDone` se dispara tanto al
  * terminar como al omitir/cerrar, para persistir que ya se vio.
  */
 export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void {
-  const reduced = prefersReducedMotion();
   let done = false;
   const markDone = () => { if (!done) { done = true; opts.onDone?.(); } };
 
@@ -43,9 +36,12 @@ export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void 
     prevBtnText: 'Anterior',
     doneBtnText: 'Terminar',
     popoverClass: 'sismo-tour',
-    // Animaciones suaves; se desactivan con prefers-reduced-motion.
-    animate: !reduced,
-    smoothScroll: !reduced,
+    // Sin animación de transición del popover: evita que al pasar de paso se
+    // vean dos tarjetas superpuestas (el popover anterior "fantasma"). El
+    // resaltado cambia al instante, limpio. smoothScroll también off para que
+    // no arrastre el popover durante el scroll.
+    animate: false,
+    smoothScroll: false,
     overlayColor: '#1A1A2E',
     overlayOpacity: 0.55,
     stagePadding: 6,
