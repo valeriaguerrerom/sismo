@@ -95,7 +95,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
-      {/* Zona scrolleable: acordeones. El botón Generar queda fijo abajo. */}
+      {/* Zona scrolleable: acordeones + botón Generar (justo bajo Configuración). */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       <AccordionSection title="Variables Elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
         <div className="space-y-4">
@@ -217,7 +217,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Configuración" open={openSection === 'config'} onToggle={() => toggle('config')}>
+      <AccordionSection title="Configuración" dataTour="params-config" open={openSection === 'config'} onToggle={() => toggle('config')}>
         <div className="space-y-4">
           <SliderRow
             label="Tiempo de Simulación"
@@ -257,9 +257,8 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           )}
         </div>
       </AccordionSection>
-      </div>
 
-      {/* Botón Generar: fijo abajo, siempre visible (fuera del scroll). */}
+      {/* Botón Generar: justo debajo de Configuración. */}
       <button
         data-tour="btn-generar"
         onClick={onRun}
@@ -278,6 +277,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           </>
         )}
       </button>
+      </div>
     </div>
   );
 }

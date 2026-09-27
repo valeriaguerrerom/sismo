@@ -23,6 +23,8 @@ interface AccordionSectionProps {
   onToggle: () => void;
   /** Ancla opcional para el tour guiado (atributo data-tour del contenedor). */
   dataTour?: string;
+  /** Ancla del tour en el ENCABEZADO (altura fija, mejor para posicionar el popover). */
+  headerDataTour?: string;
   children: ReactNode;
 }
 
@@ -30,11 +32,12 @@ interface AccordionSectionProps {
  * Tarjeta con encabezado clicable que muestra u oculta su contenido.
  * El estado de apertura lo controla el panel padre (acordeón exclusivo).
  */
-export function AccordionSection({ title, icon, open, onToggle, dataTour, children }: AccordionSectionProps) {
+export function AccordionSection({ title, icon, open, onToggle, dataTour, headerDataTour, children }: AccordionSectionProps) {
   return (
     <div data-tour={dataTour} className="bg-white rounded-xl border border-stone-200/60 overflow-hidden">
       <button
         type="button"
+        data-tour={headerDataTour}
         onClick={onToggle}
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors"

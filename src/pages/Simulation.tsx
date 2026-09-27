@@ -54,9 +54,18 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const tourRef = useRef(false); // evita relanzar el auto-tour
 
   const launchTour = useCallback(() => {
+    // Al abrir un acordeón cambia la altura del panel; Driver.js necesita
+    // reposicionar el popover DESPUÉS de que React repinte. Disparamos un par de
+    // 'resize' en los siguientes frames (Driver.js reposiciona al oír resize).
+    const reposition = () => {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 120);
+      });
+    };
     const steps = buildSimulacionSteps({
-      openParam: (s) => setTourParam(s),
-      openResult: (s) => setTourResult(s),
+      openParam: (s) => { setTourParam(s); reposition(); },
+      openResult: (s) => { setTourResult(s); reposition(); },
     });
     startTour(steps, {
       onDone: () => {

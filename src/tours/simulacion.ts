@@ -41,7 +41,18 @@ export function buildSimulacionSteps({ openParam, openResult }: SimTourControls)
       },
     },
     {
+      element: '[data-tour="params-config"]',
+      onHighlightStarted: () => openParam('config'),
+      popover: {
+        title: 'Configuración',
+        description: 'Define la duración, la resolución de la malla y el paso de tiempo de la simulación.',
+        side: 'right',
+        align: 'start',
+      },
+    },
+    {
       element: '[data-tour="btn-generar"]',
+      onHighlightStarted: () => openParam('config'),
       popover: {
         title: 'Generar',
         description: 'Genera el pseudo-sismograma con estos valores.',
