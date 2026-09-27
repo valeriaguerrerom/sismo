@@ -36,6 +36,7 @@ from api.stats_home import router as stats_home_router
 from api.quakeml import router as quakeml_router
 from api.mseed_upload import router as mseed_upload_router
 from api.account import router as account_router
+from api.feedback import router as feedback_router
 
 load_dotenv()
 
@@ -118,6 +119,9 @@ app.include_router(quakeml_router)
 app.include_router(mseed_upload_router)
 # Autogestión de la cuenta (eliminación por el propio usuario)
 app.include_router(account_router)
+
+# Formulario de contacto "Escríbenos" (guarda con la clave de servicio)
+app.include_router(feedback_router)
 
 
 # ─── Health ───

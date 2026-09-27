@@ -12,18 +12,23 @@ import { supabase } from '../lib/supabase';
 import {
   Users, Database, FileText, Settings, Trash2, Shield, BarChart3, Plus, Pencil, Upload,
   BookOpen, Check, X, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle,
-  MoreVertical, UserCheck, UserX, Download, ArrowRight, Mail,
+  MoreVertical, UserCheck, UserX, Download, ArrowRight, Mail, MessageSquare,
 } from '../lib/icons';
 import type { SeismicEvent } from '../lib/types';
 import {
   AdminReport, AdminUser, DashboardStats, QuizRow, TimelineRow, WaveFactRow,
   bulkInsertEvents, createEvent, deleteEvent, deleteFactRow, deleteQuizRow, deleteReport, deleteTimelineRow,
   loadDashboardStats, loadEvents, loadFactRows, loadQuizRows, loadReports, loadTimelineRows, loadUsers,
-  saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, setUserActive, updateEvent,
+  saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, deactivateUser, reactivateUser, updateEvent,
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { importQuakeml, ImportResult } from '../lib/quakeml';
 import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf } from '../lib/adminExport';
+import {
+  listFeedback, updateFeedbackStatus, deleteFeedback, countNewFeedback,
+  FEEDBACK_TYPE_LABELS, FEEDBACK_STATUS_LABELS,
+  type FeedbackMessage, type FeedbackType, type FeedbackStatus,
+} from '../lib/feedback';
 
 /** Muestra un valor de texto en formato título, o "Sin dato" si está vacío. */
 function DisplayVal({ value, className = '' }: { value: string; className?: string }) {
@@ -40,7 +45,7 @@ function longDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-type Tab = 'overview' | 'users' | 'events' | 'education' | 'reports';
+type Tab = 'overview' | 'users' | 'events' | 'education' | 'reports' | 'messages';
 type EduTab = 'quiz' | 'facts' | 'timeline';
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A]';
@@ -96,7 +101,9 @@ function CharBars({ title, buckets, total }: { title: string; buckets: { label: 
   );
 }
 
-function Overview({ stats, users, onRefresh }: { stats: DashboardStats | null; users: AdminUser[]; onRefresh: () => void }) {
+function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
+  stats: DashboardStats | null; users: AdminUser[]; newMessages: number; onRefresh: () => void; onGoMessages: () => void;
+}) {
   const chars = useMemo(() => characterize(users), [users]);
 
   const [exportOpen, setExportOpen] = useState(false);
@@ -135,6 +142,7 @@ function Overview({ stats, users, onRefresh }: { stats: DashboardStats | null; u
           { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={20} /> },
           { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={20} /> },
           { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} datos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={20} /> },
+          { label: 'Cuentas eliminadas', sub: 'con simulaciones anonimizadas', value: stats.deletedAccounts, icon: <Trash2 size={20} /> },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl border border-stone-200/60 p-5 card-hover">
             <span className="text-stone-400">{s.icon}</span>
@@ -143,6 +151,13 @@ function Overview({ stats, users, onRefresh }: { stats: DashboardStats | null; u
             <div className="text-[11px] text-stone-400">{s.sub}</div>
           </div>
         ))}
+        {/* Mensajes nuevos: tarjeta que lleva a la pestaña Mensajes. */}
+        <button onClick={onGoMessages} className="text-left bg-white rounded-2xl border border-stone-200/60 p-5 card-hover">
+          <span className={newMessages > 0 ? 'text-[#C4553A]' : 'text-stone-400'}><MessageSquare size={20} /></span>
+          <div className="text-3xl font-black text-[#1A1A2E] mt-2">{newMessages}</div>
+          <div className="text-xs font-semibold text-stone-500 mt-1">Mensajes nuevos</div>
+          <div className="text-[11px] text-stone-400">del formulario Escríbenos</div>
+        </button>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -233,7 +248,9 @@ function RowMenu({ u, adminCount, onAction }: {
   onAction: (a: 'role' | 'active' | 'delete') => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -241,17 +258,28 @@ function RowMenu({ u, adminCount, onAction }: {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
+  // Al abrir, decide si el menú va hacia abajo o hacia arriba según el espacio
+  // disponible (evita que se corte en las últimas filas de la tabla).
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const menuHeight = 170; // alto aproximado del menú (3 opciones + separador)
+      setDropUp(window.innerHeight - rect.bottom < menuHeight);
+    }
+    setOpen(o => !o);
+  };
+
   const isAdmin = u.role === 'admin';
   const soleAdmin = isAdmin && adminCount <= 1;
 
   return (
     <div ref={ref} className="relative flex justify-end">
-      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+      <button ref={btnRef} onClick={e => { e.stopPropagation(); toggle(); }}
         className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600" aria-label="Acciones" title="Acciones">
         <MoreVertical size={16} />
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-56 bg-white rounded-xl border border-stone-200 shadow-lg py-1 text-sm" onClick={e => e.stopPropagation()}>
+        <div className={`absolute right-0 z-20 w-56 bg-white rounded-xl border border-stone-200 shadow-lg py-1 text-sm ${dropUp ? 'bottom-8' : 'top-8'}`} onClick={e => e.stopPropagation()}>
           <button
             disabled={soleAdmin}
             onClick={() => { setOpen(false); onAction('role'); }}
@@ -260,8 +288,10 @@ function RowMenu({ u, adminCount, onAction }: {
             <Shield size={14} className="text-stone-400" /> {isAdmin ? 'Quitar administrador' : 'Hacer administrador'}
           </button>
           <button
+            disabled={u.active && soleAdmin}
             onClick={() => { setOpen(false); onAction('active'); }}
-            className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50">
+            title={u.active && soleAdmin ? 'No puedes desactivar al único administrador' : undefined}
+            className="w-full text-left px-3 py-2 flex items-center gap-2 text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed">
             {u.active ? <><UserX size={14} className="text-stone-400" /> Desactivar cuenta</> : <><UserCheck size={14} className="text-stone-400" /> Activar cuenta</>}
           </button>
           <div className="my-1 border-t border-stone-100" />
@@ -304,8 +334,16 @@ function UserDrawer({ u, onClose }: { u: AdminUser; onClose: () => void }) {
         <div className="p-5 space-y-4">
           <div className="flex flex-wrap gap-2">
             <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.role === 'admin' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ROLE_LABELS[u.role]}</span>
-            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-500'}`}>{u.active ? 'Activo' : 'Desactivado'}</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${u.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-500'}`}>
+              {u.active ? 'Activo' : u.deactivated_by === 'usuario' ? 'Desactivado por el usuario' : 'Desactivado por un administrador'}
+            </span>
           </div>
+          {!u.active && u.deactivated_by === 'administrador' && u.deactivation_reason && (
+            <div className="bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-2">
+              <div className="text-[11px] font-semibold text-stone-500">Motivo de la desactivación</div>
+              <div className="text-sm mt-0.5 text-[#1A1A2E]">{u.deactivation_reason}</div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             {row('Ocupación', u.occupation)}
             {row('Área de interés', u.research_area)}
@@ -342,11 +380,17 @@ function UsersTab({ users, meId, onChange, notify }: {
   const [occFilter, setOccFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
   const [drawer, setDrawer] = useState<AdminUser | null>(null);
-  // Confirmaciones: rol y activar/desactivar usan un modal simple; eliminar exige escribir el correo.
-  const [confirm, setConfirm] = useState<{ u: AdminUser; kind: 'role' | 'active' } | null>(null);
-  const [delUser, setDelUser] = useState<AdminUser | null>(null);
+  // Confirmación de rol (cambiar/quitar admin) — modal simple.
+  const [confirm, setConfirm] = useState<{ u: AdminUser } | null>(null);
+  // Diálogo con motivo: sirve para desactivar (reason) y para eliminar (reason+email).
+  const [reasonDlg, setReasonDlg] = useState<{ u: AdminUser; mode: 'deactivate' | 'delete' } | null>(null);
+  const [reason, setReason] = useState('');
+  const [reasonOther, setReasonOther] = useState('');
   const [delEmail, setDelEmail] = useState('');
+
+  const REASONS = ['Cuenta de prueba', 'Solicitud del usuario', 'Inactividad', 'Uso indebido', 'Otro'];
 
   const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
   const occupations = useMemo(
@@ -362,6 +406,9 @@ function UsersTab({ users, meId, onChange, notify }: {
     return users.filter(u => {
       if (roleFilter && u.role !== roleFilter) return false;
       if (occFilter && u.occupation !== occFilter) return false;
+      if (stateFilter === 'active' && !u.active) return false;
+      if (stateFilter === 'deact_user' && !(!u.active && u.deactivated_by === 'usuario')) return false;
+      if (stateFilter === 'deact_admin' && !(!u.active && u.deactivated_by === 'administrador')) return false;
       if (fromTs != null || toTs != null) {
         const t = u.created_at ? new Date(u.created_at).getTime() : NaN;
         if (isNaN(t)) return false;
@@ -371,7 +418,7 @@ function UsersTab({ users, meId, onChange, notify }: {
       if (!q) return true;
       return [u.full_name, u.email, u.institution].some(v => (v ?? '').toLowerCase().includes(q));
     });
-  }, [users, search, roleFilter, occFilter, fromDate, toDate]);
+  }, [users, search, roleFilter, occFilter, stateFilter, fromDate, toDate]);
 
   const run = async (id: string, fn: () => Promise<void>, ok: string) => {
     setBusy(id);
@@ -380,24 +427,39 @@ function UsersTab({ users, meId, onChange, notify }: {
     setBusy(null);
   };
 
+  const openReasonDialog = (u: AdminUser, mode: 'deactivate' | 'delete') => {
+    setReason(''); setReasonOther(''); setDelEmail('');
+    setReasonDlg({ u, mode });
+  };
+
   const onAction = (u: AdminUser, a: 'role' | 'active' | 'delete') => {
-    if (a === 'delete') { setDelUser(u); setDelEmail(''); }
-    else setConfirm({ u, kind: a });
+    if (a === 'role') { setConfirm({ u }); return; }
+    if (a === 'active') {
+      // Reactivar es inmediato; desactivar pide motivo.
+      if (u.active) openReasonDialog(u, 'deactivate');
+      else run(u.id, () => reactivateUser(u.id), 'Cuenta activada');
+      return;
+    }
+    openReasonDialog(u, 'delete'); // eliminar
   };
 
-  const doConfirm = () => {
+  const doConfirmRole = () => {
     if (!confirm) return;
-    const { u, kind } = confirm;
+    const { u } = confirm;
     setConfirm(null);
-    if (kind === 'role') run(u.id, () => setUserRole(u.id, u.role === 'admin' ? 'user' : 'admin'), 'Rol actualizado');
-    else run(u.id, () => setUserActive(u.id, !u.active), u.active ? 'Cuenta desactivada' : 'Cuenta activada');
+    run(u.id, () => setUserRole(u.id, u.role === 'admin' ? 'user' : 'admin'), 'Rol actualizado');
   };
 
-  const doDelete = () => {
-    if (!delUser) return;
-    const u = delUser;
-    setDelUser(null);
-    run(u.id, () => deleteUser(u.id), 'Cuenta eliminada');
+  /** Motivo final (texto del select, o el texto libre si eligió "Otro"). */
+  const finalReason = () => (reason === 'Otro' ? reasonOther.trim() : reason);
+
+  const doReasonAction = () => {
+    if (!reasonDlg) return;
+    const { u, mode } = reasonDlg;
+    const r = finalReason();
+    setReasonDlg(null);
+    if (mode === 'deactivate') run(u.id, () => deactivateUser(u.id, r), 'Cuenta desactivada');
+    else run(u.id, () => deleteUser(u.id, r), 'Cuenta eliminada');
   };
 
   return (
@@ -414,20 +476,26 @@ function UsersTab({ users, meId, onChange, notify }: {
           <option value="">Todas las ocupaciones</option>
           {occupations.map(o => <option key={o} value={o}>{titleCase(o)}</option>)}
         </select>
+        <select value={stateFilter} onChange={e => setStateFilter(e.target.value)} className={`${inputCls} sm:w-60`}>
+          <option value="">Todos los estados</option>
+          <option value="active">Activo</option>
+          <option value="deact_user">Desactivado por el usuario</option>
+          <option value="deact_admin">Desactivado por un administrador</option>
+        </select>
         <div className="flex items-center gap-1.5 text-xs text-stone-500">
           <span>Registro:</span>
           <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} title="Desde" className={`${inputCls} w-[9.5rem]`} />
           <span>a</span>
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} title="Hasta" className={`${inputCls} w-[9.5rem]`} />
         </div>
-        {(search || roleFilter || occFilter || fromDate || toDate) && (
-          <button onClick={() => { setSearch(''); setRoleFilter(''); setOccFilter(''); setFromDate(''); setToDate(''); }} className={btnGhost}>Limpiar</button>
+        {(search || roleFilter || occFilter || stateFilter || fromDate || toDate) && (
+          <button onClick={() => { setSearch(''); setRoleFilter(''); setOccFilter(''); setStateFilter(''); setFromDate(''); setToDate(''); }} className={btnGhost}>Limpiar</button>
         )}
         <div className="flex-1" />
         <span className="text-xs text-stone-400">{filtered.length} de {users.length}</span>
       </div>
 
-      <div className="bg-white rounded-2xl border border-stone-200/60 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200/60">
         <table className="w-full text-sm table-fixed">
           <colgroup>
             <col className="w-[24%]" /><col className="w-[22%]" /><col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[6%]" />
@@ -461,7 +529,9 @@ function UsersTab({ users, meId, onChange, notify }: {
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${u.role === 'admin' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ROLE_LABELS[u.role]}</span>
-                  <div className={`text-[11px] mt-1 ${u.active ? 'text-green-600' : 'text-red-500'}`}>{u.active ? 'Activo' : 'Desactivado'}</div>
+                  <div className={`text-[11px] mt-1 ${u.active ? 'text-green-600' : 'text-red-500'}`}>
+                    {u.active ? 'Activo' : u.deactivated_by === 'usuario' ? 'Desactivado (usuario)' : 'Desactivado (admin)'}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-stone-400 text-xs">{u.last_login ? fmtDate(u.last_login, true) : <span className="text-stone-300">Sin dato</span>}</td>
                 <td className="px-4 py-3">
@@ -478,54 +548,74 @@ function UsersTab({ users, meId, onChange, notify }: {
 
       {drawer && <UserDrawer u={drawer} onClose={() => setDrawer(null)} />}
 
-      {/* Confirmación de rol / activar-desactivar */}
+      {/* Confirmación de rol (hacer/quitar administrador) */}
       {confirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setConfirm(null)}>
           <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-black text-[#1A1A2E]">
-              {confirm.kind === 'role'
-                ? (confirm.u.role === 'admin' ? 'Quitar administrador' : 'Hacer administrador')
-                : (confirm.u.active ? 'Desactivar cuenta' : 'Activar cuenta')}
+              {confirm.u.role === 'admin' ? 'Quitar administrador' : 'Hacer administrador'}
             </h3>
             <p className="text-sm mt-2 text-stone-500 leading-relaxed">
-              {confirm.kind === 'role'
-                ? (confirm.u.role === 'admin'
-                    ? <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> pasará a ser Investigador y perderá el acceso al panel.</>
-                    : <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> tendrá acceso completo al panel de administración.</>)
-                : (confirm.u.active
-                    ? <>La cuenta de <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> quedará desactivada y no podrá iniciar sesión.</>
-                    : <>La cuenta de <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> podrá volver a iniciar sesión.</>)}
+              {confirm.u.role === 'admin'
+                ? <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> pasará a ser Investigador y perderá el acceso al panel.</>
+                : <>El usuario <b className="text-[#1A1A2E]">{confirm.u.full_name || confirm.u.email}</b> tendrá acceso completo al panel de administración.</>}
             </p>
             <div className="flex gap-2 mt-4">
-              <button onClick={doConfirm} className="flex-1 bg-[#C4553A] text-white py-2.5 rounded-xl font-bold text-sm btn-hover">Confirmar</button>
+              <button onClick={doConfirmRole} className="flex-1 bg-[#C4553A] text-white py-2.5 rounded-xl font-bold text-sm btn-hover">Confirmar</button>
               <button onClick={() => setConfirm(null)} className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confirmación de eliminación (escribir correo) */}
-      {delUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setDelUser(null)}>
-          <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center mb-3"><AlertTriangle size={22} className="text-red-500" /></div>
-            <h3 className="text-lg font-black text-[#1A1A2E]">Eliminar cuenta</h3>
-            <p className="text-sm mt-2 text-stone-500 leading-relaxed">
-              Se eliminarán de forma <b className="text-[#1A1A2E]">permanente</b> el perfil y los reportes de <b className="text-[#1A1A2E]">{delUser.full_name || delUser.email}</b>.
-            </p>
-            <p className="text-sm mt-3 text-stone-500">Para confirmar, escribe su correo <b className="text-[#1A1A2E]">{delUser.email}</b>:</p>
-            <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder={delUser.email} autoComplete="off"
-              className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50" />
-            <div className="flex gap-2 mt-4">
-              <button onClick={doDelete} disabled={delEmail.trim().toLowerCase() !== delUser.email.toLowerCase()}
-                className="flex-1 flex items-center justify-center gap-2 bg-red-500 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                Eliminar definitivamente <ArrowRight size={15} />
-              </button>
-              <button onClick={() => setDelUser(null)} className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
+      {/* Diálogo con motivo: desactivar (motivo) y eliminar (motivo + correo) */}
+      {reasonDlg && (() => {
+        const { u, mode } = reasonDlg;
+        const isDelete = mode === 'delete';
+        const reasonOk = reason !== '' && (reason !== 'Otro' || reasonOther.trim() !== '');
+        const emailOk = !isDelete || delEmail.trim().toLowerCase() === u.email.toLowerCase();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setReasonDlg(null)}>
+            <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-3 ${isDelete ? 'bg-red-50' : 'bg-[#C4553A]/10'}`}>
+                {isDelete ? <AlertTriangle size={22} className="text-red-500" /> : <UserX size={22} className="text-[#C4553A]" />}
+              </div>
+              <h3 className="text-lg font-black text-[#1A1A2E]">{isDelete ? 'Eliminar cuenta' : 'Desactivar cuenta'}</h3>
+              <p className="text-sm mt-2 text-stone-500 leading-relaxed">
+                {isDelete
+                  ? <>Se eliminarán el perfil y los datos personales de <b className="text-[#1A1A2E]">{u.full_name || u.email}</b> de forma permanente. Las simulaciones se conservarán sin ningún dato que identifique a la persona, solo con fines estadísticos del proyecto.</>
+                  : <>La cuenta de <b className="text-[#1A1A2E]">{u.full_name || u.email}</b> quedará desactivada y no podrá iniciar sesión. Sus datos y simulaciones se conservan.</>}
+              </p>
+
+              <label className="block text-xs font-semibold text-stone-500 mt-4 mb-1">Motivo</label>
+              <select value={reason} onChange={e => setReason(e.target.value)} className={inputCls}>
+                <option value="">Selecciona un motivo…</option>
+                {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              {reason === 'Otro' && (
+                <input value={reasonOther} onChange={e => setReasonOther(e.target.value)} placeholder="Describe el motivo" maxLength={120}
+                  className={`${inputCls} mt-2`} />
+              )}
+
+              {isDelete && (
+                <>
+                  <p className="text-sm mt-3 text-stone-500">Para confirmar, escribe su correo <b className="text-[#1A1A2E]">{u.email}</b>:</p>
+                  <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder={u.email} autoComplete="off"
+                    className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50" />
+                </>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <button onClick={doReasonAction} disabled={!reasonOk || !emailOk}
+                  className={`flex-1 flex items-center justify-center gap-2 text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed ${isDelete ? 'bg-red-500' : 'bg-[#C4553A] btn-hover'}`}>
+                  {isDelete ? <>Eliminar definitivamente <ArrowRight size={15} /></> : 'Desactivar cuenta'}
+                </button>
+                <button onClick={() => setReasonDlg(null)} className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -971,6 +1061,203 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
   );
 }
 
+/* ─────────────────────────────── Mensajes ─────────────────────────────── */
+
+/** Color del punto según el estado del mensaje. */
+const STATUS_DOT: Record<FeedbackStatus, string> = {
+  nuevo: '#C4553A',
+  leido: '#D4A853',
+  respondido: '#2D6A4F',
+};
+
+/** Panel lateral con el detalle de un mensaje. */
+function MessageDrawer({ m, onClose, onStatus, onDelete, busy }: {
+  m: FeedbackMessage;
+  onClose: () => void;
+  onStatus: (s: FeedbackStatus) => void;
+  onDelete: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-[#1A1A2E]/40" onClick={onClose}>
+      <div className="w-full max-w-md h-full bg-white shadow-xl overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-stone-200/60 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_DOT[m.status] }} />
+              <span className="font-bold text-[#1A1A2E]">{FEEDBACK_TYPE_LABELS[m.type]}</span>
+            </div>
+            <div className="text-xs text-stone-400 mt-1">{fmtDate(m.created_at, true)}</div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <div className="text-[11px] font-semibold text-stone-500 mb-1">Mensaje</div>
+            <p className="text-sm text-[#1A1A2E] leading-relaxed whitespace-pre-wrap bg-stone-50 rounded-xl border border-stone-200/60 p-3.5">{m.message}</p>
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-stone-500">Correo para responder</div>
+            {m.email ? (
+              <a href={`mailto:${m.email}`} className="text-sm mt-0.5 text-[#2D6A4F] font-semibold flex items-center gap-1.5 hover:underline">
+                <Mail size={13} /> {m.email}
+              </a>
+            ) : (
+              <div className="text-sm mt-0.5 text-stone-300">No dejó correo</div>
+            )}
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold text-stone-500 mb-1.5">Estado</div>
+            <div className="flex flex-wrap gap-2">
+              {(['nuevo', 'leido', 'respondido'] as FeedbackStatus[]).map(s => (
+                <button
+                  key={s} disabled={busy} onClick={() => onStatus(s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 ${
+                    m.status === s ? 'text-white border-transparent' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-300'
+                  }`}
+                  style={m.status === s ? { backgroundColor: STATUS_DOT[s] } : undefined}
+                >
+                  {FEEDBACK_STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="pt-3 border-t border-stone-100">
+            <button onClick={onDelete} disabled={busy} className="inline-flex items-center gap-1.5 text-red-500 text-sm font-semibold hover:bg-red-50 px-3 py-2 rounded-lg disabled:opacity-40">
+              <Trash2 size={14} /> Eliminar mensaje
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'error') => void; onChange: () => void }) {
+  const [messages, setMessages] = useState<FeedbackMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<'' | FeedbackType>('');
+  const [statusFilter, setStatusFilter] = useState<'' | FeedbackStatus>('');
+  const [drawer, setDrawer] = useState<FeedbackMessage | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try { setMessages(await listFeedback()); }
+    catch (e) { notify(e instanceof Error ? e.message : 'Error cargando mensajes', 'error'); }
+    setLoading(false);
+  }, [notify]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const filtered = useMemo(() => messages.filter(m => {
+    if (typeFilter && m.type !== typeFilter) return false;
+    if (statusFilter && m.status !== statusFilter) return false;
+    return true;
+  }), [messages, typeFilter, statusFilter]);
+
+  // Al abrir un mensaje "nuevo", pasarlo a "leído".
+  const openDrawer = async (m: FeedbackMessage) => {
+    setDrawer(m);
+    if (m.status === 'nuevo') {
+      try {
+        await updateFeedbackStatus(m.id, 'leido');
+        setMessages(prev => prev.map(x => x.id === m.id ? { ...x, status: 'leido' } : x));
+        setDrawer(d => d && d.id === m.id ? { ...d, status: 'leido' } : d);
+        onChange();
+      } catch { /* si falla, se queda como nuevo */ }
+    }
+  };
+
+  const changeStatus = async (id: string, status: FeedbackStatus) => {
+    setBusy(true);
+    try {
+      await updateFeedbackStatus(id, status);
+      setMessages(prev => prev.map(x => x.id === id ? { ...x, status } : x));
+      setDrawer(d => d && d.id === id ? { ...d, status } : d);
+      notify('Estado actualizado');
+      onChange();
+    } catch (e) { notify(e instanceof Error ? e.message : 'Error', 'error'); }
+    setBusy(false);
+  };
+
+  const removeMessage = async (id: string) => {
+    setBusy(true);
+    try {
+      await deleteFeedback(id);
+      setMessages(prev => prev.filter(x => x.id !== id));
+      setDrawer(null);
+      notify('Mensaje eliminado');
+      onChange();
+    } catch (e) { notify(e instanceof Error ? e.message : 'Error', 'error'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as '' | FeedbackType)} className={`${inputCls} sm:w-52`}>
+          <option value="">Todos los tipos</option>
+          {(Object.keys(FEEDBACK_TYPE_LABELS) as FeedbackType[]).map(t => <option key={t} value={t}>{FEEDBACK_TYPE_LABELS[t]}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | FeedbackStatus)} className={`${inputCls} sm:w-44`}>
+          <option value="">Todos los estados</option>
+          {(Object.keys(FEEDBACK_STATUS_LABELS) as FeedbackStatus[]).map(s => <option key={s} value={s}>{FEEDBACK_STATUS_LABELS[s]}</option>)}
+        </select>
+        {(typeFilter || statusFilter) && (
+          <button onClick={() => { setTypeFilter(''); setStatusFilter(''); }} className={btnGhost}>Limpiar</button>
+        )}
+        <button onClick={reload} className={btnGhost}><RefreshCw size={13} /> Actualizar</button>
+        <div className="flex-1" />
+        <span className="text-xs text-stone-400">{filtered.length} de {messages.length}</span>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-stone-400">
+          <div className="inline-block w-8 h-8 border-2 border-stone-200 border-t-[#C4553A] rounded-full animate-spin" />
+          <p className="text-sm mt-3">Cargando mensajes…</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-stone-400">
+          <MessageSquare size={32} className="mx-auto text-stone-300" />
+          <p className="text-sm mt-3">{messages.length === 0 ? 'Aún no hay mensajes.' : 'Ningún mensaje con esos filtros.'}</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-stone-200/60 divide-y divide-stone-100">
+          {filtered.map(m => (
+            <button
+              key={m.id} onClick={() => openDrawer(m)}
+              className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-stone-50/60 transition-colors"
+            >
+              <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: STATUS_DOT[m.status] }} title={FEEDBACK_STATUS_LABELS[m.status]} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-sm ${m.status === 'nuevo' ? 'font-bold text-[#1A1A2E]' : 'font-semibold text-stone-600'}`}>{FEEDBACK_TYPE_LABELS[m.type]}</span>
+                  <span className="text-[11px] text-stone-400">{FEEDBACK_STATUS_LABELS[m.status]}</span>
+                </div>
+                <div className="text-sm text-stone-500 truncate mt-0.5">{m.message}</div>
+                {m.email && <div className="text-[11px] text-stone-400 flex items-center gap-1 mt-0.5"><Mail size={10} /> {m.email}</div>}
+              </div>
+              <span className="text-[11px] text-stone-400 flex-shrink-0">{fmtDate(m.created_at, true)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {drawer && (
+        <MessageDrawer
+          m={drawer}
+          onClose={() => setDrawer(null)}
+          onStatus={s => changeStatus(drawer.id, s)}
+          onDelete={() => removeMessage(drawer.id)}
+          busy={busy}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────────── Dashboard ─────────────────────────────── */
 
 export function AdminDashboard() {
@@ -978,6 +1265,7 @@ export function AdminDashboard() {
   const [tab, setTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [newMessages, setNewMessages] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null);
 
   const notify = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => setToast({ msg, type }), []);
@@ -994,14 +1282,21 @@ export function AdminDashboard() {
     catch (e) { notify(e instanceof Error ? e.message : 'Error cargando usuarios', 'error'); }
   }, [notify]);
 
-  useEffect(() => { reloadStats(); reloadUsers(); }, [reloadStats, reloadUsers]);
+  const reloadNewMessages = useCallback(async () => {
+    if (!supabase) return;
+    try { setNewMessages(await countNewFeedback()); }
+    catch { /* el contador es informativo; si falla, se deja en 0 */ }
+  }, []);
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  useEffect(() => { reloadStats(); reloadUsers(); reloadNewMessages(); }, [reloadStats, reloadUsers, reloadNewMessages]);
+
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'overview', label: 'Resumen', icon: <BarChart3 size={16} /> },
     { id: 'users', label: 'Usuarios', icon: <Users size={16} /> },
     { id: 'events', label: 'Eventos sísmicos', icon: <Database size={16} /> },
     { id: 'education', label: 'Contenido educativo', icon: <BookOpen size={16} /> },
     { id: 'reports', label: 'Reportes', icon: <FileText size={16} /> },
+    { id: 'messages', label: 'Mensajes', icon: <MessageSquare size={16} />, badge: newMessages },
   ];
 
   if (!supabase) {
@@ -1031,15 +1326,22 @@ export function AdminDashboard() {
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
                 tab === t.id ? 'bg-[#C4553A] text-white' : 'bg-white text-stone-500 border border-stone-200'}`}>
               {t.icon} {t.label}
+              {t.badge ? (
+                <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                  tab === t.id ? 'bg-white text-[#C4553A]' : 'bg-[#C4553A] text-white'}`}>
+                  {t.badge}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
 
-        {tab === 'overview' && <Overview stats={stats} users={users} onRefresh={reloadStats} />}
+        {tab === 'overview' && <Overview stats={stats} users={users} newMessages={newMessages} onRefresh={reloadStats} onGoMessages={() => setTab('messages')} />}
         {tab === 'users' && <UsersTab users={users} meId={user?.id} onChange={() => { reloadUsers(); reloadStats(); }} notify={notify} />}
         {tab === 'events' && <EventsTab notify={notify} />}
         {tab === 'education' && <EducationTab notify={notify} />}
         {tab === 'reports' && <ReportsTab stats={stats} users={users} notify={notify} />}
+        {tab === 'messages' && <MessagesTab notify={notify} onChange={reloadNewMessages} />}
       </div>
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
