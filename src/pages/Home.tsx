@@ -743,7 +743,7 @@ function SiglaTip({ sigla, texto }: { sigla: string; texto: string }) {
       <span style={{ textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>{sigla}</span>
       {open && (
         <span
-          className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full z-20 mb-2 w-56 rounded-lg bg-[#1A1A2E] px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white shadow-lg"
+          className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full z-30 mt-2 w-56 rounded-lg bg-[#1A1A2E] px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white shadow-lg"
           role="tooltip"
         >
           {texto}
