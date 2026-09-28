@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { Mail, User, ArrowRight, ShieldCheck, Check } from '../lib/icons';
-import { Logo } from '../components/ui/Logo';
+import { LogoMark } from '../components/ui/Logo';
 import { Field, inputCls } from '../components/auth/ResearcherFields';
 import { PasswordField } from '../components/auth/PasswordField';
 import { ConsentCheckbox } from '../components/auth/ConsentCheckbox';
@@ -109,12 +109,12 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, no
       : 'Accede con tu cuenta de investigador o administrador';
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-4">
+    <div className="flex-1 min-h-0 bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-4">
           {/* Logo centrado, clic lleva a Inicio. */}
           <button onClick={onHome} className="inline-flex mx-auto mb-3" aria-label="Ir a Inicio">
-            <Logo size={44} />
+            <LogoMark size={44} />
           </button>
           <h1 className="text-2xl font-black text-[#1A1A2E]">{title}</h1>
           <p className="text-stone-400 text-sm mt-1">{subtitle}</p>

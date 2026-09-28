@@ -6,10 +6,12 @@ import { useAuth, ROLE_LABELS } from '../../lib/auth';
 
 interface NavbarProps {
   currentPage: Page;
+  /** Modo activo de la página de autenticación (para marcar el botón correcto). */
+  authMode?: 'login' | 'register' | 'forgot';
   onNavigate: (page: Page, opts?: { register?: boolean }) => void;
 }
 
-export function Navbar({ currentPage, onNavigate }: NavbarProps) {
+export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
   const { user, signOut } = useAuth();
   // Menú desplegable en móvil (bajo el botón hamburguesa).
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,6 +34,11 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
   const mainNav = user ? [publicNav[0], ...moduleNav, publicNav[1]] : publicNav;
 
   const go = (page: Page, opts?: { register?: boolean }) => { setMenuOpen(false); onNavigate(page, opts); };
+
+  // En la página de autenticación, distinguir qué botón marcar según el modo
+  // (login/registro), ya que ambos comparten la ruta 'auth'.
+  const authRegisterActive = currentPage === 'auth' && authMode === 'register';
+  const authLoginActive = currentPage === 'auth' && authMode !== 'register';
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-[#FAFAF8]/90 backdrop-blur-md border-b border-stone-200/60">
@@ -111,15 +118,18 @@ export function Navbar({ currentPage, onNavigate }: NavbarProps) {
             ) : (
               <div className="flex items-center gap-1">
                 <button onClick={() => onNavigate('auth', { register: true })} title="Registrarse"
-                  className="nav-link nav-link-forest flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium text-[#2D6A4F]">
+                  className={`relative nav-link-forest flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium text-[#2D6A4F] ${authRegisterActive ? '' : 'nav-link'}`}>
                   <UserPlus size={15} />
                   <span>Registrarse</span>
+                  {authRegisterActive && (
+                    <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[#2D6A4F]" />
+                  )}
                 </button>
                 <button onClick={() => onNavigate('auth')} title="Iniciar sesión"
-                  className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium text-[#C4553A] ${currentPage === 'auth' ? '' : 'nav-link'}`}>
+                  className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium text-[#C4553A] ${authLoginActive ? '' : 'nav-link'}`}>
                   <LogIn size={15} />
                   <span>Iniciar sesión</span>
-                  {currentPage === 'auth' && (
+                  {authLoginActive && (
                     <span className="absolute left-3.5 right-3.5 -bottom-px h-0.5 rounded-full bg-[#C4553A]" />
                   )}
                 </button>

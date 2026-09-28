@@ -235,7 +235,7 @@ function AppContent() {
           : { minHeight: '100vh' }
       }
     >
-      <Navbar currentPage={page} onNavigate={navigate} />
+      <Navbar currentPage={page} authMode={authMode} onNavigate={navigate} />
       <main className={`flex-1 flex flex-col transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
         {renderPage()}
       </main>
