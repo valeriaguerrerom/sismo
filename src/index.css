@@ -303,3 +303,15 @@ input[type='range']::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .ready-glow, .ready-pop { animation: none; }
 }
+
+/* ─── Piso de legibilidad para tipografías muy pequeñas ───
+ * Muchos textos usan tamaños arbitrarios muy chicos (9–11px) que en pantallas
+ * grandes o con escalado del SO se ven diminutos. Subimos ese piso de forma
+ * global y modesta, sin tocar cada componente. Como estas reglas van DESPUÉS de
+ * las utilidades de Tailwind y tienen la misma especificidad (una clase), ganan
+ * por orden de cascada. Cambios sutiles para no descuadrar los layouts.
+ */
+.text-\[9px\]    { font-size: 10.5px; }
+.text-\[10px\]   { font-size: 11px; }
+.text-\[10\.5px\] { font-size: 11.5px; }
+.text-\[11px\]   { font-size: 12px; }

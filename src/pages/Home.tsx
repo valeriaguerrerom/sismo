@@ -876,7 +876,7 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
   }, []);
 
   return (
-    <div className="min-h-screen relative" style={{ backgroundColor: C.cream }}>
+    <div className="min-h-full flex flex-col relative" style={{ backgroundColor: C.cream }}>
       <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
         <SeismoBg animate={animate} />
       </div>
@@ -888,8 +888,8 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
         </div>
       )}
 
-      <section className="relative flex items-center pt-16 min-h-[calc(100dvh-64px)]" style={{ zIndex: 1 }}>
-        <div className="relative w-full app-container py-4">
+      <section className="relative flex-1 flex items-center box-border pt-16 pb-6" style={{ zIndex: 1 }}>
+        <div className="relative w-full app-container py-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             <div className="lg:col-span-7 animate-slide-left">
               <p className="text-sm font-medium mb-4 flex items-center gap-2" style={{ color: C.forest }}>

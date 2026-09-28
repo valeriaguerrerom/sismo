@@ -25,22 +25,39 @@ const PUBLIC_PAGES: Page[] = ['home', 'about', 'auth'];
 /**
  * Escala global ("zoom") para monitores anchos de alta resolución.
  *
- * Hasta 1920px de ancho devuelve 1 (todo se ve exactamente igual que en un
- * portátil). Entre 1920px y 2560px crece de forma fluida hasta 1.3125, de modo
- * que en 2560px el contenedor (1280px) se ve a ~1680px y la tipografía, los
- * espaciados, las tarjetas y el registro real crecen de forma proporcional.
- * Por encima de 2560px se mantiene en el tope para no exagerar.
+ * Ajuste fino del zoom según la escala del sistema operativo (reflejada en
+ * `window.devicePixelRatio`), calibrado para que la composición se vea como en
+ * la portátil de referencia de ~15" al 100%:
+ *   · 100% (dpr 1.0)  → zoom 1.00  (referencia).
+ *   · 125% (dpr 1.25) → zoom 0.92  (reduce un poco: evita que se corte la
+ *                                    tarjeta "Nariño en contexto").
+ *   · 150% (dpr 1.5)  → zoom 1.35  (agranda bastante: al 150% el contenido se
+ *                                    veía muy pequeño y dejaba un gran vacío).
+ * Para valores intermedios se interpola; fuera de rango se mantiene en los topes.
  */
 function useWideScreenZoom(): number {
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
-    const compute = () => {
-      const w = window.innerWidth;
-      const MIN_W = 1920, MAX_W = 2560, MAX_Z = 1.3125;
-      if (w <= MIN_W) { setZoom(1); return; }
-      const t = Math.min((w - MIN_W) / (MAX_W - MIN_W), 1);
-      setZoom(1 + t * (MAX_Z - 1));
+    // Puntos de calibración (dpr → zoom) ordenados por dpr.
+    const POINTS: [number, number][] = [
+      [1.0, 1.0],
+      [1.25, 0.92],
+      [1.5, 1.35],
+    ];
+    const zoomForDpr = (dpr: number): number => {
+      if (dpr <= POINTS[0][0]) return POINTS[0][1];
+      if (dpr >= POINTS[POINTS.length - 1][0]) return POINTS[POINTS.length - 1][1];
+      for (let i = 0; i < POINTS.length - 1; i++) {
+        const [d0, z0] = POINTS[i];
+        const [d1, z1] = POINTS[i + 1];
+        if (dpr >= d0 && dpr <= d1) {
+          const t = (dpr - d0) / (d1 - d0);
+          return z0 + t * (z1 - z0);
+        }
+      }
+      return 1;
     };
+    const compute = () => setZoom(zoomForDpr(window.devicePixelRatio || 1));
     compute();
     window.addEventListener('resize', compute);
     return () => window.removeEventListener('resize', compute);
@@ -206,9 +223,20 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative" style={wideZoom !== 1 ? { zoom: wideZoom } : undefined}>
+    <div
+      className="flex flex-col relative"
+      style={
+        wideZoom !== 1
+          // Con zoom, `100vh` se agranda por el factor de zoom y deja un hueco
+          // enorme antes del footer en pantallas grandes. Dividimos la altura
+          // mínima por el zoom para que el layout ocupe exactamente una pantalla
+          // física.
+          ? { zoom: wideZoom, minHeight: `calc(100vh / ${wideZoom})` }
+          : { minHeight: '100vh' }
+      }
+    >
       <Navbar currentPage={page} onNavigate={navigate} />
-      <main className={`flex-1 transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
+      <main className={`flex-1 flex flex-col transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
         {renderPage()}
       </main>
       <Footer onNavigate={navigate} />
