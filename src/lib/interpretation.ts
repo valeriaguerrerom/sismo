@@ -34,8 +34,8 @@ export function interpretSimulation(input: InterpretationInput): string {
   const typeLabel = params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica';
   const depthDesc = depthClass(params.depth);
   const grid = gridInfo
-    ? `Simulación FDM 2D (${gridInfo.nx}×${gridInfo.nz} puntos, ${gridInfo.totalSteps} pasos)`
-    : 'Simulación FDM 2D';
+    ? `Simulación FDM (${gridInfo.nx}×${gridInfo.nz} puntos, ${gridInfo.totalSteps} pasos)`
+    : 'Simulación FDM';
 
   let text = `${grid} de un evento de fuente ${typeLabel} Mw ${params.magnitude.toFixed(1)} a ${params.depth} km de profundidad (${depthDesc}). `;
   text += `El medio se modeló con Vp = ${params.vp} m/s, Vs = ${params.vs} m/s y densidad ${params.density} kg/m³ (Vp/Vs = ${(params.vp / params.vs).toFixed(2)}). `;
@@ -49,7 +49,7 @@ export function interpretSimulation(input: InterpretationInput): string {
     ? 'El mecanismo isótropo (explosivo) produce una radiación más uniforme, típica de sismicidad volcánica somera. '
     : 'El mecanismo de doble par produce lóbulos de radiación diferenciados entre componentes, típico de fracturas tectónicas. ';
 
-  text += 'La visualización muestra la propagación del campo de ondas 2D con frentes P (rápidos) y S (lentos) expandiéndose desde el hipocentro.';
+  text += 'La visualización muestra la propagación del campo de ondas con frentes P (rápidos) y S (lentos) expandiéndose desde el hipocentro.';
 
   if (gridInfo?.dtAdjusted) text += ' ⚠️ dt fue ajustado automáticamente por condición CFL.';
   if (gridInfo?.dxAdjusted) text += ' ⚠️ dx fue aumentado para acomodar la profundidad focal solicitada.';

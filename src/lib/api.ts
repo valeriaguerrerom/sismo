@@ -129,3 +129,92 @@ export async function fetchSimulation(params: import('./types').SimulationParams
     body: JSON.stringify(params),
   });
 }
+
+/** Frame del campo tal como llega del backend (field en base64 Float32 LE). */
+interface SnapshotFrameDTO { time: number; field: string }
+/** Grid submuestreado de los snapshots (posiciones ya reescaladas). */
+interface SnapshotGridDTO {
+  nx: number; nz: number;
+  sourceX: number; sourceZ: number; receiverX: number; receiverZ: number;
+}
+
+/** Respuesta del endpoint /api/simulate/full. */
+interface SimulateFullDTO {
+  waveData: import('./types').WaveData;
+  maxAmplitude: number;
+  duration: number;
+  dominantFrequency: number;
+  params: import('./types').SimulationParams;
+  gridInfo: import('./types').GridInfo;
+  pArrival: number;
+  sArrival: number;
+  pArrivalDetected: boolean;
+  sArrivalDetected: boolean;
+  snapshotCount: number;
+  snapshots: SnapshotFrameDTO[];
+  snapshotGrid: SnapshotGridDTO;
+}
+
+/** Decodifica un campo base64 (Float32 little-endian) a Float32Array. */
+function decodeField(b64: string): Float32Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Float32Array(bytes.buffer);
+}
+
+/**
+ * Ejecuta la simulación FDM 2D COMPLETA en el backend (incluye los snapshots
+ * del campo para el mapa de calor). Todo el cómputo ocurre en el servidor; el
+ * navegador solo decodifica y dibuja.
+ *
+ * @param params - Parámetros de simulación.
+ * @returns `result` (SimulationResult con snapshots ya decodificados, cuyo
+ *   nx/nz corresponden al grid submuestreado del heatmap) y `heatmapGrid`
+ *   (GridInfo con las posiciones fuente/receptor reescaladas a ese grid, para
+ *   que TriaxialPlane ubique bien las marcas).
+ */
+export async function fetchSimulationFull(
+  params: import('./types').SimulationParams,
+): Promise<{ result: import('./types').SimulationResult; heatmapGrid: import('./types').GridInfo }> {
+  const dto = await fetchAPI<SimulateFullDTO>('/api/simulate/full', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+
+  const sg = dto.snapshotGrid;
+  const snapshots: import('./types').WavefieldSnapshot[] = dto.snapshots.map(s => ({
+    time: s.time,
+    nx: sg.nx,
+    nz: sg.nz,
+    field: decodeField(s.field),
+  }));
+
+  const result: import('./types').SimulationResult = {
+    waveData: dto.waveData,
+    snapshots,
+    maxAmplitude: dto.maxAmplitude,
+    duration: dto.duration,
+    dominantFrequency: dto.dominantFrequency,
+    params: dto.params,
+    gridInfo: dto.gridInfo,
+    pArrival: dto.pArrival,
+    sArrival: dto.sArrival,
+    pArrivalDetected: dto.pArrivalDetected,
+    sArrivalDetected: dto.sArrivalDetected,
+  };
+
+  // Grid del heatmap: mismas dimensiones que los snapshots submuestreados y
+  // posiciones fuente/receptor reescaladas a ese grid (TriaxialPlane las usa).
+  const heatmapGrid: import('./types').GridInfo = {
+    ...dto.gridInfo,
+    nx: sg.nx,
+    nz: sg.nz,
+    sourceX: sg.sourceX,
+    sourceZ: sg.sourceZ,
+    receiverX: sg.receiverX,
+    receiverZ: sg.receiverZ,
+  };
+
+  return { result, heatmapGrid };
+}

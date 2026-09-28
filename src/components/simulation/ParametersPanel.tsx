@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SimulationParams } from '../../lib/types';
-import { computeLame } from '../../lib/simulation';
+import { computeLame, presetForSource } from '../../lib/simulation';
 import { Tooltip } from '../ui/Tooltip';
 import { Play, Loader } from '../../lib/icons';
 import { AccordionSection } from './AccordionSection';
@@ -158,7 +158,10 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               {(['tectonic', 'volcanic'] as const).map(t => (
                 <button
                   key={t}
-                  onClick={() => onChange({ ...params, sourceType: t })}
+                  // Al cambiar de tipo se aplica el preset óptimo de esa fuente
+                  // (evita avisos de malla/CFL y da arribos detectables). Si ya
+                  // está seleccionado, no se toca para no borrar ajustes manuales.
+                  onClick={() => { if (params.sourceType !== t) onChange(presetForSource(t)); }}
                   className={`py-1.5 rounded-lg text-xs font-semibold transition-all border ${
                     params.sourceType === t
                       ? t === 'tectonic'
@@ -243,9 +246,9 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             label="Paso Temporal (dt)"
             tooltip="Incremento de tiempo en segundos entre muestras. Debe cumplir la condición CFL: dt ≤ dx / (Vp·√2)."
             value={params.dt}
-            min={0.005}
+            min={0.001}
             max={0.1}
-            step={0.005}
+            step={0.001}
             unit="s"
             onChange={v => update('dt', v)}
           />

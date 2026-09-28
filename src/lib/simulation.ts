@@ -5,11 +5,46 @@ function ricker(t: number, f0: number, t0: number): number {
   return (1 - 2 * arg * arg) * Math.exp(-arg * arg);
 }
 
-export function defaultParams(): SimulationParams {
+/**
+ * Preset tectónico optimizado para una interpretación "limpia":
+ *  · dx = 20 m y f0 = 3.5 Hz (tectónico) ⇒ λ_min/dx ≈ 11 nodos/λ (> 10),
+ *    evita el aviso de dispersión numérica de la malla.
+ *  · profundidad 5 km ⇒ la malla representa el foco sin aumentar dx
+ *    (nz requerido ≈ 373 ≤ 400), evita el aviso de "dx ajustado".
+ *  · dt = 0.004 s < CFL (dx/(Vp·√2) ≈ 0.00404 s) ⇒ evita el aviso de "dt ajustado".
+ *  · duración 40 s con dt pequeño ⇒ ~6000 pasos, arribos P y S detectados por STA.
+ */
+export function tectonicParams(): SimulationParams {
   const vp = 3500, vs = 2000, density = 2600;
   const mu = density * vs * vs;
   const lambda = density * vp * vp - 2 * mu;
-  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 15, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 60, dx: 100, dt: 0.02 };
+  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 40, dx: 20, dt: 0.004 };
+}
+
+/**
+ * Preset volcánico optimizado (tipo Galeras), también con interpretación limpia:
+ *  · f0 = 2.0 Hz (volcánico) y Vs = 1700 ⇒ λ_min ≈ 340 m; con dx = 30 m ⇒
+ *    ≈ 11.3 nodos/λ (> 10), sin dispersión.
+ *  · profundidad 6 km (sismicidad volcánica somera) ⇒ malla sin ajustar dx y
+ *    con arribos P y S bien separados y detectables por STA (verificado).
+ *  · dt = 0.006 s < CFL (dx/(Vp·√2) ≈ 0.00707 s) ⇒ sin ajuste de dt.
+ *  · Vp = 3000, Vs = 1700, ρ = 2500 y epicentro en el Galeras.
+ */
+export function volcanicParams(): SimulationParams {
+  const vp = 3000, vs = 1700, density = 2500;
+  const mu = density * vs * vs;
+  const lambda = density * vp * vp - 2 * mu;
+  return { vp, vs, density, lambda, mu, sourceType: 'volcanic', magnitude: 4.5, depth: 6, epicenterLat: 1.2216, epicenterLon: -77.3742, duration: 40, dx: 30, dt: 0.006 };
+}
+
+/** Preset óptimo según el tipo de fuente elegido. */
+export function presetForSource(sourceType: SimulationParams['sourceType']): SimulationParams {
+  return sourceType === 'volcanic' ? volcanicParams() : tectonicParams();
+}
+
+/** Valores predeterminados iniciales del simulador (fuente tectónica). */
+export function defaultParams(): SimulationParams {
+  return tectonicParams();
 }
 
 export function computeLame(vp: number, vs: number, density: number) {
@@ -139,12 +174,24 @@ export function runFDM(
         const sIdx = idx(si, sj);
 
         if (sourceType === 'tectonic') {
-          uxCurr[sIdx] += srcVal * weight * 0.8 * (di !== 0 ? Math.sign(di) * 0.3 : 1);
-          uzCurr[sIdx] += srcVal * weight * 1.0;
+          // Doble par (falla de cizalla): campo de desplazamiento con patrón de
+          // cuatro lóbulos que genera ONDA S dominante y fuertes componentes
+          // horizontales. Se siembra la cizalla de forma antisimétrica: el
+          // desplazamiento horizontal depende del offset vertical (dj) y el
+          // vertical del offset horizontal (di) → ∇×u ≠ 0 (energía de corte).
+          const norm = dist > 1e-6 ? 1 / spread : 0;
+          uxCurr[sIdx] += srcVal * weight * 1.0 * (dj * norm);
+          uzCurr[sIdx] += srcVal * weight * 1.0 * (di * norm);
         } else {
-          const angle = Math.atan2(dj, di);
-          uxCurr[sIdx] += srcVal * weight * 0.4 * Math.cos(angle);
-          uzCurr[sIdx] += srcVal * weight * 1.0;
+          // Explosión isótropa (volcánica): expansión RADIAL uniforme hacia
+          // afuera desde el foco → ∇·u ≠ 0, ∇×u ≈ 0. Genera ONDA P dominante,
+          // radiación simétrica y muy poca S (sismicidad volcánica somera). El
+          // nodo central no tiene dirección radial, se omite (lo cubre el anillo).
+          if (dist > 1e-6) {
+            const angle = Math.atan2(dj, di);
+            uxCurr[sIdx] += srcVal * weight * 1.0 * Math.cos(angle);
+            uzCurr[sIdx] += srcVal * weight * 1.0 * Math.sin(angle);
+          }
         }
       }
     }

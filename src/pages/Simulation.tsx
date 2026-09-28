@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { downsampleWave } from '../lib/reportPdf';
-import { SimulationParams, SimulationResult, SimProgress, WavefieldSnapshot, WaveData } from '../lib/types';
+import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
+import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
 import { WaveChart } from '../components/simulation/WaveChart';
@@ -39,10 +40,16 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   }, [initialParams, onParamsUsed]);
 
   const [result, setResult] = useState<SimulationResult | null>(null);
+  // Grid submuestreado del mapa de calor (llega del backend junto al resultado).
+  const [heatmapGrid, setHeatmapGrid] = useState<GridInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<SimProgress | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
-  const workerRef = useRef<Worker | null>(null);
+  // Espejo de `result` para que launchTour (useCallback estable) siempre lea el
+  // valor actual sin recrearse ni capturar un valor viejo.
+  const resultRef = useRef<SimulationResult | null>(null);
+  resultRef.current = result;
 
   // Guardado de reportes
   const { user, markTourSeen } = useAuth();
@@ -66,6 +73,8 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     const steps = buildSimulacionSteps({
       openParam: (s) => { setTourParam(s); reposition(); },
       openResult: (s) => { setTourResult(s); reposition(); },
+      // Los pasos de resultados solo se añaden si ya hay una simulación generada.
+      hasResult: resultRef.current !== null,
     });
     startTour(steps, {
       onDone: () => {
@@ -188,83 +197,48 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     if (!background) {
       setLoading(true);
       setResult(null);
-      setProgress({ step: 0, totalSteps: 1, percent: 0 });
+      setSimError(null);
+      setProgress({ step: 0, totalSteps: 100, percent: 0 });
     }
 
-    const finish = (r: SimulationResult) => {
-      setResult(r);
-      if (!background) {
-        setLoading(false);
-        setProgress(null);
-        setWave2dRatio(0);
-        setWave2dPlaying(true);
-      }
-    };
+    // El cómputo ocurre en el backend (FastAPI). Como la respuesta es una sola
+    // petición sin streaming de progreso, animamos una barra "optimista" que
+    // avanza suavemente hacia ~90% mientras esperamos y salta a 100% al llegar.
+    let fakePct = 0;
+    let progTimer: ReturnType<typeof setInterval> | null = null;
+    if (!background) {
+      progTimer = setInterval(() => {
+        fakePct = Math.min(90, fakePct + Math.max(1, (90 - fakePct) * 0.08));
+        setProgress({ step: Math.round(fakePct), totalSteps: 100, percent: Math.round(fakePct) });
+      }, 200);
+    }
+    const stopProg = () => { if (progTimer) { clearInterval(progTimer); progTimer = null; } };
 
-    const runMainThread = () => {
-      import('../lib/simulation').then(({ runFDM }) => {
-        setTimeout(() => {
-          try {
-            const res = runFDM(runParams, (step, total) => {
-              if (!background) setProgress({ step, totalSteps: total, percent: Math.round((step / total) * 100) });
-            });
-            finish(res);
-          } catch {
-            if (!background) { setLoading(false); setProgress(null); }
-          }
-        }, 50);
-      }).catch(() => {
-        if (!background) { setLoading(false); setProgress(null); }
-      });
-    };
-
-    // Web Worker primero; si falla, cae al hilo principal.
-    try {
-      const worker = new Worker(
-        new URL('../lib/simulation.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-      workerRef.current = worker;
-
-      worker.onmessage = (e) => {
-        const msg = e.data;
-        if (msg.type === 'progress') {
-          if (!background) setProgress({ step: msg.step, totalSteps: msg.totalSteps, percent: msg.percent });
-        } else if (msg.type === 'done') {
-          const r = msg.result;
-          const snapshots: WavefieldSnapshot[] = r.snapshotMeta.map(
-            (meta: { time: number; nx: number; nz: number }, i: number) => ({
-              time: meta.time, nx: meta.nx, nz: meta.nz,
-              field: new Float32Array(r.snapshotFields[i]),
-            })
-          );
-          finish({
-            waveData: r.waveData,
-            snapshots,
-            maxAmplitude: r.maxAmplitude,
-            duration: r.duration,
-            dominantFrequency: r.dominantFrequency,
-            params: r.params,
-            gridInfo: r.gridInfo,
-            pArrival: r.pArrival,
-            sArrival: r.sArrival,
-            pArrivalDetected: r.pArrivalDetected,
-            sArrivalDetected: r.sArrivalDetected,
-          });
-          worker.terminate();
+    fetchSimulationFull(runParams)
+      .then(({ result: r, heatmapGrid: hg }) => {
+        setResult(r);
+        setHeatmapGrid(hg);
+        stopProg();
+        if (!background) {
+          setProgress({ step: 100, totalSteps: 100, percent: 100 });
+          setLoading(false);
+          setProgress(null);
+          setWave2dRatio(0);
+          setWave2dPlaying(true);
         }
-      };
-
-      worker.onerror = () => {
-        // Si el worker falla (p.ej. no soportado), se cae al hilo principal.
-        worker.terminate();
-        runMainThread();
-      };
-
-      worker.postMessage({ type: 'run', params: runParams });
-    } catch {
-      runMainThread();
-    }
+      })
+      .catch((err) => {
+        stopProg();
+        if (!background) {
+          setLoading(false);
+          setProgress(null);
+          setSimError(
+            err instanceof Error && err.message.includes('Failed to fetch')
+              ? 'No se pudo conectar con el servidor de simulación. Verifica que el backend esté activo.'
+              : 'Ocurrió un error al ejecutar la simulación en el servidor.'
+          );
+        }
+      });
   }, [params]);
 
   // Mantener la ref del auto-run apuntando a la última versión.
@@ -323,7 +297,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 </button>
               </Tooltip>
             </h1>
-            <p className="hidden sm:block text-stone-400 text-[11px] mt-0.5">Diferencias Finitas 2D · Ecuación de Onda Elástica · Pseudo-sismogramas del subsuelo de Nariño</p>
+            <p className="hidden sm:block text-stone-400 text-[11px] mt-0.5">Diferencias Finitas · Ecuación de Onda Elástica · Pseudo-sismogramas del subsuelo de Nariño</p>
           </div>
           <div className="hidden lg:flex items-center gap-2 bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-1.5 text-xs text-stone-400">
             <Info size={12} />
@@ -375,8 +349,16 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               {/* Progress bar */}
               {loading && progress && <ProgressBar progress={progress} />}
 
+              {/* Error del backend (no se pudo simular). */}
+              {!loading && simError && (
+                <div className="flex items-start gap-2 bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-3 text-sm text-[#C4553A]">
+                  <Info size={16} className="mt-0.5 shrink-0" />
+                  <span>{simError}</span>
+                </div>
+              )}
+
               {/* Empty state (compacto: no reserva altura enorme) */}
-              {!loading && !result && !realData && (
+              {!loading && !result && !realData && !simError && (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
                     <Activity size={26} className="text-stone-300" />
@@ -510,7 +492,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               {!loading && result && viewMode === 'triaxial' && (
                 <TriaxialPlane
                   snapshots={result.snapshots}
-                  gridInfo={result.gridInfo}
+                  gridInfo={heatmapGrid ?? result.gridInfo}
                   maxAmplitude={result.maxAmplitude}
                 />
               )}

@@ -5,7 +5,7 @@
  *  1. Si hay un canvas WebGL válido (la vista 3D / mapa de calor), se exporta
  *     directamente con `toDataURL` (rápido y fiel).
  *  2. Si no, se usa html2canvas sobre el área de visualización (`[data-viz-area]`)
- *     para capturar los sismogramas 2D (SVG/HTML).
+ *     para capturar los sismogramas (SVG/HTML).
  *
  * Extraído de ResultsPanel a un módulo de lib para poder probarlo de forma
  * automatizada (Vitest) contra el código real, no una copia.
@@ -16,7 +16,7 @@ import html2canvas from 'html2canvas';
 /** Origen del PNG generado (útil para pruebas y logs). */
 export type PngSource = 'webgl' | 'html2canvas' | 'none';
 
-const FILENAME = 'sismonarino_2d.png';
+const FILENAME = 'sismonarino_sismograma.png';
 
 function triggerDownload(href: string) {
   const link = document.createElement('a');

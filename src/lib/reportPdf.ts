@@ -317,7 +317,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     doc.setPage(p);
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.muted);
-    doc.text('SismoNariño · Motor FDM 2D · Valeria Guerrero & Luisa Basante · Universidad Mariana (2026)', MARGIN, 292);
+    doc.text('SismoNariño · Motor FDM · Valeria Guerrero & Luisa Basante · Universidad Mariana (2026)', MARGIN, 292);
     doc.text(`Página ${p} de ${pages}`, PAGE_W - MARGIN, 292, { align: 'right' });
   }
 
