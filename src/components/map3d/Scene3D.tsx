@@ -172,6 +172,10 @@ export function Scene3D({
     const placeholderMat = new THREE.MeshStandardMaterial({ color: 0x33404f, transparent: true, opacity: 0.6 });
     const placeholder = new THREE.Mesh(placeholderGeo, placeholderMat);
     placeholder.position.y = -BLOCK.height / 2;
+    // Oculto de entrada: evita el "cuadrado" gris que parpadea antes de que
+    // aparezca el relieve de Nariño. Solo se muestra si falla la carga del
+    // heightmap (fallback), donde sí conviene ver algo de suelo.
+    placeholder.visible = false;
     scene.add(placeholder);
 
     let terrain: TerrainHandle | null = null;
@@ -184,6 +188,7 @@ export function Scene3D({
       if (disposed) return;
       if (!heightData) {
         console.info('[Map3D] Sin heightmap en /terrain/; se mantiene bloque plano.');
+        placeholder.visible = true; // fallback visible solo si no hay relieve
         return;
       }
       terrain = buildTerrainBlock(scene, null, hillshade, geo.coast, geo.border, heightData, terrainSeg.current, ring);

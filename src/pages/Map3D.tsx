@@ -14,6 +14,7 @@ import {
   Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check, HelpCircle,
 } from '../lib/icons';
 import { Tooltip } from '../components/ui/Tooltip';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { Scene3D } from '../components/map3d/Scene3D';
 import { Legend } from '../components/map3d/Legend';
 import { RecordSection } from '../components/map3d/RecordSection';
@@ -51,6 +52,23 @@ interface CatalogEvent {
 const SUBTYPE_LABELS: Record<string, string> = {
   lp: 'Largo Período', to: 'Tornillo', tr: 'Tremor', va: 'Volcano-Tectónico',
 };
+
+/**
+ * Datos curiosos que rotan en el overlay mientras se generan los sismogramas,
+ * para entretener la espera. Sobre ondas sísmicas, el Galeras y Nariño.
+ */
+const LOADER_FACTS: string[] = [
+  'Las ondas P (primarias) son las más rápidas: comprimen y estiran la roca, y viajan a varios km por segundo.',
+  'Las ondas S (secundarias) llegan después de las P y no atraviesan líquidos, por eso no pasan por el núcleo externo.',
+  'La diferencia de tiempo entre la llegada de la P y la S revela a qué distancia ocurrió el sismo.',
+  'El volcán Galeras es uno de los más activos de Colombia y es vigilado por el OVSP en Pasto.',
+  'Las ondas superficiales (Love y Rayleigh) suelen causar el mayor movimiento del suelo en un sismo.',
+  'La estación más cercana al epicentro registra primero las ondas: por eso ordenamos los sismogramas por distancia.',
+  'Un sismograma triaxial mide el movimiento en tres direcciones: Norte-Sur, Este-Oeste y Vertical.',
+  'Nariño tiene siete volcanes activos vigilados por el OVSP, incluidos Galeras, Cumbal y Azufral.',
+  'La escala de magnitud es logarítmica: cada punto más equivale a unas 32 veces más energía liberada.',
+  'Este simulador resuelve la ecuación de onda elástica en 2D con diferencias finitas (FDM).',
+];
 
 /** Página principal del Mapa 3D. */
 export function Map3D() {
@@ -98,6 +116,15 @@ export function Map3D() {
   // UI
   const [showEventList, setShowEventList] = useState(false);
   const [loadingTT, setLoadingTT] = useState(false);
+  // Índice del dato curioso que se muestra en el overlay de carga (rota solo).
+  const [factIndex, setFactIndex] = useState(0);
+  // Solicitud de carga pendiente de confirmar cuando ya hay una generación en
+  // curso: el usuario decide si reemplazarla (cargar la nueva) o seguir con la
+  // actual. Puede venir de un evento del catálogo o de un epicentro manual.
+  type PendingRequest =
+    | { kind: 'event'; ev: CatalogEvent }
+    | { kind: 'epicenter'; lat: number; lon: number };
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   // Reporte del Mapa 3D (modal de opciones + formato + guardado).
   const { user, markTourSeen } = useAuth();
 
@@ -239,7 +266,7 @@ export function Map3D() {
         vp_km_s: vp, vs_km_s: vs, model,
       });
       setTravelTimes(res.estaciones);
-      setMessage(`Listo (${res.modelo_usado}). Presiona reproducir.`);
+      setMessage('Tiempos de viaje calculados. Generando sismogramas…');
     } catch (e) {
       const err = e as ApiError;
       setMessage(err.status === 0 ? 'Backend no disponible en :8000' : `Error: ${err.message}`);
@@ -254,30 +281,38 @@ export function Map3D() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epicenter, model]);
 
-  // ── Cargar sintéticos por estación en PARALELO (Promise.all) ──
-  // Usa la distancia hipocentral de cada estación. Marca las trazas como
-  // "cargando" (null en `traces` + código en `loadingTraces`) para el spinner.
+  // ── Cargar sintéticos por estación, de forma INCREMENTAL ──
+  // Cada estación actualiza `traces` y `loadingTraces` en cuanto termina, para
+  // mostrar una barra de progreso real. Un `runId` garantiza que solo la última
+  // generación escriba estado (evita que una carga vieja pise a la nueva).
   const [loadingTraces, setLoadingTraces] = useState<Set<string>>(new Set());
+  const runIdRef = useRef(0);
 
   const loadSynthetics = useCallback(async (tts: StationTravelTime[]) => {
+    const runId = ++runIdRef.current;
     setLoadingTraces(new Set(tts.map(t => t.code)));
     setTraces({}); // limpiar previos para evitar trazas viejas
-    const results = await Promise.all(tts.map(async (tt) => {
+    // Lanzar todas en paralelo, pero aplicar cada resultado en cuanto llega.
+    await Promise.all(tts.map(async (tt) => {
+      let syn: SyntheticResult | null = null;
       try {
-        const syn = await getSynthetic({
+        syn = await getSynthetic({
           vp: vp * 1000, vs: vs * 1000, density, magnitude, depth_km: depthKm,
           source_type: sourceType, distance_km: tt.distancia_hipocentral_km,
           nx: 160, nz: 120, dt_max_s: 0.02,
         });
-        return [tt.code, syn] as const;
       } catch {
-        return [tt.code, null] as const;
+        syn = null;
       }
+      // Descartar si ya empezó otra generación (la última gana).
+      if (runId !== runIdRef.current) return;
+      setTraces(prev => ({ ...prev, [tt.code]: syn }));
+      setLoadingTraces(prev => {
+        const next = new Set(prev);
+        next.delete(tt.code);
+        return next;
+      });
     }));
-    const updates: Record<string, SyntheticResult | null> = {};
-    for (const [code, syn] of results) updates[code] = syn;
-    setTraces(updates);
-    setLoadingTraces(new Set());
   }, [vp, vs, density, magnitude, depthKm, sourceType]);
 
   useEffect(() => {
@@ -313,7 +348,7 @@ export function Map3D() {
     setRealAvailable({}); setShowReal({}); setRealWave({}); setShowTriaxial(false);
   };
 
-  const placeEpicenter = (lat: number, lon: number) => {
+  const applyEpicenter = (lat: number, lon: number) => {
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
     resetRealState();
@@ -321,7 +356,7 @@ export function Map3D() {
     setPlaying(false);
   };
 
-  const loadEvent = (ev: CatalogEvent) => {
+  const applyEvent = (ev: CatalogEvent) => {
     setSourceType(ev.sourceType);
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
@@ -334,6 +369,36 @@ export function Map3D() {
     setShowEventList(false);
     setMessage(`Evento cargado: ${ev.label}`);
     setView('fit'); // transición de cámara suave al encuadre
+  };
+
+  // Wrappers públicos: si hay una generación en curso, piden confirmación antes
+  // de reemplazarla; si no, aplican de inmediato. `calculatingNow` se evalúa en
+  // el momento del clic (no al crear el componente).
+  const loadEvent = (ev: CatalogEvent) => {
+    if (isCalculating) {
+      setShowEventList(false);
+      setPendingRequest({ kind: 'event', ev });
+      return;
+    }
+    applyEvent(ev);
+  };
+
+  const placeEpicenter = (lat: number, lon: number) => {
+    if (isCalculating) {
+      setPendingRequest({ kind: 'epicenter', lat, lon });
+      return;
+    }
+    applyEpicenter(lat, lon);
+  };
+
+  // Confirmar el reemplazo: aplica la solicitud pendiente y arranca la nueva
+  // generación (el runId de loadSynthetics descarta la carga anterior).
+  const confirmPending = () => {
+    const req = pendingRequest;
+    setPendingRequest(null);
+    if (!req) return;
+    if (req.kind === 'event') applyEvent(req.ev);
+    else applyEpicenter(req.lat, req.lon);
   };
 
   const selectStation = (code: string) => {
@@ -483,9 +548,50 @@ export function Map3D() {
   // queda alguna traza sintética por generar. Con esto bloqueamos "Reproducir"
   // y mostramos un aviso de carga, para que no se reproduzca sin ondas.
   const isCalculating = loadingTT || loadingTraces.size > 0;
-  // Hay epicentro pero todavía ninguna traza lista (aún generando la primera).
-  const noSignalYet = !!epicenter && travelTimes.length > 0 && stationsWithSignal === 0;
   const canPlay = !!epicenter && !isCalculating && stationsWithSignal > 0;
+
+  // ── Progreso legible de la generación (para el overlay a pantalla completa) ──
+  const genTotal = travelTimes.length;
+  const genDone = stationsWithSignal;
+  const genPercent = genTotal > 0 ? Math.round((genDone / genTotal) * 100) : 0;
+  // Paso actual: primero los tiempos de viaje; luego la estación más cercana que
+  // aún está en cola (loadingTraces conserva las pendientes en orden de distancia).
+  const nextPending = travelTimes.find(tt => loadingTraces.has(tt.code));
+  const genStepLabel = loadingTT
+    ? 'Calculando tiempos de viaje…'
+    : nextPending
+      ? `Generando estación ${nextPending.code}${nextPending.name ? ` · ${nextPending.name}` : ''}…`
+      : 'Preparando la reproducción…';
+
+  // Al terminar de generar, arrancar la reproducción automáticamente desde el
+  // inicio (autoplay) y dejar un mensaje final para no dejar "Generando…" pegado.
+  const wasCalcRef = useRef(false);
+  useEffect(() => {
+    if (isCalculating) {
+      wasCalcRef.current = true;
+      return;
+    }
+    // Terminó de generar (venía de calcular y ahora ya se puede reproducir).
+    if (wasCalcRef.current && canPlay) {
+      wasCalcRef.current = false;
+      setMessage(`Listo · ${stationsWithSignal} ${stationsWithSignal === 1 ? 'estacion' : 'estaciones'} con senal`);
+      // Autoplay: arrancar la reproducción desde el inicio en cuanto está lista.
+      setElapsed(0);
+      const play = setTimeout(() => setPlaying(true), 600);
+      return () => clearTimeout(play);
+    }
+  }, [isCalculating, canPlay, stationsWithSignal]);
+
+  // Rotar el dato curioso del overlay cada ~4.5 s mientras se está generando.
+  // Al empezar una carga arranca desde un dato aleatorio para variar.
+  useEffect(() => {
+    if (!isCalculating) return;
+    setFactIndex(Math.floor(Math.random() * LOADER_FACTS.length));
+    const id = setInterval(() => {
+      setFactIndex(prev => (prev + 1) % LOADER_FACTS.length);
+    }, 4500);
+    return () => clearInterval(id);
+  }, [isCalculating]);
 
   const loadedEvent = events.find(e => e.id === currentEventId) ?? null;
   const magType = sourceType === 'volcanic' ? 'Md' : 'Ml';
@@ -500,6 +606,43 @@ export function Map3D() {
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] pt-16 text-stone-200">
+      {/* Overlay de generación a pantalla completa: se mantiene durante TODA la
+          generación (no solo hasta la primera traza) para que el usuario espere
+          en la pantalla principal. Muestra el volcán, el paso actual, la barra
+          de progreso y un dato curioso rotativo. Al terminar desaparece y la
+          animación arranca sola. */}
+      {isCalculating && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-[#0a0e1a]/85 backdrop-blur-sm px-6">
+          <div className="w-full max-w-md flex flex-col items-center text-center">
+            <VolcanoLoader size={72} dark label="" />
+            <h3 className="mt-5 text-xl font-bold text-stone-100">Generando sismogramas…</h3>
+            <p className="mt-1 font-mono text-[12px] text-[#D4A853] min-h-[18px]">{genStepLabel}</p>
+            {genTotal > 0 && (
+              <div className="mt-5 w-full max-w-sm">
+                <div className="flex items-center justify-between font-mono text-[10px] text-stone-400 mb-1.5">
+                  <span>{genDone}/{genTotal} estaciones</span>
+                  <span>{genPercent}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#C4553A] to-[#D4A853] transition-all duration-300 ease-out"
+                    style={{ width: `${genPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {/* Dato curioso rotativo mientras carga (se entretiene la espera). */}
+            <div className="mt-7 w-full max-w-sm rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-[#C4553A] mb-1">¿Sabías que…?</p>
+              <p key={factIndex} className="text-[12px] leading-snug text-stone-300 animate-fade-in">
+                {LOADER_FACTS[factIndex]}
+              </p>
+            </div>
+            <p className="mt-5 font-mono text-[10px] text-stone-500">Se reproducirá automáticamente al terminar</p>
+          </div>
+        </div>
+      )}
+
       {/* Barra superior */}
       <div className="border-b border-white/10 px-4 py-2.5">
         <div className="max-w-[1600px] mx-auto flex items-center justify-between">
@@ -538,20 +681,32 @@ export function Map3D() {
           <div className="flex items-center gap-2 mb-2">
             <Radio size={13} className="text-[#C4553A]" />
             <h2 className="font-mono text-xs font-bold text-stone-200">SISMOGRAMAS</h2>
-            {isCalculating && travelTimes.length > 0 && (
-              <span className="flex items-center gap-1 font-mono text-[9px] text-[#eab308]">
-                <Loader size={9} className="animate-spin" /> generando…
-              </span>
-            )}
             <span className="font-mono text-[10px] text-stone-500 ml-auto">por distancia →</span>
           </div>
+          {/* Barra de progreso de la generación (estaciones listas / total). */}
+          {isCalculating && travelTimes.length > 0 && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between font-mono text-[9px] text-[#eab308] mb-1">
+                <span className="flex items-center gap-1"><Loader size={9} className="animate-spin" /> generando sismogramas…</span>
+                <span>{stationsWithSignal}/{travelTimes.length}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#C4553A] to-[#D4A853] transition-all duration-300 ease-out"
+                  style={{ width: `${Math.round((stationsWithSignal / travelTimes.length) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
           {travelTimes.length === 0 ? (
             <div className="flex items-center justify-center h-[520px] text-center px-4">
-              <p className="font-mono text-[11px] text-stone-500">
-                {loadingTT
-                  ? 'Calculando tiempos de viaje…'
-                  : 'Coloca un epicentro o carga un evento para ver los sismogramas.'}
-              </p>
+              {loadingTT ? (
+                <VolcanoLoader size={40} dark label="Calculando tiempos de viaje…" />
+              ) : (
+                <p className="font-mono text-[11px] text-stone-500">
+                  Coloca un epicentro o carga un evento para ver los sismogramas.
+                </p>
+              )}
             </div>
           ) : (
             <div className="relative">
@@ -564,16 +719,6 @@ export function Map3D() {
                 selectedStation={selectedStation}
                 onSelectStation={selectStation}
               />
-              {/* Aviso de carga: mientras aún no hay ninguna traza lista, cubre
-                  el panel para que quede claro que se están generando y que no
-                  tiene sentido reproducir todavía. */}
-              {noSignalYet && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0e1a]/70 backdrop-blur-[1px] rounded-lg">
-                  <Loader size={22} className="animate-spin text-[#C4553A] mb-2" />
-                  <p className="font-mono text-[11px] text-stone-300">Generando sismogramas…</p>
-                  <p className="font-mono text-[9px] text-stone-500 mt-1">Espera un momento para reproducir</p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -639,7 +784,7 @@ export function Map3D() {
                 onClick={() => setPlaying(p => !p)}
                 disabled={!canPlay}
                 title={isCalculating ? 'Espera a que terminen de generarse los sismogramas' : undefined}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${canPlay && !playing ? 'ready-glow' : ''}`}
               >
                 {isCalculating ? (
                   <><Loader size={13} className="animate-spin" /> Generando…</>
@@ -773,6 +918,42 @@ export function Map3D() {
           )}
         </div>
       </div>
+
+      {/* Modal de confirmación: hay una generación en curso y el usuario pidió
+          cargar otro evento/epicentro. Puede reemplazarla o seguir con la actual. */}
+      {pendingRequest && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => setPendingRequest(null)}>
+          <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-2 flex items-start gap-3">
+              <div className="mt-0.5 text-[#D4A853]"><AlertCircle size={20} /></div>
+              <div>
+                <h3 className="font-mono text-sm font-bold text-stone-100 mb-1">Generación en curso</h3>
+                <p className="text-[12px] leading-snug text-stone-300">
+                  Se están generando los sismogramas del evento actual.
+                  ¿Quieres reemplazarlos por{' '}
+                  <span className="font-semibold text-stone-100">
+                    {pendingRequest.kind === 'event' ? pendingRequest.ev.label : 'el nuevo epicentro'}
+                  </span>?
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 flex gap-2">
+              <button
+                onClick={() => setPendingRequest(null)}
+                className="flex-1 text-xs font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300"
+              >
+                Seguir con el actual
+              </button>
+              <button
+                onClick={confirmPending}
+                className="flex-1 text-xs font-bold py-2 rounded-lg bg-[#C4553A] text-white"
+              >
+                Cargar el nuevo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal lista de eventos */}
       {showEventList && (
