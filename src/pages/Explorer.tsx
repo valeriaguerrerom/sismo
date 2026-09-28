@@ -7,6 +7,7 @@ import {
 } from '../lib/icons';
 import { MseedUpload } from '../components/explorer/MseedUpload';
 import { Tooltip } from '../components/ui/Tooltip';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
 import { loadCatalog } from '../lib/catalog';
 import { startTour } from '../tours/useTour';
@@ -622,9 +623,7 @@ export function Explorer({ onLoadRealData }: Props) {
           {/* Lista */}
           <div data-tour="exp-lista" className="bg-white rounded-xl border border-stone-200/60 p-3">
             {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 rounded-full border-4 border-stone-200 border-t-[#C4553A] animate-spin" />
-              </div>
+              <div className="py-16"><VolcanoLoader size={44} label="Cargando registros…" /></div>
             ) : activeList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 {source === 'volcanic' ? <Flame size={36} className="text-stone-300 mb-3" /> : <Radio size={36} className="text-stone-300 mb-3" />}
@@ -700,9 +699,7 @@ export function Explorer({ onLoadRealData }: Props) {
                         {isOpen && isGal && (
                           <div className="px-2 pb-4 animate-fade-in">
                             {loadingWave ? (
-                              <div className="flex items-center justify-center py-8">
-                                <div className="w-6 h-6 rounded-full border-[3px] border-stone-200 border-t-[#C4553A] animate-spin" />
-                              </div>
+                              <div className="py-6"><VolcanoLoader size={34} label="Cargando forma de onda…" /></div>
                             ) : galerasWave ? (
                               <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
                                 <WaveTrace data={galerasWave.north} label="Norte (N)" color="#2D6A4F" />
@@ -746,9 +743,7 @@ export function Explorer({ onLoadRealData }: Props) {
                               {selectedStation && (
                                 <div className="mt-3 pt-3 border-t border-stone-200">
                                   {loadingCMWave ? (
-                                    <div className="flex items-center justify-center py-6">
-                                      <div className="w-6 h-6 rounded-full border-[3px] border-stone-200 border-t-[#2D6A4F] animate-spin" />
-                                    </div>
+                                    <div className="py-5"><VolcanoLoader size={32} label="Cargando forma de onda…" /></div>
                                   ) : (cmWave && cmWave.event_id === c.id && cmWave.station === selectedStation.station) ? (
                                     <div className="space-y-2">
                                       <WaveTrace data={cmWave.waveData.north} label="Norte (N)" color="#2D6A4F" />

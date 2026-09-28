@@ -430,6 +430,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile]);
 
   const signOut = useCallback(async () => {
+    // Mostrar el loader (volcán) mientras se cierra la sesión, para que la
+    // transición sea suave y no un salto brusco de la app protegida al Inicio.
+    setLoading(true);
     // Limpiamos el estado local PRIMERO para que la UI responda al instante.
     // Si la petición a Supabase se cuelga (p. ej. una extensión bloquea la red),
     // el usuario igual queda deslogueado en la app. La llamada de red corre en
@@ -438,12 +441,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRecoveryMode(false);
     setBlockedMessage(null);
     setDeactivatedInfo(null);
-    if (!supabase) return;
-    try {
-      await withTimeout(supabase.auth.signOut(), 5000, 'cierre de sesión');
-    } catch {
-      // La sesión local ya se cerró; no se registra el detalle.
+    if (supabase) {
+      try {
+        await withTimeout(supabase.auth.signOut(), 5000, 'cierre de sesión');
+      } catch {
+        // La sesión local ya se cerró; no se registra el detalle.
+      }
     }
+    // Breve margen para que el loader se alcance a ver y no parpadee.
+    await new Promise(r => setTimeout(r, 350));
+    setLoading(false);
   }, []);
 
   /**

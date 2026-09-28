@@ -9,6 +9,7 @@ import { FdmMethodology } from '../components/education/FdmMethodology';
 import { Glossary } from '../components/education/Glossary';
 import { References } from '../components/education/References';
 import { Tooltip } from '../components/ui/Tooltip';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth } from '../lib/auth';
 import { startTour } from '../tours/useTour';
 import { buildEducacionSteps } from '../tours/educacion';
@@ -202,7 +203,7 @@ function SeismicQuiz() {
 
   useEffect(() => { loadQuizQuestions().then(q => { setQuestions(q); setLoading(false); }); }, []);
 
-  if (loading || questions.length === 0) return <div className="text-center py-8 text-stone-400">Cargando preguntas...</div>;
+  if (loading || questions.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando preguntas…" /></div>;
 
   const q = questions[current];
 
@@ -519,7 +520,7 @@ function HistoricalTimeline() {
 
   useEffect(() => { loadTimelineEvents().then(e => { setEvents(e); setLoading(false); }); }, []);
 
-  if (loading || events.length === 0) return <div className="text-center py-8 text-stone-400">Cargando línea de tiempo...</div>;
+  if (loading || events.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando línea de tiempo…" /></div>;
 
   const ev = events[selectedEvent];
 

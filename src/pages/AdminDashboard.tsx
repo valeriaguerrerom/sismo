@@ -22,6 +22,7 @@ import {
   saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, deactivateUser, reactivateUser, updateEvent,
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { importQuakeml, ImportResult } from '../lib/quakeml';
 import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf } from '../lib/adminExport';
 import {
@@ -126,7 +127,7 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
     URL.revokeObjectURL(url);
   };
 
-  if (!stats) return <div className="text-center py-12 text-stone-400">Cargando indicadores...</div>;
+  if (!stats) return <div className="py-12"><VolcanoLoader size={44} label="Cargando indicadores…" /></div>;
   const maxMonth = Math.max(1, ...stats.reportsPerMonth.map(m => m.count));
   const total = Math.max(1, stats.roles.admin + stats.roles.user);
   const adminPct = Math.round((stats.roles.admin / total) * 100);
@@ -941,7 +942,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
       {editing?.kind === 'facts' && <FactEditor row={editing.row as Partial<WaveFactRow>} onCancel={() => setEditing(null)} onSave={r => wrap(() => saveFactRow(r), 'Dato guardado')} />}
       {editing?.kind === 'timeline' && <TimelineEditor row={editing.row as Partial<TimelineRow>} onCancel={() => setEditing(null)} onSave={r => wrap(() => saveTimelineRow(r), 'Hito guardado')} />}
 
-      {loading ? <div className="text-center py-10 text-stone-400">Cargando…</div> : (
+      {loading ? <div className="py-10"><VolcanoLoader size={40} /></div> : (
         <div className="bg-white rounded-2xl border border-stone-200/60 divide-y divide-stone-100">
           {sub === 'quiz' && quiz.map(q => (
             <div key={q.id} className={`p-4 flex items-start gap-3 ${!q.active ? 'opacity-50' : ''}`}>
@@ -1214,10 +1215,7 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-stone-400">
-          <div className="inline-block w-8 h-8 border-2 border-stone-200 border-t-[#C4553A] rounded-full animate-spin" />
-          <p className="text-sm mt-3">Cargando mensajes…</p>
-        </div>
+        <div className="py-12"><VolcanoLoader size={44} label="Cargando mensajes…" /></div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-stone-400">
           <MessageSquare size={32} className="mx-auto text-stone-300" />

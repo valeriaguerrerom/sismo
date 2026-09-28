@@ -4,6 +4,7 @@ import { defaultParams } from './lib/simulation';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
+import { VolcanoLoader } from './components/ui/VolcanoLoader';
 import { Home } from './pages/Home';
 import { Simulation } from './pages/Simulation';
 import { Explorer } from './pages/Explorer';
@@ -201,12 +202,7 @@ function AppContent() {
   // página: así no se ve por un instante el estado "sin sesión" (navbar público)
   // antes de que llegue el usuario. Se muestra un loader breve y neutro.
   if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: '#FAFAF8' }}>
-        <div className="w-9 h-9 border-2 border-stone-200 border-t-[#C4553A] rounded-full animate-spin" />
-        <span className="text-sm text-stone-400">Cargando…</span>
-      </div>
-    );
+    return <VolcanoLoader fullscreen />;
   }
 
   return (

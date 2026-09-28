@@ -5,6 +5,7 @@ import { FileText, Trash2, Download, Calendar, FileDown } from '../lib/icons';
 import { downloadReportPdf, SavedResults } from '../lib/reportPdf';
 import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dReportOptions } from '../lib/map3dReport';
 import type { SimulationParams } from '../lib/types';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 
 /** Resultados guardados: de simulación (waveData/métricas) o de Mapa 3D. */
 type StoredResults = SavedResults & {
@@ -100,7 +101,7 @@ export function MyReports() {
 
       <div className="max-w-5xl mx-auto px-6 py-6">
         {loading ? (
-          <div className="text-center py-12 text-stone-400">Cargando reportes...</div>
+          <div className="py-12"><VolcanoLoader size={44} label="Cargando reportes…" /></div>
         ) : error ? (
           <div className="text-center py-12 text-red-500 text-sm">{error}</div>
         ) : reports.length === 0 ? (
