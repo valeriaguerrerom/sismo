@@ -27,6 +27,7 @@ import {
   type SceneEventInput, ApiError,
 } from '../lib/api3d';
 import { loadCatalog } from '../lib/catalog';
+import { LOADER_FACTS, randomFactIndex } from '../lib/loaderFacts';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { startTour } from '../tours/useTour';
@@ -52,23 +53,6 @@ interface CatalogEvent {
 const SUBTYPE_LABELS: Record<string, string> = {
   lp: 'Largo Período', to: 'Tornillo', tr: 'Tremor', va: 'Volcano-Tectónico',
 };
-
-/**
- * Datos curiosos que rotan en el overlay mientras se generan los sismogramas,
- * para entretener la espera. Sobre ondas sísmicas, el Galeras y Nariño.
- */
-const LOADER_FACTS: string[] = [
-  'Las ondas P (primarias) son las más rápidas: comprimen y estiran la roca, y viajan a varios km por segundo.',
-  'Las ondas S (secundarias) llegan después de las P y no atraviesan líquidos, por eso no pasan por el núcleo externo.',
-  'La diferencia de tiempo entre la llegada de la P y la S revela a qué distancia ocurrió el sismo.',
-  'El volcán Galeras es uno de los más activos de Colombia y es vigilado por el OVSP en Pasto.',
-  'Las ondas superficiales (Love y Rayleigh) suelen causar el mayor movimiento del suelo en un sismo.',
-  'La estación más cercana al epicentro registra primero las ondas: por eso ordenamos los sismogramas por distancia.',
-  'Un sismograma triaxial mide el movimiento en tres direcciones: Norte-Sur, Este-Oeste y Vertical.',
-  'Nariño tiene siete volcanes activos vigilados por el OVSP, incluidos Galeras, Cumbal y Azufral.',
-  'La escala de magnitud es logarítmica: cada punto más equivale a unas 32 veces más energía liberada.',
-  'Este simulador resuelve la ecuación de onda elástica en 2D con diferencias finitas (FDM).',
-];
 
 /** Página principal del Mapa 3D. */
 export function Map3D() {
@@ -586,7 +570,7 @@ export function Map3D() {
   // Al empezar una carga arranca desde un dato aleatorio para variar.
   useEffect(() => {
     if (!isCalculating) return;
-    setFactIndex(Math.floor(Math.random() * LOADER_FACTS.length));
+    setFactIndex(randomFactIndex());
     const id = setInterval(() => {
       setFactIndex(prev => (prev + 1) % LOADER_FACTS.length);
     }, 4500);
