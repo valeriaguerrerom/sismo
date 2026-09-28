@@ -363,7 +363,7 @@ function HowItWorks() {
     },
     {
       title: 'Simulación',
-      desc: 'Pseudo-sismograma del motor de diferencias finitas 2D, generado en el backend.',
+      desc: 'Pseudo-sismograma del motor de diferencias finitas, generado en el backend.',
       node: ready
         ? (sim ? <MiniTrace values={sim.values} color={C.terracotta} /> : <TraceUnavailable />)
         : <TracePlaceholder />,
@@ -698,7 +698,7 @@ function Footer() {
         <h3 className="text-base font-bold mb-3" style={{ color: C.ink }}>Uso académico y responsabilidad</h3>
         <p className="text-sm leading-relaxed max-w-3xl mx-auto" style={{ color: '#57534E' }}>
           SismoNariño es un prototipo con fines educativos e investigativos. Los pseudo-sismogramas son señales
-          sintéticas generadas con un modelo simplificado (FDM 2D en medio homogéneo) y no sustituyen los
+          sintéticas generadas con un modelo simplificado (FDM en medio homogéneo) y no sustituyen los
           productos oficiales del Servicio Geológico Colombiano. Los conceptos, afirmaciones y opiniones emitidos
           en el trabajo de grado son responsabilidad exclusiva de las autoras (Art. 71, Reglamento de
           Investigaciones, Universidad Mariana).
