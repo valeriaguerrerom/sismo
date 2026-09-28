@@ -11,10 +11,14 @@ Uso recomendado en código nuevo:
 from core.fdm import (  # noqa: F401
     SimulationParams,
     SimulationResult,
+    SimulationFullResult,
+    SnapshotFrame,
+    SnapshotGrid,
     GridInfo,
     WaveData,
     compute_lame,
     ricker,
     detect_arrival,
     run_fdm,
+    run_fdm_full,
 )

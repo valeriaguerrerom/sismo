@@ -24,6 +24,7 @@ backend/simulation.py re-exporta desde aquí para mantener compatibilidad.
 
 Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
+import base64
 import math
 import numpy as np
 from pydantic import BaseModel, Field
@@ -227,7 +228,7 @@ def _build_sponge_2d(nx: int, nz: int, abs_thick: int = 15) -> np.ndarray:
     return (factor_x[:, np.newaxis] * factor_z[np.newaxis, :]).astype(np.float32)
 
 
-def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
+def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | None = None) -> SimulationResult:
     """Ejecuta la simulación FDM 2D de la ecuación de onda elástica (vectorizada).
 
     Resuelve el sistema acoplado de ecuaciones de onda elástica en 2D
@@ -239,6 +240,12 @@ def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
     Args:
         params: Parámetros de simulación (velocidades, densidad, fuente, malla, etc.).
         on_progress: Callback opcional para reportar progreso. Recibe (step, total_steps).
+        snapshot_sink: Si se pasa un dict, se llena con los snapshots del campo de
+            ondas submuestreados para el mapa de calor. Claves de salida:
+            ``frames`` (lista de dicts {time, field}), ``nx``, ``nz``, ``sourceX``,
+            ``sourceZ``, ``receiverX``, ``receiverZ`` en el grid submuestreado. El
+            ``field`` de cada frame es una lista concatenada [Ux | Uz | |u|] con
+            índice k = i*nz + j (mismo layout que el frontend).
 
     Returns:
         SimulationResult con sismogramas triaxiales, métricas y metadatos de la malla.
@@ -330,6 +337,34 @@ def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
     vert_arr = []
     snapshot_count = 0
 
+    # ── Preparación de snapshots submuestreados para el mapa de calor ──
+    # El campo completo (nx·nz·~80 frames) es demasiado pesado para HTTP, así que
+    # lo reducimos a un grid <= SNAP_MAX_DIM por lado y <= SNAP_MAX_FRAMES frames.
+    collect_snaps = snapshot_sink is not None
+    if collect_snaps:
+        SNAP_MAX_DIM = 100
+        SNAP_MAX_FRAMES = 48
+        sub_ix = np.linspace(0, nx - 1, min(nx, SNAP_MAX_DIM)).astype(np.int32)
+        sub_jz = np.linspace(0, nz - 1, min(nz, SNAP_MAX_DIM)).astype(np.int32)
+        sub_nx = int(sub_ix.size)
+        sub_nz = int(sub_jz.size)
+        # Cada cuántos snapshots guardamos un frame (para no pasar de SNAP_MAX_FRAMES).
+        approx_snaps = max(1, total_steps // snapshot_interval)
+        frame_every = max(1, math.ceil(approx_snaps / SNAP_MAX_FRAMES))
+        snap_taken = 0
+        snap_frames: list[dict] = []
+        # Posiciones fuente/receptor reescaladas al grid submuestreado.
+        def _rescale(idx_full: int, n_full: int, n_sub: int) -> int:
+            if n_full <= 1:
+                return 0
+            return int(round(idx_full / (n_full - 1) * (n_sub - 1)))
+        snapshot_sink.update({
+            "nx": sub_nx, "nz": sub_nz,
+            "sourceX": _rescale(src_x, nx, sub_nx), "sourceZ": _rescale(src_z, nz, sub_nz),
+            "receiverX": _rescale(rec_x, nx, sub_nx), "receiverZ": _rescale(rec_z, nz, sub_nz),
+            "frames": snap_frames,
+        })
+
     # ═══ Bucle temporal principal ═══
     for step in range(total_steps):
         t = step * dt
@@ -345,13 +380,22 @@ def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
                 dist = math.sqrt(di * di + dj * dj)
                 weight = math.exp(-dist * dist / (spread * 0.8))
                 if source_type == "tectonic":
-                    sign = math.copysign(0.3, di) if di != 0 else 1.0
-                    ux_curr[si, sj] += src_val * weight * 0.8 * sign
-                    uz_curr[si, sj] += src_val * weight * 1.0
+                    # Doble par (falla de cizalla): campo con patrón de cuatro
+                    # lóbulos que genera ONDA S dominante y componentes
+                    # horizontales fuertes. Cizalla antisimétrica: el
+                    # desplazamiento horizontal depende del offset vertical (dj)
+                    # y el vertical del offset horizontal (di) → ∇×u ≠ 0.
+                    norm = (1.0 / spread) if dist > 1e-6 else 0.0
+                    ux_curr[si, sj] += src_val * weight * 1.0 * (dj * norm)
+                    uz_curr[si, sj] += src_val * weight * 1.0 * (di * norm)
                 else:
-                    angle = math.atan2(dj, di)
-                    ux_curr[si, sj] += src_val * weight * 0.4 * math.cos(angle)
-                    uz_curr[si, sj] += src_val * weight * 1.0
+                    # Explosión isótropa (volcánica): expansión RADIAL uniforme
+                    # → ∇·u ≠ 0, ∇×u ≈ 0. ONDA P dominante y radiación simétrica.
+                    # El nodo central no tiene dirección radial, se omite.
+                    if dist > 1e-6:
+                        angle = math.atan2(dj, di)
+                        ux_curr[si, sj] += src_val * weight * 1.0 * math.cos(angle)
+                        uz_curr[si, sj] += src_val * weight * 1.0 * math.sin(angle)
 
         # ── Actualización FDM vectorizada con slicing ──
         # Región interior: i in [2, nx-3], j in [1, nz-3]
@@ -395,6 +439,19 @@ def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
 
         if step % snapshot_interval == 0:
             snapshot_count += 1
+            # Capturar un frame submuestreado del campo para el mapa de calor.
+            if collect_snaps and (snap_taken % frame_every == 0):
+                # Submuestreo espacial por indexado avanzado (sub_nx × sub_nz).
+                ux_s = ux_curr[np.ix_(sub_ix, sub_jz)]
+                uz_s = uz_curr[np.ix_(sub_ix, sub_jz)]
+                mag_s = np.sqrt(ux_s * ux_s + uz_s * uz_s)
+                # Layout concatenado [Ux | Uz | |u|] con k = i*nz + j (fila i en X).
+                field = np.concatenate([
+                    ux_s.reshape(-1), uz_s.reshape(-1), mag_s.reshape(-1),
+                ]).astype(np.float32)
+                snap_frames.append({"time": float(t), "field": field})
+            if collect_snaps:
+                snap_taken += 1
         if on_progress and step % 200 == 0:
             on_progress(step, total_steps)
 
@@ -480,6 +537,104 @@ def run_fdm(params: SimulationParams, on_progress=None) -> SimulationResult:
         pArrivalDetected=p_arrival_detected,
         sArrivalDetected=s_arrival_detected,
         snapshotCount=snapshot_count,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Simulación "completa" con snapshots del campo (mapa de calor) — /api/simulate/full
+# ═══════════════════════════════════════════════════════════════════════
+
+class SnapshotFrame(BaseModel):
+    """Un frame del campo de ondas submuestreado para el mapa de calor.
+
+    Attributes:
+        time: Instante de tiempo del frame (s).
+        field: Campo concatenado [Ux | Uz | |u|] codificado en base64 (Float32
+            little-endian). Longitud = 3·nx·nz floats; índice k = i·nz + j.
+    """
+    time: float
+    field: str
+
+
+class SnapshotGrid(BaseModel):
+    """Metadatos del grid submuestreado de los snapshots (para el heatmap)."""
+    nx: int
+    nz: int
+    sourceX: int
+    sourceZ: int
+    receiverX: int
+    receiverZ: int
+
+
+class SimulationFullResult(BaseModel):
+    """Resultado de simulación con los snapshots del campo incluidos.
+
+    Igual que :class:`SimulationResult` pero añade ``snapshots`` (frames del
+    campo submuestreado, base64) y ``snapshotGrid`` (dimensiones y posiciones
+    de fuente/receptor en ese grid), para que el mapa de calor se renderice en
+    el navegador sin recomputar nada.
+    """
+    waveData: WaveData
+    maxAmplitude: float
+    duration: float
+    dominantFrequency: float
+    params: SimulationParams
+    gridInfo: GridInfo
+    pArrival: float
+    sArrival: float
+    pArrivalDetected: bool
+    sArrivalDetected: bool
+    snapshotCount: int
+    snapshots: list[SnapshotFrame]
+    snapshotGrid: SnapshotGrid
+
+
+def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullResult:
+    """Ejecuta el FDM 2D y devuelve también los snapshots del campo (mapa de calor).
+
+    Reutiliza :func:`run_fdm` con un ``snapshot_sink`` para materializar los
+    frames submuestreados y los codifica en base64 (Float32 little-endian) para
+    transportarlos por HTTP de forma compacta.
+
+    Args:
+        params: Parámetros de simulación.
+        on_progress: Callback opcional de progreso (step, total_steps).
+
+    Returns:
+        SimulationFullResult con sismogramas, métricas, snapshots y grid del heatmap.
+    """
+    sink: dict = {}
+    base = run_fdm(params, on_progress=on_progress, snapshot_sink=sink)
+
+    frames_out: list[SnapshotFrame] = []
+    for fr in sink.get("frames", []):
+        arr = np.ascontiguousarray(fr["field"], dtype="<f4")  # Float32 little-endian
+        b64 = base64.b64encode(arr.tobytes()).decode("ascii")
+        frames_out.append(SnapshotFrame(time=fr["time"], field=b64))
+
+    grid = SnapshotGrid(
+        nx=sink.get("nx", base.gridInfo.nx),
+        nz=sink.get("nz", base.gridInfo.nz),
+        sourceX=sink.get("sourceX", base.gridInfo.sourceX),
+        sourceZ=sink.get("sourceZ", base.gridInfo.sourceZ),
+        receiverX=sink.get("receiverX", base.gridInfo.receiverX),
+        receiverZ=sink.get("receiverZ", base.gridInfo.receiverZ),
+    )
+
+    return SimulationFullResult(
+        waveData=base.waveData,
+        maxAmplitude=base.maxAmplitude,
+        duration=base.duration,
+        dominantFrequency=base.dominantFrequency,
+        params=base.params,
+        gridInfo=base.gridInfo,
+        pArrival=base.pArrival,
+        sArrival=base.sArrival,
+        pArrivalDetected=base.pArrivalDetected,
+        sArrivalDetected=base.sArrivalDetected,
+        snapshotCount=base.snapshotCount,
+        snapshots=frames_out,
+        snapshotGrid=grid,
     )
 
 
@@ -637,13 +792,17 @@ def run_fdm_synthetic(p: "SyntheticParams") -> "SyntheticResult":
                 dist = math.sqrt(di * di + dj * dj)
                 weight = math.exp(-dist * dist / (spread * 0.8))
                 if p.source_type == "tectonic":
-                    sign = math.copysign(0.3, di) if di != 0 else 1.0
-                    ux_curr[si, sj] += src_val * weight * 0.8 * sign
-                    uz_curr[si, sj] += src_val * weight * 1.0
-                else:
+                    # Doble par (cizalla): ONDA S dominante, componentes
+                    # horizontales fuertes (patrón de cuatro lóbulos, ∇×u ≠ 0).
+                    norm = (1.0 / spread) if dist > 1e-6 else 0.0
+                    ux_curr[si, sj] += src_val * weight * 1.0 * (dj * norm)
+                    uz_curr[si, sj] += src_val * weight * 1.0 * (di * norm)
+                elif dist > 1e-6:
+                    # Explosión isótropa (volcánica): expansión radial, ONDA P
+                    # dominante, radiación simétrica (∇·u ≠ 0, ∇×u ≈ 0).
                     angle = math.atan2(dj, di)
-                    ux_curr[si, sj] += src_val * weight * 0.4 * math.cos(angle)
-                    uz_curr[si, sj] += src_val * weight * 1.0
+                    ux_curr[si, sj] += src_val * weight * 1.0 * math.cos(angle)
+                    uz_curr[si, sj] += src_val * weight * 1.0 * math.sin(angle)
 
         d2ux_dx2 = (ux_curr[3:nx-1, 1:nz-2] - 2*ux_curr[2:nx-2, 1:nz-2] + ux_curr[1:nx-3, 1:nz-2]) / dx2
         d2ux_dz2 = (ux_curr[2:nx-2, 2:nz-1] - 2*ux_curr[2:nx-2, 1:nz-2] + ux_curr[2:nx-2, 0:nz-3]) / dx2

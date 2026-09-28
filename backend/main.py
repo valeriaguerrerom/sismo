@@ -27,7 +27,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 
-from simulation import SimulationParams, SimulationResult, run_fdm, compute_lame
+from simulation import (
+    SimulationParams, SimulationResult, SimulationFullResult,
+    run_fdm, run_fdm_full, compute_lame,
+)
 from api.travel_times import router as travel_times_router
 from api.scene import router as scene_router
 from api.synthetic import router as synthetic_router
@@ -188,6 +191,31 @@ def simulate(params: SimulationParams):
     try:
         result = run_fdm(params)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en simulación: {str(e)}")
+
+
+@app.post("/api/simulate/full", response_model=SimulationFullResult, tags=["Simulación"],
+          summary="Ejecutar simulación FDM 2D con snapshots del campo (mapa de calor)")
+def simulate_full(params: SimulationParams):
+    """Ejecuta el FDM 2D y devuelve además los snapshots del campo de ondas.
+
+    Igual que ``/api/simulate`` pero incluye ``snapshots`` (frames del campo
+    submuestreado, codificados en base64 Float32) y ``snapshotGrid`` para que el
+    navegador dibuje el mapa de calor sin recomputar nada. El cómputo pesado
+    ocurre íntegramente en el backend.
+
+    Args:
+        params: Parámetros de simulación (velocidades, densidad, fuente, malla).
+
+    Returns:
+        SimulationFullResult: Sismogramas, métricas, llegadas P/S, snapshots y grid.
+
+    Raises:
+        HTTPException(500): Si ocurre un error durante la simulación.
+    """
+    try:
+        return run_fdm_full(params)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en simulación: {str(e)}")
 
