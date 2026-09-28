@@ -237,10 +237,19 @@ function Hero() {
     return () => clearTimeout(t);
   }, []);
 
-  const move = enter ? 'none' : 'translateY(18px)';
+  // Animación propia del encabezado, CLARAMENTE distinta del fundido hacia
+  // arriba (translateY) de las secciones de abajo: los elementos entran EN
+  // CASCADA deslizando desde la izquierda con un leve zoom. Cada uno con su
+  // retardo para que se note el escalonado.
+  const reduce = prefersReducedMotion();
+  const anim = (delay: number) => ({
+    opacity: enter ? 1 : 0,
+    transform: enter ? 'none' : 'translateX(-40px) scale(0.98)',
+    transition: reduce ? 'none' : `opacity 0.8s ease-out ${delay}ms, transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) ${delay}ms`,
+  } as React.CSSProperties);
 
   return (
-    <header className="relative w-full overflow-hidden" style={{ height: '58vh', minHeight: 380 }}>
+    <header className="relative w-full overflow-hidden" style={{ height: '68vh', minHeight: 460 }}>
       {/* Relieve real de Nariño (solo fondo, sin marcadores) */}
       <div
         className="absolute inset-0 bg-center bg-cover"
@@ -251,25 +260,23 @@ function Hero() {
       <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(250,250,248,0.94) 0%, rgba(250,250,248,0.82) 45%, rgba(250,250,248,0.55) 100%)' }} aria-hidden="true" />
 
       {/* Contenido alineado al contenedor del sitio (mismo que el navbar) */}
-      <div className="relative h-full app-container flex flex-col justify-center">
-        <div style={{ opacity: enter ? 1 : 0, transform: move, transition: prefersReducedMotion() ? 'none' : 'opacity 0.7s ease, transform 0.7s ease' }}>
-          <h1 className="text-3xl md:text-5xl font-black tracking-tight max-w-3xl leading-[1.1]" style={{ color: C.ink }}>
-            Nariño tiembla. Queríamos entender cómo.
-          </h1>
-          <div className="mt-5 max-w-2xl space-y-3">
-            <p className="text-[15px] md:text-base leading-relaxed" style={{ color: C.ink }}>
-              Nariño está en una de las zonas sísmicas más activas de Colombia. Aquí convergen las placas de
-              Nazca y Sudamericana, lo atraviesa el sistema de fallas de Romeral y el Observatorio Vulcanológico
-              y Sismológico de Pasto (OVSP) vigila siete volcanes activos. En 1979 el terremoto de Tumaco, de magnitud 8.1, mostró lo que está
-              en juego. Convivir con esa realidad exige entender cómo se comporta el subsuelo, y ese conocimiento
-              todavía llega con dificultad a las aulas y a quienes deciden sobre el territorio.
-            </p>
-            <p className="text-[15px] md:text-base leading-relaxed" style={{ color: C.ink }}>
-              SismoNariño acerca ese conocimiento. Genera pseudo-sismogramas a partir de las propiedades físicas
-              del subsuelo y los pone junto a registros reales de la región, para que estudiantes, docentes e
-              investigadores vean cómo viajan las ondas sísmicas bajo sus pies.
-            </p>
-          </div>
+      <div className="relative h-full app-container flex flex-col justify-center py-16 md:py-24">
+        <h1 className="text-3xl md:text-5xl font-black tracking-tight max-w-3xl leading-[1.1]" style={{ color: C.ink, ...anim(0) }}>
+          Nariño tiembla. Queríamos entender cómo.
+        </h1>
+        <div className="mt-7 md:mt-8 max-w-2xl space-y-4">
+          <p className="text-[15px] md:text-base leading-relaxed" style={{ color: C.ink, ...anim(140) }}>
+            Nariño está en una de las zonas sísmicas más activas de Colombia. Aquí convergen las placas de
+            Nazca y Sudamericana, lo atraviesa el sistema de fallas de Romeral y el Observatorio Vulcanológico
+            y Sismológico de Pasto (OVSP) vigila siete volcanes activos. En 1979 el terremoto de Tumaco, de magnitud 8.1, mostró lo que está
+            en juego. Convivir con esa realidad exige entender cómo se comporta el subsuelo, y ese conocimiento
+            todavía llega con dificultad a las aulas y a quienes deciden sobre el territorio.
+          </p>
+          <p className="text-[15px] md:text-base leading-relaxed" style={{ color: C.ink, ...anim(280) }}>
+            SismoNariño acerca ese conocimiento. Genera pseudo-sismogramas a partir de las propiedades físicas
+            del subsuelo y los pone junto a registros reales de la región, para que estudiantes, docentes e
+            investigadores vean cómo viajan las ondas sísmicas bajo sus pies.
+          </p>
         </div>
       </div>
     </header>
