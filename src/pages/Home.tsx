@@ -952,7 +952,7 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
                     </button>
                   </div>
                   <p className="text-xs mt-3 max-w-lg" style={{ color: C.muted }}>
-                    El acceso al simulador, al explorador de registros, al mapa 3D y al centro educativo está reservado a investigadores y administradores registrados.
+                    El acceso al simulador, al explorador de registros, al mapa 3D y al centro educativo está reservado a investigadores registrados.
                   </p>
                 </div>
               )}
