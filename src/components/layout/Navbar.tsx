@@ -118,11 +118,11 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
             ) : (
               <div className="flex items-center gap-1">
                 <button onClick={() => onNavigate('auth', { register: true })} title="Registrarse"
-                  className={`relative nav-link-forest flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium text-[#2D6A4F] ${authRegisterActive ? '' : 'nav-link'}`}>
+                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium ${authRegisterActive ? 'text-[#C4553A]' : 'text-[#2D6A4F] nav-link'}`}>
                   <UserPlus size={15} />
                   <span>Registrarse</span>
                   {authRegisterActive && (
-                    <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[#2D6A4F]" />
+                    <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[#C4553A]" />
                   )}
                 </button>
                 <button onClick={() => onNavigate('auth')} title="Iniciar sesión"

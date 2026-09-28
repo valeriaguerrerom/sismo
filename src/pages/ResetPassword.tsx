@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { ArrowRight, Check, AlertTriangle } from '../lib/icons';
-import { Logo } from '../components/ui/Logo';
+import { AuthLayout } from '../components/auth/AuthLayout';
 import { PasswordField } from '../components/auth/PasswordField';
 import { PASSWORD_RULES, isPasswordStrong } from '../lib/authConsent';
 
@@ -49,16 +49,7 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
   const requestNew = () => { clearRecovery(); onRequestNew(); };
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-4">
-          <button onClick={onHome} className="inline-flex mx-auto mb-3" aria-label="Ir a Inicio">
-            <Logo size={44} />
-          </button>
-          <h1 className="text-2xl font-black text-[#1A1A2E]">Nueva contraseña</h1>
-          <p className="text-stone-400 text-sm mt-1">Elige una contraseña segura para tu cuenta</p>
-        </div>
-
+    <AuthLayout title="Nueva contraseña" subtitle="Elige una contraseña segura para tu cuenta" onHome={onHome}>
         {expired ? (
           <div className="bg-white rounded-2xl border border-stone-200/60 shadow-sm p-6 text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mx-auto">
@@ -81,11 +72,11 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
               autoComplete="new-password"
             />
 
-            <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5">
               {PASSWORD_RULES.map(rule => {
                 const ok = rule.test(password);
                 return (
-                  <li key={rule.label} className="flex items-center gap-1.5 text-[12px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
+                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
                     <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: ok ? '#2D6A4F' : 'transparent', border: ok ? 'none' : '1px solid #D6D3D1' }}>
                       {ok && <Check size={10} className="text-white" />}
                     </span>
@@ -97,13 +88,24 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
 
             {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
 
-            <button type="submit" disabled={loading || !strong}
-              className="w-full flex items-center justify-center gap-2 bg-[#2D6A4F] text-white py-3 rounded-xl font-bold text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-hover">
-              {loading ? 'Guardando…' : 'Guardar contraseña'} <ArrowRight size={16} />
-            </button>
+            {(() => {
+              const disabled = loading || !strong;
+              return (
+                <div>
+                  <button type="submit" disabled={disabled}
+                    className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm shadow-sm btn-hover ${
+                      disabled ? 'bg-stone-200 text-stone-500 cursor-not-allowed' : 'bg-[#2D6A4F] text-white'
+                    }`}>
+                    {loading ? 'Guardando…' : 'Guardar contraseña'} <ArrowRight size={16} />
+                  </button>
+                  {!loading && !strong && (
+                    <p className="text-[11px] text-stone-500 mt-1.5 text-center">Completa los requisitos de la contraseña</p>
+                  )}
+                </div>
+              );
+            })()}
           </form>
         )}
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

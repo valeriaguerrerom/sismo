@@ -8,8 +8,8 @@
  */
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { Mail, User, ArrowRight, ShieldCheck, Check } from '../lib/icons';
-import { LogoMark } from '../components/ui/Logo';
+import { Mail, User, ArrowRight, Check } from '../lib/icons';
+import { AuthLayout } from '../components/auth/AuthLayout';
 import { Field, inputCls } from '../components/auth/ResearcherFields';
 import { PasswordField } from '../components/auth/PasswordField';
 import { ConsentCheckbox } from '../components/auth/ConsentCheckbox';
@@ -28,12 +28,7 @@ interface Props {
   onNoticeSeen?: () => void;
 }
 
-const PAGE_LABELS: Partial<Record<Page, string>> = {
-  simulation: 'el Simulador', explorer: 'el Explorador de registros', map3d: 'el Mapa 3D',
-  education: 'el Centro educativo', reports: 'tus reportes',
-};
-
-export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, notice, onNoticeSeen }: Props) {
+export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNoticeSeen }: Props) {
   const { signIn, signUp, signInWithGoogle, sendPasswordReset, blockedMessage } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [fullName, setFullName] = useState('');
@@ -103,34 +98,27 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, no
 
   const title = isRegister ? 'Registrarse' : isForgot ? 'Recuperar contraseña' : 'Iniciar sesión';
   const subtitle = isRegister
-    ? 'Crea tu cuenta; después completarás tu perfil de investigador'
+    ? 'Crea tu cuenta. Después completarás tu perfil de investigador.'
     : isForgot
       ? 'Te enviaremos un enlace a tu correo para restablecerla'
-      : 'Accede con tu cuenta de investigador o administrador';
+      : 'Accede a los módulos de SismoNariño';
+
+  // Motivo por el que el botón de registro está deshabilitado (para guiar al
+  // usuario). Prioriza los campos base, luego la contraseña y por último el
+  // consentimiento.
+  const registerBlockReason = !isRegister ? null
+    : !fullName.trim() || !email.trim() ? 'Completa tu nombre y correo para continuar'
+      : !strong ? 'Completa los requisitos de la contraseña'
+        : !consent ? 'Acepta la autorización de datos para continuar'
+          : null;
 
   return (
-    <div className="flex-1 min-h-0 bg-[#FAFAF8] pt-16 flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-4">
-          {/* Logo centrado, clic lleva a Inicio. */}
-          <button onClick={onHome} className="inline-flex mx-auto mb-3" aria-label="Ir a Inicio">
-            <LogoMark size={44} />
-          </button>
-          <h1 className="text-2xl font-black text-[#1A1A2E]">{title}</h1>
-          <p className="text-stone-400 text-sm mt-1">{subtitle}</p>
-          {pendingPage && PAGE_LABELS[pendingPage] && !isForgot && (
-            <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-[#2D6A4F] bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-full px-3 py-1">
-              <ShieldCheck size={13} /> Necesitas una sesión activa para entrar a {PAGE_LABELS[pendingPage]}.
-            </p>
-          )}
-        </div>
-
+    <AuthLayout title={title} subtitle={subtitle} onHome={onHome}>
         {localNotice && mode === 'login' && (
           <div className="mb-4 text-xs text-green-700 bg-green-50 border border-green-100 rounded-xl p-3">{localNotice}</div>
         )}
 
-
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-stone-200/60 shadow-sm p-5 space-y-3">
+        <form onSubmit={handleSubmit} className={`bg-white rounded-2xl border border-stone-200/60 shadow-sm ${isRegister ? 'p-4 space-y-2.5' : 'p-5 space-y-3'}`}>
           {!isForgot && (
             <>
               <button type="button" onClick={handleGoogle} disabled={loading}
@@ -181,11 +169,11 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, no
           )}
 
           {isRegister && (
-            <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5">
               {PASSWORD_RULES.map(rule => {
                 const ok = rule.test(password);
                 return (
-                  <li key={rule.label} className="flex items-center gap-1.5 text-[12px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
+                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
                     <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: ok ? '#2D6A4F' : 'transparent', border: ok ? 'none' : '1px solid #D6D3D1' }}>
                       {ok && <Check size={10} className="text-white" />}
                     </span>
@@ -203,18 +191,31 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, no
           {success && <p className="text-green-600 text-xs bg-green-50 rounded-lg p-2 border border-green-100">{success}</p>}
 
           {/* En "forgot", tras enviar, ocultamos el botón y ofrecemos volver. */}
-          {!(isForgot && success) && (
-            <button type="submit" disabled={loading || (isRegister && !canRegister)}
-              className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white py-3 rounded-xl font-bold text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed btn-hover">
-              {loading ? 'Procesando...' : isRegister ? 'Registrarse' : isForgot ? 'Enviar enlace' : 'Iniciar sesión'}
-              <ArrowRight size={16} />
-            </button>
-          )}
+          {!(isForgot && success) && (() => {
+            const disabled = loading || (isRegister && !canRegister);
+            return (
+              <div>
+                <button type="submit" disabled={disabled}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm shadow-sm btn-hover ${
+                    disabled
+                      ? 'bg-stone-200 text-stone-500 cursor-not-allowed'
+                      : 'bg-[#C4553A] text-white'
+                  }`}>
+                  {loading ? 'Procesando...' : isRegister ? 'Registrarse' : isForgot ? 'Enviar enlace' : 'Iniciar sesión'}
+                  <ArrowRight size={16} />
+                </button>
+                {/* Motivo por el que el botón sigue deshabilitado (registro). */}
+                {!loading && registerBlockReason && (
+                  <p className="text-[11px] text-stone-500 mt-1.5 text-center">{registerBlockReason}</p>
+                )}
+              </div>
+            );
+          })()}
         </form>
 
         <p className="text-center text-sm text-stone-400 mt-3">
           {isForgot ? (
-            <button onClick={() => go('login')} className="text-[#C4553A] font-semibold">Volver a Iniciar sesión</button>
+            <button onClick={() => go('login')} className="text-[#C4553A] font-semibold">Volver a iniciar sesión</button>
           ) : (
             <>
               {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}{' '}
@@ -224,7 +225,6 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', pendingPage, no
             </>
           )}
         </p>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
