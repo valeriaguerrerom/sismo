@@ -87,14 +87,13 @@ function SliderRow({
 }
 
 export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS }: Props) {
-  // Acordeón INDEPENDIENTE: cada sección abre/cierra por su cuenta (abrir una
-  // no cierra las demás). Al inicio solo "Variables elásticas" está abierta.
+  // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
+  // cierran las demás). Así el contenido siempre cabe sin scroll. Al inicio
+  // solo "Variables elásticas" está abierta.
   const [openSections, setOpenSections] = useState<Set<ParamSection>>(new Set(['elasticas']));
-  const toggle = (s: ParamSection) => setOpenSections(prev => {
-    const next = new Set(prev);
-    if (next.has(s)) next.delete(s); else next.add(s);
-    return next;
-  });
+  const toggle = (s: ParamSection) => setOpenSections(prev => (
+    prev.has(s) ? new Set<ParamSection>() : new Set<ParamSection>([s])
+  ));
   // Mensajes de autoajuste por campo (por qué se corrigió un valor).
   const [limitMsgs, setLimitMsgs] = useState<Record<string, string>>({});
   // Escenario seleccionado en el selector (para mostrar su descripción). Al
@@ -105,7 +104,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
-    if (forceSection) setOpenSections(prev => new Set(prev).add(forceSection));
+    if (forceSection) setOpenSections(new Set([forceSection]));
   }, [forceSection]);
 
   const update = (key: keyof SimulationParams, val: number | string) => {

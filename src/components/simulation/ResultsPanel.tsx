@@ -157,14 +157,13 @@ async function exportPDF(
 }
 
 export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid }: Props) {
-  // Acordeón INDEPENDIENTE: cada sección abre/cierra por su cuenta. Al inicio
-  // solo "Métricas" está abierta.
+  // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
+  // cierran las demás), para que siempre quepa sin scroll. Al inicio solo
+  // "Métricas" está abierta.
   const [openSections, setOpenSections] = useState<Set<ResultSection>>(new Set(['metricas']));
-  const toggle = (s: ResultSection) => setOpenSections(prev => {
-    const next = new Set(prev);
-    if (next.has(s)) next.delete(s); else next.add(s);
-    return next;
-  });
+  const toggle = (s: ResultSection) => setOpenSections(prev => (
+    prev.has(s) ? new Set<ResultSection>() : new Set<ResultSection>([s])
+  ));
 
   // Diálogo de opciones del PDF: qué secciones incluir (todas por defecto).
   const [pdfDialog, setPdfDialog] = useState(false);
@@ -179,7 +178,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
-    if (forceSection) setOpenSections(prev => new Set(prev).add(forceSection));
+    if (forceSection) setOpenSections(new Set([forceSection]));
   }, [forceSection]);
 
   if (!result) {
