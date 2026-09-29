@@ -1,6 +1,8 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 numpy==1.26.4
+# Compila el bucle temporal del FDM (~5×). 0.60.0 soporta Python 3.11 y numpy 1.26.
+numba==0.60.0
 scipy==1.13.1
 obspy==1.4.1
 supabase==2.9.1

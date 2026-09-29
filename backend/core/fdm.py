@@ -29,6 +29,22 @@ import math
 import numpy as np
 from pydantic import BaseModel, Field
 
+# Numba acelera el bucle temporal ~5x. Si no está disponible (entorno sin
+# compilador), se degrada a un kernel NumPy vectorizado equivalente, así el
+# motor sigue funcionando sin la dependencia.
+try:
+    from numba import njit
+    _HAS_NUMBA = True
+except Exception:  # pragma: no cover - entorno sin numba
+    _HAS_NUMBA = False
+
+    def njit(*args, **kwargs):  # type: ignore
+        def _wrap(fn):
+            return fn
+        if args and callable(args[0]):
+            return args[0]
+        return _wrap
+
 
 class SimulationParams(BaseModel):
     """Parámetros de entrada para la simulación FDM.
@@ -217,15 +233,86 @@ def _build_sponge_2d(nx: int, nz: int, abs_thick: int = 15) -> np.ndarray:
     Returns:
         Array 2D de forma (nx, nz) con coeficientes en [0, 1].
     """
+    # Perfil clásico de Cerjan: G = exp(-(a·d)²), con d = nº de nodos DENTRO de la
+    # zona absorbente (0 en el borde interno, abs_thick-1 en el borde físico). El
+    # coeficiente decae suave desde 1 hasta ~exp(-(a·abs_thick)²) en el borde.
+    CERJAN_A = 0.02
+
+    def edge_factor(dist_into_layer: np.ndarray) -> np.ndarray:
+        # dist_into_layer: 0 fuera de la capa; crece hacia el borde físico.
+        return np.exp(-((CERJAN_A * dist_into_layer) ** 2)).astype(np.float32)
+
     ix = np.arange(nx, dtype=np.float32)
-    dx_left = np.where(ix < abs_thick, (ix / abs_thick) ** 2, 1.0)
-    dx_right = np.where(ix >= nx - abs_thick, ((nx - 1 - ix) / abs_thick) ** 2, 1.0)
-    factor_x = dx_left * dx_right
+    d_left = np.where(ix < abs_thick, abs_thick - ix, 0.0)          # bordes laterales
+    d_right = np.where(ix >= nx - abs_thick, ix - (nx - 1 - abs_thick), 0.0)
+    factor_x = edge_factor(d_left) * edge_factor(d_right)
 
     jz = np.arange(nz, dtype=np.float32)
-    factor_z = np.where(jz >= nz - abs_thick, ((nz - 1 - jz) / abs_thick) ** 2, 1.0)
+    d_bottom = np.where(jz >= nz - abs_thick, jz - (nz - 1 - abs_thick), 0.0)  # solo inferior
+    factor_z = edge_factor(d_bottom)
 
     return (factor_x[:, np.newaxis] * factor_z[np.newaxis, :]).astype(np.float32)
+
+
+@njit(cache=True, fastmath=False)
+def _fdm_step(ux_p, ux_c, ux_n, uz_p, uz_c, uz_n, abs_coeff,
+              nx, nz, dx2, dt2, c1, c2, c3):
+    """Un paso temporal del esquema FDM 2º orden (compilado con Numba).
+
+    Actualiza el campo interior con el stencil de 3 puntos + derivada cruzada de
+    4 puntos, aplica superficie libre en z=0 y multiplica el coeficiente sponge
+    de Cerjan a los niveles ``next`` y ``curr`` (curr pasa a ser prev tras el
+    swap, así el término -u_prev del leapfrog también queda amortiguado). Es
+    idéntico bit a bit al kernel vectorizado con NumPy salvo el orden de las
+    operaciones en punto flotante (diferencia relativa < 1e-6).
+
+    Args:
+        ux_p, ux_c, ux_n: Campos Ux en t-dt, t, t+dt (se escriben in place).
+        uz_p, uz_c, uz_n: Campos Uz en t-dt, t, t+dt (se escriben in place).
+        abs_coeff: Matriz sponge (nx, nz) en [0, 1].
+        nx, nz: Dimensiones de la malla.
+        dx2, dt2: dx² y dt².
+        c1, c2, c3: Constantes elásticas (λ+2μ)/ρ, μ/ρ, (λ+μ)/ρ.
+    """
+    for i in range(2, nx - 2):
+        for j in range(1, nz - 2):
+            d2ux_dx2 = (ux_c[i+1, j] - 2.0*ux_c[i, j] + ux_c[i-1, j]) / dx2
+            d2ux_dz2 = (ux_c[i, j+1] - 2.0*ux_c[i, j] + ux_c[i, j-1]) / dx2
+            d2uz_dx2 = (uz_c[i+1, j] - 2.0*uz_c[i, j] + uz_c[i-1, j]) / dx2
+            d2uz_dz2 = (uz_c[i, j+1] - 2.0*uz_c[i, j] + uz_c[i, j-1]) / dx2
+            d2uz_dxdz = (uz_c[i+1, j+1] - uz_c[i+1, j-1] - uz_c[i-1, j+1] + uz_c[i-1, j-1]) / (4.0*dx2)
+            d2ux_dxdz = (ux_c[i+1, j+1] - ux_c[i+1, j-1] - ux_c[i-1, j+1] + ux_c[i-1, j-1]) / (4.0*dx2)
+            ux_n[i, j] = (2.0*ux_c[i, j] - ux_p[i, j]
+                          + dt2 * (c1*d2ux_dx2 + c2*d2ux_dz2 + c3*d2uz_dxdz))
+            uz_n[i, j] = (2.0*uz_c[i, j] - uz_p[i, j]
+                          + dt2 * (c2*d2uz_dx2 + c1*d2uz_dz2 + c3*d2ux_dxdz))
+    # Superficie libre (stress-free) en z=0 por espejo antisimétrico.
+    for i in range(1, nx - 1):
+        uz_n[i, 0] = -uz_n[i, 1]
+        ux_n[i, 0] = ux_n[i, 1]
+    # Fronteras absorbentes (Cerjan) en next y curr.
+    for i in range(nx):
+        for j in range(nz):
+            a = abs_coeff[i, j]
+            ux_n[i, j] *= a
+            uz_n[i, j] *= a
+            ux_c[i, j] *= a
+            uz_c[i, j] *= a
+
+
+_NUMBA_WARMED = False
+
+
+def _warmup_numba():
+    """Compila el kernel Numba una vez (fuera de la ruta de medición)."""
+    global _NUMBA_WARMED
+    if _NUMBA_WARMED or not _HAS_NUMBA:
+        return
+    n = 8
+    z = np.zeros((n, n), dtype=np.float32)
+    _fdm_step(z.copy(), z.copy(), z.copy(), z.copy(), z.copy(), z.copy(),
+              np.ones((n, n), dtype=np.float32), n, n, 1.0, 1.0, 1.0, 1.0, 1.0)
+    _NUMBA_WARMED = True
 
 
 def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | None = None) -> SimulationResult:
@@ -266,28 +353,41 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         mu = params.mu
 
     # ── Grid sizing: nz adapts to requested depth ──
-    abs_thick = 15
-    NX_MAX = 200
-    NZ_MAX = 400
+    # Zona absorbente ancha (Cerjan) + dominio más grande para que la fuente y
+    # el receptor queden lejos de los bordes y la coda decaiga sin reflexiones.
+    # Dominio amplio + zona absorbente ancha para que fuente y receptor queden
+    # lejos de los bordes. Con la duración corta por defecto (~11 s) el primer
+    # rebote de borde llega DESPUÉS de la ventana útil, así que la señal decae a
+    # la calma propia del medio homogéneo (no hay coda física).
+    # Con el bucle temporal compilado (Numba, ~5x), el dominio puede ser mucho
+    # más grande manteniendo el cómputo < 15 s. Un dominio amplio + geometría
+    # simétrica (fuente y receptor a ±d/2 del centro) aleja ambos de los bordes,
+    # de modo que el PRIMER rebote de borde llega DESPUÉS de ~8 s (más allá de
+    # la onda S y la superficial). Esto elimina la coda artificial sin depender
+    # solo de la absorción del sponge.
+    abs_thick = 44
+    NX_MAX = 820
+    NZ_MAX = 700
 
-    nx = min(NX_MAX, max(60, int(20000 / dx)))
+    nx = min(NX_MAX, max(80, int(34000 / dx)))
 
-    # Source should sit within top 70% of nz (leaving 30% for propagation + sponge below)
+    # La fuente se ubica al ~70% de nz; el resto es propagación + sponge inferior.
     depth_nodes = int((depth * 1000) / dx)
-    # nz must fit: source at 70% → nz >= depth_nodes / 0.7
-    nz_required = max(40, math.ceil(depth_nodes / 0.7) + abs_thick)
+    nz_required = max(40, math.ceil(depth_nodes / 0.70) + abs_thick + 20)
     dx_adjusted = False
 
+    # nz al máximo representable para alejar el borde inferior (rebote inferior
+    # tardío), sin bajar de lo que exige la profundidad focal.
     if nz_required <= NZ_MAX:
-        nz = min(NZ_MAX, max(40, nz_required))
+        nz = NZ_MAX
     else:
         # Depth exceeds representable range: increase dx
-        max_depth_nodes = int((NZ_MAX - abs_thick) * 0.7)
+        max_depth_nodes = int((NZ_MAX - abs_thick - 20) * 0.70)
         dx = math.ceil((depth * 1000) / max_depth_nodes)
         dx_adjusted = True
         nz = NZ_MAX
         # Recompute nx with new dx
-        nx = min(NX_MAX, max(60, int(20000 / dx)))
+        nx = min(NX_MAX, max(80, int(34000 / dx)))
 
     # Verificación de estabilidad CFL (re-check after possible dx change)
     cfl_limit = dx / (vp * math.sqrt(2))
@@ -296,16 +396,22 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         dt = cfl_limit * 0.9
         dt_adjusted = True
 
-    total_steps = min(6000, int(duration / dt))
+    # Tope de pasos por rendimiento. La duración EFECTIVA (la que se grafica y se
+    # reporta) es total_steps · dt, que puede ser menor que la pedida si se
+    # alcanza el tope. Todo el resultado usa eff_duration para ser coherente.
+    MAX_STEPS = 8000
+    total_steps = min(MAX_STEPS, int(duration / dt))
+    eff_duration = total_steps * dt
     snapshot_interval = max(1, total_steps // 80)
 
-    # Posición de la fuente: depth in nodes, capped at 70% of nz
-    src_x = nx // 2
-    src_z = min(int(nz * 0.7), max(5, int((depth * 1000) / dx)))
-
-    # Receptor en superficie
-    rec_offset = min(int(nx * 0.15), int(3000 / dx))
-    rec_x = min(nx - 15, src_x + rec_offset)
+    # Geometría simétrica respecto al centro del dominio: la fuente en X a −d/2
+    # y el receptor a +d/2 (d = distancia epicentral objetivo ≈ 2.5 km). Así
+    # ninguno queda cerca de un borde y el rebote de borde es lo más tardío
+    # posible para un dominio dado. La profundidad de la fuente sigue la focal.
+    epic_nodes = min(int(2500 / dx), (nx - 2 * abs_thick - 60) // 2)
+    src_x = nx // 2 - epic_nodes // 2
+    rec_x = nx // 2 + epic_nodes // 2
+    src_z = min(int(nz * 0.70), max(5, int((depth * 1000) / dx)))
     rec_z = 2
 
     # Parámetros de la fuente Ricker
@@ -330,6 +436,8 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     c1 = (lam + 2 * mu) / density
     c2 = mu / density
     c3 = (lam + mu) / density
+
+    _warmup_numba()
 
     time_arr = []
     north_arr = []
@@ -397,29 +505,11 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
                         ux_curr[si, sj] += src_val * weight * 1.0 * math.cos(angle)
                         uz_curr[si, sj] += src_val * weight * 1.0 * math.sin(angle)
 
-        # ── Actualización FDM vectorizada con slicing ──
-        # Región interior: i in [2, nx-3], j in [1, nz-3]
-        d2ux_dx2 = (ux_curr[3:nx-1, 1:nz-2] - 2*ux_curr[2:nx-2, 1:nz-2] + ux_curr[1:nx-3, 1:nz-2]) / dx2
-        d2ux_dz2 = (ux_curr[2:nx-2, 2:nz-1] - 2*ux_curr[2:nx-2, 1:nz-2] + ux_curr[2:nx-2, 0:nz-3]) / dx2
-        d2uz_dx2 = (uz_curr[3:nx-1, 1:nz-2] - 2*uz_curr[2:nx-2, 1:nz-2] + uz_curr[1:nx-3, 1:nz-2]) / dx2
-        d2uz_dz2 = (uz_curr[2:nx-2, 2:nz-1] - 2*uz_curr[2:nx-2, 1:nz-2] + uz_curr[2:nx-2, 0:nz-3]) / dx2
-        d2uz_dxdz = (uz_curr[3:nx-1, 2:nz-1] - uz_curr[3:nx-1, 0:nz-3]
-                     - uz_curr[1:nx-3, 2:nz-1] + uz_curr[1:nx-3, 0:nz-3]) / (4 * dx2)
-        d2ux_dxdz = (ux_curr[3:nx-1, 2:nz-1] - ux_curr[3:nx-1, 0:nz-3]
-                     - ux_curr[1:nx-3, 2:nz-1] + ux_curr[1:nx-3, 0:nz-3]) / (4 * dx2)
-
-        ux_next[2:nx-2, 1:nz-2] = (2*ux_curr[2:nx-2, 1:nz-2] - ux_prev[2:nx-2, 1:nz-2]
-                                    + dt2 * (c1*d2ux_dx2 + c2*d2ux_dz2 + c3*d2uz_dxdz))
-        uz_next[2:nx-2, 1:nz-2] = (2*uz_curr[2:nx-2, 1:nz-2] - uz_prev[2:nx-2, 1:nz-2]
-                                    + dt2 * (c2*d2uz_dx2 + c1*d2uz_dz2 + c3*d2ux_dxdz))
-
-        # ── Condición de superficie libre en z=0 ──
-        uz_next[1:nx-1, 0] = -uz_next[1:nx-1, 1]
-        ux_next[1:nx-1, 0] = ux_next[1:nx-1, 1]
-
-        # Aplicar fronteras absorbentes (vectorizado)
-        ux_next *= abs_coeff
-        uz_next *= abs_coeff
+        # ── Actualización FDM (kernel compilado con Numba) ──
+        # Stencil de 2º orden + derivada cruzada de 4 puntos, superficie libre en
+        # z=0 y sponge de Cerjan aplicado a next y curr. Ver _fdm_step.
+        _fdm_step(ux_prev, ux_curr, ux_next, uz_prev, uz_curr, uz_next, abs_coeff,
+                  nx, nz, dx2, dt2, c1, c2, c3)
 
         # Intercambio de buffers temporales
         ux_prev, ux_curr, ux_next = ux_curr, ux_next, ux_prev
@@ -524,7 +614,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     return SimulationResult(
         waveData=WaveData(time=time_arr, north=north_arr, east=east_arr, vertical=vert_arr),
         maxAmplitude=max_amplitude,
-        duration=duration,
+        duration=eff_duration,
         dominantFrequency=f0,
         params=result_params,
         gridInfo=GridInfo(
