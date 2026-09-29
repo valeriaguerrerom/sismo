@@ -78,6 +78,7 @@ function drawTrace(
   pArrival?: number,
   sArrival?: number,
   refMax?: number,
+  reflectionsAfter?: number,
 ) {
   // Marco
   doc.setDrawColor(...COLORS.line);
@@ -114,6 +115,15 @@ function drawTrace(
   };
   marker(pArrival, [0.6, 0.6], 'P');
   marker(sArrival, [1.6, 0.8], 'S');
+  // Marca de reflexiones de borde (terracota tenue): lo que hay a la derecha
+  // es artificial (rebotes de los límites de la malla), no señal real.
+  if (reflectionsAfter !== undefined && reflectionsAfter > 0 && reflectionsAfter <= tMax) {
+    doc.setDrawColor(196, 85, 58);
+    doc.setLineWidth(0.3);
+    doc.setLineDashPattern([0.5, 0.8], 0);
+    doc.line(px(reflectionsAfter), y, px(reflectionsAfter), y + h);
+    doc.setLineDashPattern([], 0);
+  }
 
   // Traza
   doc.setDrawColor(...color);
@@ -258,6 +268,19 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     }
   }
   kv(metricRows);
+  // Aviso de reflexiones si la ventana supera el primer rebote de borde.
+  {
+    const bounceS = results.gridInfo?.firstBounceS;
+    if (results.isRealRecord !== true && typeof bounceS === 'number' && bounceS > 0 && results.duration > bounceS + 0.05) {
+      y += 1;
+      doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
+      const note = `Después de ${bounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.`;
+      const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
+      doc.text(lines, MARGIN, y);
+      y += lines.length * 3.4 + 2;
+      doc.setTextColor(...COLORS.text);
+    }
+  }
   }
 
   // ── Sismogramas ──
@@ -284,6 +307,19 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       for (const v of arr) commonMax = Math.max(commonMax, Math.abs(v));
     }
     const refMax = scaleCommon ? commonMax : undefined;
+    // Tiempo del primer rebote de borde: si la ventana lo supera, se marca en
+    // las trazas y se advierte que lo posterior es artificial (no en real).
+    const bounceS = results.gridInfo?.firstBounceS;
+    const reflAfter = (!real && typeof bounceS === 'number' && bounceS > 0 && results.duration > bounceS + 0.05)
+      ? bounceS : undefined;
+    if (reflAfter !== undefined) {
+      doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
+      const note = `Después de ${reflAfter.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (línea punteada terracota).`;
+      const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
+      doc.text(lines, MARGIN, y);
+      y += lines.length * 3.4 + 2;
+      doc.setTextColor(...COLORS.muted);
+    }
     // Colores de componente (global): Norte terracota, Este verde bosque,
     // Vertical ocre.
     const traces: [number[], [number, number, number], string][] = [
@@ -297,7 +333,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label,
         real ? undefined : results.pArrival,
         real ? undefined : results.sArrival,
-        refMax);
+        refMax, reflAfter);
       y += traceH + gap;
     }
     const scaleNote = scaleCommon

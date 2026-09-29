@@ -19,7 +19,7 @@ export interface SavedResults {
   sArrival: number;
   pArrivalDetected?: boolean;
   sArrivalDetected?: boolean;
-  gridInfo?: { nx: number; nz: number; totalSteps: number; dtAdjusted?: boolean; dxAdjusted?: boolean; epicentralDistanceKm?: number };
+  gridInfo?: { nx: number; nz: number; totalSteps: number; dtAdjusted?: boolean; dxAdjusted?: boolean; epicentralDistanceKm?: number; firstBounceS?: number };
   /** Series submuestreadas (≤ 600 puntos) para reconstruir las gráficas. */
   waveData?: WaveData;
   /**

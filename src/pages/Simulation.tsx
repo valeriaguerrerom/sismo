@@ -518,6 +518,16 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     </div>
                   </div>
 
+                  {/* Aviso de reflexiones de borde: solo si la ventana supera el
+                      primer rebote de la S (con el dominio grande y la duración
+                      acotada normalmente NO aparece). */}
+                  {typeof result.gridInfo.firstBounceS === 'number' && result.gridInfo.firstBounceS > 0 && result.duration > result.gridInfo.firstBounceS + 0.05 && (
+                    <div className="flex items-start gap-2 bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-2.5 text-[11px] text-[#C4553A]">
+                      <Info size={14} className="mt-0.5 shrink-0" />
+                      <span>Después de {result.gridInfo.firstBounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (marcadas con la línea punteada).</span>
+                    </div>
+                  )}
+
                   {/* Selector de escala de amplitud */}
                   <div className="flex items-center justify-between gap-2 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100">
                     <span className="text-[11px] text-stone-500">
@@ -532,13 +542,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
                   </div>
                 </div>
               )}

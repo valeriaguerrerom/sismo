@@ -24,9 +24,15 @@ interface WaveChartProps {
    * Si es undefined, cada traza se normaliza contra su propio pico.
    */
   refAmpOverride?: number;
+  /**
+   * Si se pasa, dibuja una línea vertical tenue en ese tiempo (s) para marcar
+   * desde cuándo pueden aparecer reflexiones artificiales de los bordes del
+   * modelo. Lo que hay después no debe interpretarse como señal real.
+   */
+  reflectionsAfter?: number;
 }
 
-export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false, refAmpOverride }: WaveChartProps) {
+export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false, refAmpOverride, reflectionsAfter }: WaveChartProps) {
   const svgData = useMemo(() => {
     if (!data.time.length) return null;
 
@@ -94,9 +100,11 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     // Arrival marker positions
     const pX = pArrival !== undefined && pArrival >= minT && pArrival <= maxT ? toX(pArrival) : null;
     const sX = sArrival !== undefined && sArrival >= minT && sArrival <= maxT ? toX(sArrival) : null;
+    // Marca de reflexiones de borde (si la ventana llega hasta ese tiempo).
+    const refX = reflectionsAfter !== undefined && reflectionsAfter > minT && reflectionsAfter <= maxT ? toX(reflectionsAfter) : null;
 
-    return { path, gridLines, ampLabels, midY: toY(0), w, h, padLeft, padTop, padBottom, cursorX, cursorY, pX, sX };
-  }, [data, component, height, visibleRatio, pArrival, sArrival, robustScale, refAmpOverride]);
+    return { path, gridLines, ampLabels, midY: toY(0), w, h, padLeft, padTop, padBottom, cursorX, cursorY, pX, sX, refX };
+  }, [data, component, height, visibleRatio, pArrival, sArrival, robustScale, refAmpOverride, reflectionsAfter]);
 
   if (!svgData) return null;
 
@@ -134,6 +142,14 @@ export function WaveChart({ data, label, component, color, height = 120, visible
             <>
               <line x1={svgData.sX} y1={svgData.padTop} x2={svgData.sX} y2={svgData.h - svgData.padBottom} stroke="#78716C" strokeWidth="1" strokeDasharray="7,3" opacity="0.8" />
               <text x={svgData.sX + 3} y={svgData.padTop + 10} fontSize="8" fill="#57534E" fontWeight="bold">S</text>
+            </>
+          )}
+          {/* Reflexiones de borde: línea vertical tenue. Lo que hay a la derecha
+              es artificial (rebotes de los límites de la malla). */}
+          {svgData.refX !== null && (
+            <>
+              <line x1={svgData.refX} y1={svgData.padTop} x2={svgData.refX} y2={svgData.h - svgData.padBottom} stroke="#C4553A" strokeWidth="1" strokeDasharray="2,3" opacity="0.5" />
+              <text x={svgData.refX + 3} y={svgData.padTop + 10} fontSize="7" fill="#C4553A" opacity="0.9">reflex.</text>
             </>
           )}
 

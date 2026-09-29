@@ -299,6 +299,11 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         {(!pArrivalDetected || !sArrivalDetected) && (
           <p className="text-[10px] text-stone-500 mt-1.5 italic">* Tiempo teórico (distancia ÷ velocidad); ver detalle en el ícono de la métrica.</p>
         )}
+        {typeof gridInfo.firstBounceS === 'number' && gridInfo.firstBounceS > 0 && duration > gridInfo.firstBounceS + 0.05 && (
+          <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
+            Después de {gridInfo.firstBounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.
+          </p>
+        )}
       </AccordionSection>
 
       {/* Grid info */}
