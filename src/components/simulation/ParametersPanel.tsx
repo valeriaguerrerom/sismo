@@ -277,13 +277,15 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               normaliza a punto. */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <span className="text-xs font-medium text-stone-600 block mb-1">Latitud</span>
+              <Tooltip content="Epicentro (lat/lon) dentro de Nariño y su entorno, incluida la red CM Colombia-Ecuador. En este modelo homogéneo 2D es solo una referencia geográfica: no cambia el cálculo. Lo que afecta el registro es la distancia y la dirección de la estación." showIcon>
+                <span className="text-xs font-medium text-stone-600">Latitud</span>
+              </Tooltip>
               <input
                 type="text"
                 inputMode="decimal"
                 value={String(params.epicenterLat)}
                 onChange={e => { const v = Number(e.target.value.replace(',', '.')); if (!Number.isNaN(v)) onChange({ ...params, epicenterLat: v }); }}
-                className="w-full text-xs border border-stone-200 rounded px-2 py-1 text-stone-700 bg-stone-50 focus:outline-none focus:border-[#2D6A4F]"
+                className="w-full mt-1 text-xs border border-stone-200 rounded px-2 py-1 text-stone-700 bg-stone-50 focus:outline-none focus:border-[#2D6A4F]"
               />
             </div>
             <div>
@@ -297,10 +299,6 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               />
             </div>
           </div>
-          <p className="text-[10px] text-stone-400 -mt-1">
-            Limitado a Nariño y su entorno (incluye la red CM Colombia-Ecuador). En este modelo homogéneo 2D la ubicación del epicentro es solo una referencia geográfica: no cambia el cálculo. La distancia y el acimut de la estación sí afectan el registro.
-          </p>
-
           {/* Distancia epicentral: separa en el tiempo la P y la S. El máximo
               depende de dx (lo que cabe en la malla sin acercarse a los bordes). */}
           <SliderRow

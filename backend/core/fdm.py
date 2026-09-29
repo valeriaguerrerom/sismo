@@ -124,7 +124,7 @@ class SimulationParams(BaseModel):
     # 2–3 produce un tren de ondas por arribo (más parecido a un sismo real y
     # visualmente más llamativo). Se mantiene la frecuencia dominante f0, así
     # que la dispersión numérica (nodos/λ) y la CFL no cambian.
-    sourceCycles: float = Field(default=1.0, ge=1.0, le=4.0, description="Ciclos del pulso de la fuente (1=Ricker, 2-3=tren de ondas)")
+    sourceCycles: float = Field(default=1.0, ge=1.0, le=6.0, description="Ciclos del pulso de la fuente (1=Ricker, 3-4=tren de ondas llamativo)")
 
     @model_validator(mode="after")
     def _check_physics(self):
