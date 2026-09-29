@@ -13,22 +13,25 @@
 import type { WaveData } from './types';
 
 export interface EventWindowOpts {
-  /** Arribo P (s), si se conoce. Sirve para anclar el inicio de la ventana. */
+  /** Arribo P (s), si se conoce. Ancla el inicio de la ventana (P − padBefore). */
   pArrival?: number;
   /** Arribo S (s), si se conoce. */
   sArrival?: number;
-  /** Segundos de "aire" antes del inicio del pulso. Por defecto 1.5 s. */
+  /** Segundos de "aire" antes del arribo P. Por defecto 0.3 s. */
   padBefore?: number;
-  /** Segundos de "aire" después del final del pulso. Por defecto 2.5 s. */
+  /** Segundos de "aire" tras el decaimiento de la última fase. Por defecto 0.8 s. */
   padAfter?: number;
 }
 
 /**
- * Calcula la ventana del evento. Estrategia:
- *  - Inicio: el menor entre (P − padBefore) y (primer instante con |señal| por
- *    encima del 5 % del pico) − padBefore, acotado a ≥ 0.
- *  - Fin: el instante en que la envolvente cae por debajo del 5 % del pico tras
- *    su máximo, + padAfter (y al menos hasta S + padAfter si se conoce).
+ * Calcula la ventana del evento para encuadrar el pulso en el gráfico.
+ *
+ * Criterio (acordado con el usuario):
+ *  - **Inicio**: unos `padBefore` s antes del arribo P (o, si no se conoce P,
+ *    antes del primer instante con energía sobre el 5 % del pico).
+ *  - **Fin**: unos `padAfter` s después de que la energía de la ÚLTIMA fase cae
+ *    por debajo del 5 % de su pico (último instante de la envolvente ≥ 5 % del
+ *    máximo). Si se conoce S, la ventana llega al menos hasta la S.
  *
  * Si la señal es muy corta o plana, devuelve la duración completa.
  */
@@ -36,7 +39,7 @@ export function computeEventWindow(
   wave: WaveData,
   opts: EventWindowOpts = {},
 ): { start: number; end: number } {
-  const { pArrival, sArrival, padBefore = 1.5, padAfter = 2.5 } = opts;
+  const { pArrival, sArrival, padBefore = 0.3, padAfter = 0.8 } = opts;
   const t = wave.time;
   const n = t.length;
   const full = { start: t[0] ?? 0, end: t[n - 1] ?? 1 };
@@ -51,9 +54,9 @@ export function computeEventWindow(
     if (m > peak) peak = m;
   }
   if (peak <= 0) return full;
-  const thr = peak * 0.05;
+  const thr = peak * 0.05; // 5 % del pico
 
-  // Primer y último instante por encima del umbral.
+  // Primer y último instante por encima del umbral (la última fase que decae).
   let firstIdx = -1;
   let lastIdx = -1;
   for (let i = 0; i < n; i++) {
@@ -64,18 +67,20 @@ export function computeEventWindow(
   const onsetT = t[firstIdx];
   const decayT = t[lastIdx];
 
-  // Inicio: un poco antes del onset, o antes de P si se conoce y es anterior.
-  const anchorStart = Math.min(onsetT, pArrival ?? onsetT);
+  // Inicio: padBefore antes del arribo P (si se conoce y es válido) o del onset
+  // de energía, lo que sea más temprano para no cortar el comienzo del pulso.
+  const pRef = (pArrival !== undefined && pArrival > 0) ? pArrival : onsetT;
+  const anchorStart = Math.min(pRef, onsetT);
   let start = Math.max(full.start, anchorStart - padBefore);
-  // Fin: tras el decaimiento (y al menos tras la S si se conoce), con aire.
+  // Fin: padAfter tras el decaimiento de la última fase (y al menos hasta S).
   const anchorEnd = Math.max(decayT, sArrival ?? decayT);
   let end = Math.min(full.end, anchorEnd + padAfter);
 
-  // Salvaguarda: ventana mínima razonable de 6 s.
-  if (end - start < 6) {
+  // Salvaguarda mínima (solo casos degenerados): al menos 1.5 s de ventana.
+  if (end - start < 1.5) {
     const mid = (start + end) / 2;
-    start = Math.max(full.start, mid - 3);
-    end = Math.min(full.end, mid + 3);
+    start = Math.max(full.start, mid - 0.75);
+    end = Math.min(full.end, mid + 0.75);
   }
   if (end <= start) return full;
   return { start, end };
