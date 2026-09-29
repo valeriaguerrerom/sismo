@@ -675,17 +675,40 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # lo reducimos a un grid <= SNAP_MAX_DIM por lado y <= SNAP_MAX_FRAMES frames.
     collect_snaps = snapshot_sink is not None
     if collect_snaps:
-        SNAP_MAX_DIM = 100
-        # ~100 fotogramas del campo para una animación fluida del corte del
-        # subsuelo. El costo de cómputo lo domina el bucle (grid × pasos), no el
-        # número de fotogramas; subirlo solo aumenta el tamaño de la respuesta.
+        # Resolución de los fotogramas del corte. Se respeta la PROPORCIÓN real
+        # del dominio (misma escala en km en X y Z) fijando el lado mayor a
+        # SNAP_MAX_DIM y el menor en proporción, para que los frentes circulares
+        # no se deformen.
+        SNAP_MAX_DIM = 200
         SNAP_MAX_FRAMES = 100
-        sub_ix = np.linspace(0, nx - 1, min(nx, SNAP_MAX_DIM)).astype(np.int32)
-        sub_jz = np.linspace(0, nz - 1, min(nz, SNAP_MAX_DIM)).astype(np.int32)
-        sub_nx = int(sub_ix.size)
-        sub_nz = int(sub_jz.size)
-        # snapshot_interval ya apunta a ~100 fotogramas; frame_every solo actúa
-        # de salvaguarda si los candidatos superaran el tope SNAP_MAX_FRAMES.
+        if nx >= nz:
+            sub_nx = min(nx, SNAP_MAX_DIM)
+            sub_nz = max(1, min(nz, int(round(SNAP_MAX_DIM * nz / nx))))
+        else:
+            sub_nz = min(nz, SNAP_MAX_DIM)
+            sub_nx = max(1, min(nx, int(round(SNAP_MAX_DIM * nx / nz))))
+
+        # Submuestreo por PROMEDIO DE BLOQUES (filtro de caja) en vez de tomar
+        # puntos sueltos: elimina el moiré (patrones diagonales falsos) que
+        # produce el diezmado. Se precomputan los límites de bloque en X y Z y
+        # se promedia con np.add.reduceat (rápido y vectorizado).
+        bx = np.linspace(0, nx, sub_nx + 1).astype(np.int64)
+        bx[-1] = nx
+        bz = np.linspace(0, nz, sub_nz + 1).astype(np.int64)
+        bz[-1] = nz
+        bx_start = bx[:-1].copy()
+        bz_start = bz[:-1].copy()
+        bx_cnt = (bx[1:] - bx[:-1]).astype(np.float32)
+        bz_cnt = (bz[1:] - bz[:-1]).astype(np.float32)
+        bx_cnt[bx_cnt == 0] = 1.0
+        bz_cnt[bz_cnt == 0] = 1.0
+
+        def _box_downsample(field2d: np.ndarray) -> np.ndarray:
+            """Promedia el campo (nx, nz) a (sub_nx, sub_nz) por bloques."""
+            sx = np.add.reduceat(field2d, bx_start, axis=0)
+            sxz = np.add.reduceat(sx, bz_start, axis=1)
+            return (sxz / bx_cnt[:, None] / bz_cnt[None, :]).astype(np.float32)
+
         approx_snaps = max(1, total_steps // snapshot_interval)
         frame_every = max(1, math.ceil(approx_snaps / SNAP_MAX_FRAMES))
         snap_taken = 0
@@ -776,15 +799,18 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             snapshot_count += 1
             # Capturar un frame submuestreado del campo para el mapa de calor.
             if collect_snaps and (snap_taken % frame_every == 0):
-                # Submuestreo espacial por indexado avanzado (sub_nx × sub_nz).
-                ux_s = ux_curr[np.ix_(sub_ix, sub_jz)]
-                uz_s = uz_curr[np.ix_(sub_ix, sub_jz)]
-                mag_s = np.sqrt(ux_s * ux_s + uz_s * uz_s)
-                # Layout concatenado [Ux | Uz | |u|] con k = i*nz + j (fila i en X).
-                field = np.concatenate([
-                    ux_s.reshape(-1), uz_s.reshape(-1), mag_s.reshape(-1),
-                ]).astype(np.float32)
-                snap_frames.append({"time": float(t), "field": field})
+                # Submuestreo por PROMEDIO DE BLOQUES (sin moiré). Se guardan solo
+                # las dos componentes del plano (ux radial, uz vertical) en
+                # float32; la magnitud |u| se calcula en el navegador. La
+                # cuantización a uint8 con escala global se hace tras el bucle
+                # (run_fdm_full), cuando ya se conoce el máximo de toda la sim.
+                ux_s = _box_downsample(ux_curr)
+                uz_s = _box_downsample(uz_curr)
+                snap_frames.append({
+                    "time": float(t),
+                    "ux": ux_s.reshape(-1).astype(np.float32),
+                    "uz": uz_s.reshape(-1).astype(np.float32),
+                })
             if collect_snaps:
                 snap_taken += 1
         if on_progress and step % 200 == 0:
@@ -907,15 +933,22 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
 # ═══════════════════════════════════════════════════════════════════════
 
 class SnapshotFrame(BaseModel):
-    """Un frame del campo de ondas submuestreado para el mapa de calor.
+    """Un frame del campo de ondas submuestreado para el corte del subsuelo.
+
+    Cada componente se cuantiza a 8 bits (int8 con signo) usando una escala
+    GLOBAL de toda la simulación (``snapshotScale``): valor_real ≈ byte/127 ·
+    escala. Así los residuos tardíos se ven tenues (no se amplifican por
+    fotograma) y la respuesta pesa mucho menos. La magnitud |u| se calcula en
+    el navegador a partir de ``ux`` y ``uz``.
 
     Attributes:
         time: Instante de tiempo del frame (s).
-        field: Campo concatenado [Ux | Uz | |u|] codificado en base64 (Float32
-            little-endian). Longitud = 3·nx·nz floats; índice k = i·nz + j.
+        ux: Componente radial (int8 en base64), índice k = i·nz + j.
+        uz: Componente vertical (int8 en base64), mismo layout.
     """
     time: float
-    field: str
+    ux: str
+    uz: str
 
 
 class SnapshotGrid(BaseModel):
@@ -949,30 +982,51 @@ class SimulationFullResult(BaseModel):
     snapshotCount: int
     snapshots: list[SnapshotFrame]
     snapshotGrid: SnapshotGrid
+    # Escala global (máximo |ux|,|uz| sobre TODOS los fotogramas) para
+    # reconstruir el valor real: valor ≈ byte/127 · snapshotScale.
+    snapshotScale: float
 
 
 def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullResult:
-    """Ejecuta el FDM 2D y devuelve también los snapshots del campo (mapa de calor).
+    """Ejecuta el FDM 2D y devuelve también los snapshots del campo (corte).
 
     Reutiliza :func:`run_fdm` con un ``snapshot_sink`` para materializar los
-    frames submuestreados y los codifica en base64 (Float32 little-endian) para
-    transportarlos por HTTP de forma compacta.
+    fotogramas submuestreados (por promedio de bloques). Cada componente (ux,
+    uz) se cuantiza a int8 con una ESCALA GLOBAL (máximo absoluto sobre todos
+    los fotogramas), de modo que la respuesta pesa ~4× menos que en float32 y la
+    energía tardía se ve tenue. La magnitud |u| se reconstruye en el navegador.
 
     Args:
         params: Parámetros de simulación.
         on_progress: Callback opcional de progreso (step, total_steps).
 
     Returns:
-        SimulationFullResult con sismogramas, métricas, snapshots y grid del heatmap.
+        SimulationFullResult con sismogramas, métricas, snapshots y grid del corte.
     """
     sink: dict = {}
     base = run_fdm(params, on_progress=on_progress, snapshot_sink=sink)
 
+    raw_frames = sink.get("frames", [])
+    # Escala global: máximo |ux|,|uz| sobre TODOS los fotogramas.
+    global_max = 1e-30
+    for fr in raw_frames:
+        m1 = float(np.max(np.abs(fr["ux"]))) if fr["ux"].size else 0.0
+        m2 = float(np.max(np.abs(fr["uz"]))) if fr["uz"].size else 0.0
+        if m1 > global_max:
+            global_max = m1
+        if m2 > global_max:
+            global_max = m2
+
+    def _quant(a: np.ndarray) -> str:
+        # valor → int8 en [-127, 127] con la escala global; base64.
+        q = np.clip(np.round(a / global_max * 127.0), -127, 127).astype(np.int8)
+        return base64.b64encode(q.tobytes()).decode("ascii")
+
     frames_out: list[SnapshotFrame] = []
-    for fr in sink.get("frames", []):
-        arr = np.ascontiguousarray(fr["field"], dtype="<f4")  # Float32 little-endian
-        b64 = base64.b64encode(arr.tobytes()).decode("ascii")
-        frames_out.append(SnapshotFrame(time=fr["time"], field=b64))
+    for fr in raw_frames:
+        frames_out.append(SnapshotFrame(
+            time=fr["time"], ux=_quant(fr["ux"]), uz=_quant(fr["uz"]),
+        ))
 
     grid = SnapshotGrid(
         nx=sink.get("nx", base.gridInfo.nx),
@@ -997,6 +1051,7 @@ def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullRe
         snapshotCount=base.snapshotCount,
         snapshots=frames_out,
         snapshotGrid=grid,
+        snapshotScale=global_max,
     )
 
 

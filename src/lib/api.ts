@@ -147,8 +147,8 @@ export async function fetchSimulation(params: import('./types').SimulationParams
   });
 }
 
-/** Frame del campo tal como llega del backend (field en base64 Float32 LE). */
-interface SnapshotFrameDTO { time: number; field: string }
+/** Frame del corte tal como llega del backend (ux/uz en base64 int8). */
+interface SnapshotFrameDTO { time: number; ux: string; uz: string }
 /** Grid submuestreado de los snapshots (posiciones ya reescaladas). */
 interface SnapshotGridDTO {
   nx: number; nz: number;
@@ -170,14 +170,37 @@ interface SimulateFullDTO {
   snapshotCount: number;
   snapshots: SnapshotFrameDTO[];
   snapshotGrid: SnapshotGridDTO;
+  /** Escala global para reconstruir el valor real: byte/127 · snapshotScale. */
+  snapshotScale: number;
 }
 
-/** Decodifica un campo base64 (Float32 little-endian) a Float32Array. */
-function decodeField(b64: string): Float32Array {
+/** Decodifica un base64 de int8 a Int8Array. */
+function decodeInt8(b64: string): Int8Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new Float32Array(bytes.buffer);
+  return new Int8Array(bytes.buffer);
+}
+
+/**
+ * Reconstruye un frame del corte a partir de ux/uz cuantizados (int8) y la
+ * escala global. Devuelve un Float32Array con el layout [Ux | Uz | |u|] que
+ * espera el renderizador (|u| se calcula aquí, no viaja por la red).
+ */
+function decodeFrame(ux64: string, uz64: string, scale: number): Float32Array {
+  const ux = decodeInt8(ux64);
+  const uz = decodeInt8(uz64);
+  const n = ux.length;
+  const out = new Float32Array(n * 3);
+  const k = scale / 127;
+  for (let i = 0; i < n; i++) {
+    const a = ux[i] * k;
+    const b = uz[i] * k;
+    out[i] = a;
+    out[n + i] = b;
+    out[2 * n + i] = Math.sqrt(a * a + b * b);
+  }
+  return out;
 }
 
 /**
@@ -204,11 +227,12 @@ export async function fetchSimulationFull(
   });
 
   const sg = dto.snapshotGrid;
+  const scale = dto.snapshotScale ?? 1;
   const snapshots: import('./types').WavefieldSnapshot[] = dto.snapshots.map(s => ({
     time: s.time,
     nx: sg.nx,
     nz: sg.nz,
-    field: decodeField(s.field),
+    field: decodeFrame(s.ux, s.uz, scale),
   }));
 
   // El backend serializa los Lamé como `lambda_` (palabra reservada en Python).

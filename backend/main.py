@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 
@@ -126,6 +127,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compresión gzip de las respuestas (clave para /api/simulate/full, cuyos
+# fotogramas del corte son varios MB de JSON: gzip los reduce ~4-6×).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 # Manejador global de errores no controlados. Sin esto, una excepción cruda
