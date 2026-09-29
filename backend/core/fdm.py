@@ -592,7 +592,11 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     MAX_STEPS = 8000
     total_steps = min(MAX_STEPS, int(duration / dt))
     eff_duration = total_steps * dt
-    snapshot_interval = max(1, total_steps // 80)
+    # ~100 fotogramas del campo para animar el corte del subsuelo con fluidez.
+    # ceil garantiza que el nº de candidatos no supere 100 (evita que el tope
+    # SNAP_MAX_FRAMES active un submuestreo que dejaría solo ~50 fotogramas).
+    SNAP_TARGET_FRAMES = 100
+    snapshot_interval = max(1, math.ceil(total_steps / SNAP_TARGET_FRAMES))
 
     # Geometría simétrica respecto al centro del dominio: la fuente en X a −d/2
     # y el receptor a +d/2 (d = distancia epicentral pedida). Así ninguno queda
@@ -672,12 +676,16 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     collect_snaps = snapshot_sink is not None
     if collect_snaps:
         SNAP_MAX_DIM = 100
-        SNAP_MAX_FRAMES = 48
+        # ~100 fotogramas del campo para una animación fluida del corte del
+        # subsuelo. El costo de cómputo lo domina el bucle (grid × pasos), no el
+        # número de fotogramas; subirlo solo aumenta el tamaño de la respuesta.
+        SNAP_MAX_FRAMES = 100
         sub_ix = np.linspace(0, nx - 1, min(nx, SNAP_MAX_DIM)).astype(np.int32)
         sub_jz = np.linspace(0, nz - 1, min(nz, SNAP_MAX_DIM)).astype(np.int32)
         sub_nx = int(sub_ix.size)
         sub_nz = int(sub_jz.size)
-        # Cada cuántos snapshots guardamos un frame (para no pasar de SNAP_MAX_FRAMES).
+        # snapshot_interval ya apunta a ~100 fotogramas; frame_every solo actúa
+        # de salvaguarda si los candidatos superaran el tope SNAP_MAX_FRAMES.
         approx_snaps = max(1, total_steps // snapshot_interval)
         frame_every = max(1, math.ceil(approx_snaps / SNAP_MAX_FRAMES))
         snap_taken = 0
