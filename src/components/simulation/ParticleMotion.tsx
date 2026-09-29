@@ -132,7 +132,17 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     // componentes, para no deformar las proporciones reales del movimiento
     // (así la vertical se ve tan pequeña o grande como es respecto a N y E).
     const { time, north, east, vertical } = waveData;
-    const n = time.length;
+    const nAll = time.length;
+    // VENTANA LIMPIA: la trayectoria solo muestra hasta un poco después de la S
+    // (P + S + una cola corta). Con la coda larga de reverberación la partícula
+    // daría cientos de vueltas y se vería como un ovillo; recortar a esta
+    // ventana deja el hodograma didáctico (los lazos de la P y la S se leen).
+    const winEnd = (sArrival > 0 && pArrival > 0)
+      ? sArrival + (sArrival - pArrival) + 2.0
+      : (time[nAll - 1] || 1);
+    let n = nAll;
+    for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { n = i; break; } }
+    n = Math.max(2, n);
     let peak = 0;
     for (let i = 0; i < n; i++) {
       peak = Math.max(peak, Math.abs(north[i]), Math.abs(east[i]), Math.abs(vertical[i]));
@@ -170,7 +180,7 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     );
     scene.add(head);
 
-    const lastT = time[n - 1] || 1;
+    const lastT = time[n - 1] || 1;   // fin de la ventana limpia (no de la coda)
     const reduced = prefersReducedMotion();
 
     // Cuántos SEGMENTOS mostrar según el tiempo actual (la línea "crece"). En
@@ -220,10 +230,14 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     };
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(mount);
+    // También al redimensionar la ventana (p. ej. al ampliar la Visualización,
+    // que dispara un 'resize' para que el lienzo se re-mida).
+    window.addEventListener('resize', onResize);
 
     return () => {
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
+      window.removeEventListener('resize', onResize);
       controls.dispose();
       lineGeo.dispose();
       lineMat.dispose();

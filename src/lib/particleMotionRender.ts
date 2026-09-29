@@ -36,7 +36,15 @@ export interface ParticleMotionRenderOpts {
 export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string {
   const { waveData, pArrival, sArrival, sizePx = 900 } = opts;
   const { time, north, east, vertical } = waveData;
-  const n = time.length;
+  const nAll = time.length;
+  // Misma ventana limpia que en pantalla: hasta un poco después de la S, para
+  // que la trayectoria no sea un ovillo de coda.
+  const winEnd = (sArrival > 0 && pArrival > 0)
+    ? sArrival + (sArrival - pArrival) + 2.0
+    : (time[nAll - 1] || 1);
+  let n = nAll;
+  for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { n = i; break; } }
+  n = Math.max(2, n);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#FAFAF8');

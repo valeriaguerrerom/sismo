@@ -250,9 +250,9 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         <div className="space-y-2">
           {[
             { label: 'Tamaño malla', value: `${gridInfo.nx} × ${gridInfo.nz}`, tip: 'Número de nodos de la malla (horizontal × profundidad) donde se resuelve la ecuación de onda.' },
-            { label: 'Resolución (dx)', value: `${gridInfo.dx} m${gridInfo.dxAdjusted ? ' ⚠️' : ''}`, tip: 'Distancia entre nodos de la malla. Menor dx = más detalle, pero más costo de cálculo.' },
-            { label: 'Paso temporal (dt)', value: `${(gridInfo.dt * 1000).toFixed(2)} ms${gridInfo.dtAdjusted ? ' ⚠️' : ''}`, tip: 'Intervalo de tiempo entre pasos de la simulación. Debe cumplir la condición de estabilidad CFL: dt ≤ dx/(Vp·√2).' },
-            { label: 'Nodos/λ mín.', value: `${gridInfo.pointsPerWavelength.toFixed(1)}${gridInfo.pointsPerWavelength < 10 ? ' ⚠️' : ''}`, tip: 'Cuántos nodos caben en la onda más corta. Se recomiendan al menos 10 para evitar dispersión numérica.' },
+            { label: 'Resolución (dx)', value: `${gridInfo.dx} m`, tip: 'Distancia entre nodos de la malla. Menor dx = más detalle, pero más costo de cálculo.' },
+            { label: 'Paso temporal (dt)', value: `${(gridInfo.dt * 1000).toFixed(2)} ms`, tip: 'Intervalo de tiempo entre pasos de la simulación. Debe cumplir la condición de estabilidad CFL: dt ≤ dx/(Vp·√2).' },
+            { label: 'Nodos/λ mín.', value: `${gridInfo.pointsPerWavelength.toFixed(1)}`, tip: 'Cuántos nodos caben en la onda más corta. Se recomiendan al menos 10 para evitar dispersión numérica.' },
             { label: 'Total pasos', value: formatBigInt(gridInfo.totalSteps), tip: 'Número de iteraciones temporales que ejecutó la simulación.' },
             { label: 'Estación virtual', value: epicentralDistanceLabel(gridInfo), tip: 'Distancia horizontal del receptor (estación virtual) al epicentro, en superficie. Se calcula desde la malla: |receptorX − fuenteX| · dx.' },
             { label: 'Fuente', value: params.sourceType === 'volcanic' ? 'Volcánica' : 'Tectónica', tip: 'Mecanismo de la fuente: volcánica (explosión isótropa, más onda P) o tectónica (doble par de cizalla, más onda S).' },
@@ -264,24 +264,6 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-stone-400 mt-2">
-          Estación virtual a {epicentralDistanceLabel(gridInfo)} del epicentro, en superficie.
-        </p>
-        {gridInfo.pointsPerWavelength < 10 && (
-          <p className="text-[10px] text-[#D4A853] mt-2 bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20">
-            ⚠️ Malla gruesa para la frecuencia simulada ({gridInfo.pointsPerWavelength.toFixed(1)} nodos/λ, mínimo recomendado: 10). Posible dispersión numérica: las altas frecuencias se propagan más lento de lo debido.
-          </p>
-        )}
-        {gridInfo.dtAdjusted && (
-          <p className="text-[10px] text-[#C4553A] mt-2 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-            ⚠️ dt fue ajustado automáticamente para cumplir la condición CFL: dt ≤ dx/(Vp·√2)
-          </p>
-        )}
-        {gridInfo.dxAdjusted && (
-          <p className="text-[10px] text-[#C4553A] mt-2 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-            ⚠️ dx fue aumentado automáticamente para representar la profundidad focal solicitada dentro de la malla.
-          </p>
-        )}
       </AccordionSection>
 
       {/* Interpretation */}

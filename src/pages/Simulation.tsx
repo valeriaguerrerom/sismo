@@ -134,6 +134,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
   }, [vizExpanded]);
 
+  // Al ampliar/reducir cambia el tamaño del contenedor de los lienzos 3D
+  // (mapa de calor y partícula); forzamos que se re-midan tras el reflujo.
+  useEffect(() => {
+    const id = setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+    return () => clearTimeout(id);
+  }, [vizExpanded]);
+
   const handleSaveReport = useCallback(async () => {
     if (!supabase || !user || !result) return;
     setSaving(true);

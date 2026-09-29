@@ -51,12 +51,14 @@ describe('interpretSimulation (RF-12)', () => {
     expect(text).toContain('doble par');
   });
 
-  it('distingue el mecanismo volcánico y advierte ajustes de malla', () => {
+  it('distingue el mecanismo volcánico sin advertencias técnicas de malla', () => {
     const text = interpretSimulation({ params: { ...params, sourceType: 'volcanic', depth: 80 }, dominantFrequency: 1, gridInfo: { nx: 100, nz: 100, totalSteps: 10, dtAdjusted: true } });
     expect(text).toContain('volcánica');
     expect(text).toContain('profunda');
     expect(text).toContain('isótropo');
-    expect(text).toContain('CFL');
+    // La interpretación ya NO incluye avisos técnicos (CFL/dx): los escenarios
+    // son óptimos y esos avisos alarmaban sin motivo.
+    expect(text).not.toContain('CFL');
   });
 
   it('clasifica la profundidad focal', () => {

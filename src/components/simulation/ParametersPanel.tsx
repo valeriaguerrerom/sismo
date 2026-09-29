@@ -294,6 +294,11 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               />
             </div>
           </div>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection title="Estación y malla" dataTour="params-config" headerDataTour="params-config-h" open={openSection === 'config'} onToggle={() => toggle('config')}>
+        <div className="space-y-3">
           {/* Distancia epicentral: separa en el tiempo la P y la S. El máximo
               depende de dx (lo que cabe en la malla sin acercarse a los bordes). */}
           <SliderRow
@@ -372,11 +377,6 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               )}
             </div>
           )}
-        </div>
-      </AccordionSection>
-
-      <AccordionSection title="Configuración" dataTour="params-config" headerDataTour="params-config-h" open={openSection === 'config'} onToggle={() => toggle('config')}>
-        <div className="space-y-3">
           <SliderRow
             label="Tiempo de simulación"
             tooltip="Duración total del registro sísmico simulado en segundos."
