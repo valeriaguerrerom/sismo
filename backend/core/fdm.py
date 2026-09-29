@@ -129,6 +129,13 @@ class SimulationParams(BaseModel):
     # según el tipo (2 volcánica / 3.5 tectónica). Subirla hace oscilaciones más
     # rápidas y densas (registro más "vivo"); requiere dx pequeño para no dispersar.
     sourceFreq: float = Field(default=0.0, ge=0.0, le=12.0, description="Frecuencia dominante de la fuente (Hz); 0 = automática por tipo")
+    # Nivel de coda (0-1): 0 = dominio amplio y sponge fuerte (medio homogéneo,
+    # la señal decae a la calma tras la S, sin coda). >0 acerca los bordes y
+    # debilita la absorción, de modo que las reflexiones de borde reverberan y
+    # llenan el registro con una coda sostenida que decae lentamente (aspecto de
+    # sismograma "vivo" que sigue oscilando un buen rato). Es un efecto visual
+    # didáctico, no una coda física de dispersión.
+    codaLevel: float = Field(default=0.0, ge=0.0, le=1.0, description="Coda sostenida por reverberación de bordes (0=nada, 1=máxima)")
 
     @model_validator(mode="after")
     def _check_physics(self):
@@ -323,13 +330,15 @@ def detect_arrival(signal: np.ndarray, dt: float, threshold: float = 0.05,
     return 0.0
 
 
-def _build_sponge_2d(nx: int, nz: int, abs_thick: int = 15) -> np.ndarray:
+def _build_sponge_2d(nx: int, nz: int, abs_thick: int = 15, cerjan_a: float = 0.02) -> np.ndarray:
     """Construye la matriz de coeficientes sponge con broadcasting (sin bucles).
 
     Args:
         nx: Nodos en dirección X.
         nz: Nodos en dirección Z.
         abs_thick: Grosor de la capa absorbente en nodos.
+        cerjan_a: Coeficiente de Cerjan (mayor = absorbe más). Bajarlo deja pasar
+            más energía a los bordes y sostiene la coda por reverberación.
 
     Returns:
         Array 2D de forma (nx, nz) con coeficientes en [0, 1].
@@ -337,7 +346,7 @@ def _build_sponge_2d(nx: int, nz: int, abs_thick: int = 15) -> np.ndarray:
     # Perfil clásico de Cerjan: G = exp(-(a·d)²), con d = nº de nodos DENTRO de la
     # zona absorbente (0 en el borde interno, abs_thick-1 en el borde físico). El
     # coeficiente decae suave desde 1 hasta ~exp(-(a·abs_thick)²) en el borde.
-    CERJAN_A = 0.02
+    CERJAN_A = cerjan_a
 
     def edge_factor(dist_into_layer: np.ndarray) -> np.ndarray:
         # dist_into_layer: 0 fuera de la capa; crece hacia el borde físico.
@@ -593,11 +602,17 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # de modo que el PRIMER rebote de borde llega DESPUÉS de ~8 s (más allá de
     # la onda S y la superficial). Esto elimina la coda artificial sin depender
     # solo de la absorción del sponge.
-    abs_thick = 44
-    NX_MAX = 820
-    NZ_MAX = 700
+    # Nivel de coda: acerca los bordes (dominio más pequeño) y debilita la
+    # absorción, para que las reflexiones de borde reverberen y sostengan la
+    # señal. Con coda=0 se mantiene el comportamiento limpio (dominio amplio,
+    # sponge fuerte). Con coda=1, dominio ~40% y sponge fino/suave → mucha coda.
+    coda = max(0.0, min(1.0, float(getattr(params, "codaLevel", 0.0) or 0.0)))
+    abs_thick = int(round(44 - 30 * coda))          # 44 → 14 nodos
+    NX_MAX = int(round(820 - 480 * coda))            # 820 → 340
+    NZ_MAX = int(round(700 - 420 * coda))            # 700 → 280
+    domain_span = 34000 - 20000 * coda               # 34 km → 14 km
 
-    nx = min(NX_MAX, max(80, int(34000 / dx)))
+    nx = min(NX_MAX, max(80, int(domain_span / dx)))
 
     # La fuente se ubica al ~70% de nz; el resto es propagación + sponge inferior.
     depth_nodes = int((depth * 1000) / dx)
@@ -696,8 +711,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     cos_az = math.cos(az_rad)
     sin_az = math.sin(az_rad)
 
-    # Coeficientes de frontera absorbente (sponge layer) — vectorizado
-    abs_coeff = _build_sponge_2d(nx, nz, abs_thick=abs_thick)
+    # Coeficientes de frontera absorbente (sponge layer) — vectorizado. Con coda
+    # se debilita la absorción (Cerjan menor) para que los bordes reverberen.
+    cerjan_a = 0.02 - 0.014 * coda   # 0.02 (fuerte) → 0.006 (débil, mucha coda)
+    abs_coeff = _build_sponge_2d(nx, nz, abs_thick=abs_thick, cerjan_a=cerjan_a)
 
     # Constantes del esquema FDM
     dx2 = dx * dx

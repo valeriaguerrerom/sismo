@@ -65,6 +65,12 @@ export interface SimulationParams {
    */
   sourceFreq?: number;
   /**
+   * Nivel de coda (0-1): 0 = medio homogéneo limpio (la señal decae tras la S);
+   * >0 acerca los bordes y debilita la absorción para que reverberen y el
+   * registro siga oscilando un buen rato (aspecto de sismograma "vivo").
+   */
+  codaLevel?: number;
+  /**
    * Distancia epicentral fuente→estación en superficie (km). Controla la
    * separación temporal entre la P y la S (a mayor distancia, más se separan).
    * Acotada por el dominio y los rebotes de borde.
