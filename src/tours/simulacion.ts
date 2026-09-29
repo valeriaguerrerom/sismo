@@ -16,8 +16,10 @@ import type { TourStep } from './useTour';
  * la fuente; el primer paso ya coincide sin abrir otra sección.
  * v5: los pasos de parámetros apuntan al encabezado de cada sección (altura
  * fija), para que el popover no se desborde cuando la sección abierta es alta.
+ * v6: con las secciones compactas y el acordeón exclusivo, los pasos vuelven a
+ * resaltar la SECCIÓN COMPLETA (tarjeta con su contenido).
  */
-export const SIMULACION_TOUR_VERSION = 5;
+export const SIMULACION_TOUR_VERSION = 6;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -34,15 +36,15 @@ interface SimTourControls {
 
 /** Construye los pasos del tour del Simulador con los controles dados. */
 export function buildSimulacionSteps({ openParam, openResult, hasResult = false }: SimTourControls): TourStep[] {
-  // Los pasos de parámetros apuntan al ENCABEZADO de cada sección (elemento de
-  // altura fija ~44px), no a la tarjeta completa (que crece al abrirse y puede
-  // superar el alto de la ventana). Así el popover siempre cabe al lado y nunca
-  // se desborda. La sección se abre igual con openParam para mostrar su contenido.
+  // Los pasos de parámetros resaltan la SECCIÓN COMPLETA (tarjeta con su
+  // contenido), no solo el encabezado. Como el acordeón es exclusivo y las
+  // secciones son compactas, la tarjeta abierta cabe en la ventana y el popover
+  // se coloca al lado sin desbordarse. La sección se abre con openParam.
   const steps: TourStep[] = [
     {
       // Se empieza por "Variables elásticas", que es la sección abierta por
       // defecto: así el primer paso ya coincide sin tener que abrir otra.
-      element: '[data-tour="params-elasticas-h"]',
+      element: '[data-tour="params-elasticas"]',
       onHighlightStarted: () => openParam('elasticas'),
       popover: {
         title: 'Propiedades del subsuelo',
@@ -52,7 +54,7 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       },
     },
     {
-      element: '[data-tour="params-fuente-h"]',
+      element: '[data-tour="params-fuente"]',
       onHighlightStarted: () => openParam('fuente'),
       popover: {
         title: 'Elige la fuente',
@@ -62,7 +64,7 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       },
     },
     {
-      element: '[data-tour="params-config-h"]',
+      element: '[data-tour="params-config"]',
       onHighlightStarted: () => openParam('config'),
       popover: {
         title: 'Estación y malla',
