@@ -418,3 +418,34 @@ veían muy parecidas y poco llamativas. Para que cada arribo se parezca a un
 La detección de arribos (STA + validación teórica) sigue funcionando; cuando el
 paquete más ancho dificulta la detección, se cae al arribo teórico (marcado con
 `*` en el panel), como ya ocurría.
+
+## 9. Se retira el mecanismo de "coda por bordes" (codaLevel)
+
+Durante una iteración se añadió un parámetro `codaLevel` para que los
+sismogramas "siguieran oscilando un buen rato" (aspecto más vivo). Lo lograba de
+forma **artificial**: al subir `codaLevel` (a) encogía el dominio
+(`NX_MAX` 820→340, `NZ_MAX` 700→280, `domain_span` 34→14 km), (b) adelgazaba la
+capa absorbente (`abs_thick` 44→14 nodos) y (c) debilitaba el coeficiente de
+Cerjan (0.02→0.006). El resultado era que las **reflexiones de los bordes**
+volvían al receptor y llenaban el registro. No metía ruido, ni amplificaba la
+señal, ni tocaba la fuente o el kernel: solo esos tres factores geométricos/de
+absorción.
+
+**Se eliminó por completo** (parámetro, escalados y el `cerjan_a` variable). El
+motivo: contradice el principio de la sección 0 —en un medio homogéneo no debe
+haber coda; cualquier energía tardía sostenida es un **artefacto de borde**, no
+física—. Mantener esa "coda" habría sido presentar un artefacto como si fuera
+señal real, algo indefendible en la tesis.
+
+Estado tras el retiro:
+- Dominio **grande y fijo** siempre (820×700, ~16 km con dx = 20 m), con la
+  absorción de Cerjan canónica (`abs_thick = 44`, `a = 0.02`).
+- La **duración** de los presets se limita a **antes del primer rebote de borde**
+  (7.5–9 s según la geometría), de modo que la ventana útil no contiene
+  reflexiones artificiales y el cómputo se mantiene dentro del presupuesto.
+- Los presets quedan con fuente **Ricker** (`sourceCycles = 1`) —la Ricker no es
+  un artefacto; es la fuente estándar— sin `codaLevel`.
+
+La coda **física** real (reverberación en una capa blanda, ondas superficiales,
+conversiones P↔S) se obtendrá con el **modelo de capas** (trabajo futuro), que
+es la manera correcta de tenerla.
