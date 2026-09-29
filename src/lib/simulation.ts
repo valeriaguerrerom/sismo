@@ -18,13 +18,14 @@ import { SimulationParams } from './types';
  * ~8.4 s, después de P + S + superficial, así que en medio homogéneo la señal
  * cae a la calma (no hay coda física). f0 = 3.5 Hz.
  *  · dt = 0.004 s < CFL (dx/(Vp·√2) ≈ 0.00444 s), Courant ≈ 0.90 (estable).
- *  · duración 13 s (cómputo ~10 s en el servidor, con ~80 fotogramas).
+ *  · duración 8 s: termina ANTES del primer rebote de borde (S a ~8.4 s),
+ *    dejando margen tras P (1.8 s), S (3.0 s) y superficial. Cómputo ~6 s.
  */
 export function tectonicParams(): SimulationParams {
   const vp = 3500, vs = 2000, density = 2600;
   const mu = density * vs * vs;
   const lambda = density * vp * vp - 2 * mu;
-  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 13, dx: 22, dt: 0.004 };
+  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 8, dx: 22, dt: 0.004 };
 }
 
 /**

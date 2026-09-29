@@ -245,9 +245,9 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             label="Tiempo de Simulación"
             tooltip="Duración total del registro sísmico simulado en segundos."
             value={params.duration}
-            min={10}
+            min={5}
             max={120}
-            step={5}
+            step={1}
             unit="seg"
             onChange={v => update('duration', v)}
           />
@@ -260,6 +260,18 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             return (
               <p className="text-[10px] text-[#D4A853] bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20 -mt-2">
                 Se simularán ≈ {eff.toFixed(0)} s (tope de {formatBigInt(MAX_STEPS)} pasos). Sube dx o baja Vp para alcanzar {params.duration} s.
+              </p>
+            );
+          })()}
+          {/* Aviso de rebote de borde: con la geometría por defecto el primer
+              rebote de la S llega a ~8.4 s (tectónico) o ~13.3 s (volcánico). Si
+              la duración lo supera, se verán reflexiones artificiales al final. */}
+          {(() => {
+            const bounceS = params.sourceType === 'volcanic' ? 13.3 : 8.4;
+            if (params.duration <= bounceS + 0.05) return null;
+            return (
+              <p className="text-[10px] text-[#C4553A] bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10 -mt-2">
+                ⚠️ La duración supera el primer rebote de borde (≈ {bounceS.toFixed(1)} s). Después de ese tiempo pueden aparecer reflexiones artificiales de los límites de la malla.
               </p>
             );
           })()}
