@@ -27,7 +27,7 @@ Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 import base64
 import math
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Numba acelera el bucle temporal ~5x. Si no está disponible (entorno sin
 # compilador), se degrada a un kernel NumPy vectorizado equivalente, así el
@@ -48,6 +48,32 @@ except Exception:  # pragma: no cover - entorno sin numba
     prange = range  # type: ignore  # fallback secuencial sin numba
 
 
+# ── Rangos válidos de los parámetros (fuente única de verdad, compartida con el
+# frontend en src/lib/paramLimits.ts). El motor simula bien dentro de estos
+# rangos; fuera de ellos la malla, la estabilidad o la física dejan de ser
+# válidas. Área de Nariño para el epicentro (solo referencia geográfica). ──
+PARAM_RANGES = {
+    "vp": (1500.0, 8000.0),
+    "vs": (500.0, 4500.0),
+    "density": (1500.0, 3500.0),
+    "magnitude": (2.0, 9.0),
+    "depth": (1.0, 100.0),
+    "duration": (5.0, 120.0),
+    "dx": (10.0, 200.0),
+    "strike": (0.0, 360.0),
+    "dip": (0.0, 90.0),
+    "rake": (-180.0, 180.0),
+    "stationAzimuth": (0.0, 360.0),
+    # Nariño y su entorno inmediato (incluye la red CM Colombia-Ecuador, cuyos
+    # eventos reales pueden cargarse en el simulador).
+    "epicenterLat": (-1.0, 3.0),
+    "epicenterLon": (-79.5, -75.5),
+}
+# Factor de seguridad de Vs respecto a Vp para que λ = ρ(Vp² − 2Vs²) > 0 con
+# margen (medio sólido físico). Vs_max = Vp / √2 · factor.
+VS_VP_SAFETY = 0.98
+
+
 class SimulationParams(BaseModel):
     """Parámetros de entrada para la simulación FDM.
 
@@ -66,19 +92,47 @@ class SimulationParams(BaseModel):
         dx: Espaciado de la malla en metros.
         dt: Paso temporal en segundos. Se ajusta automáticamente si viola CFL.
     """
-    vp: float = Field(default=3500, description="Velocidad de onda P (m/s)")
-    vs: float = Field(default=2000, description="Velocidad de onda S (m/s)")
-    density: float = Field(default=2600, description="Densidad del medio (kg/m³)")
+    vp: float = Field(default=3500, ge=1500, le=8000, description="Velocidad de onda P (m/s)")
+    vs: float = Field(default=2000, ge=500, le=4500, description="Velocidad de onda S (m/s)")
+    density: float = Field(default=2600, ge=1500, le=3500, description="Densidad del medio (kg/m³)")
     lambda_: float = Field(default=0, description="Primer parámetro de Lamé (Pa)")
     mu: float = Field(default=0, description="Módulo de corte (Pa)")
     sourceType: str = Field(default="tectonic", description="Tipo de fuente: tectonic | volcanic")
-    magnitude: float = Field(default=5.0, description="Magnitud momento (Mw)")
-    depth: float = Field(default=15, description="Profundidad focal (km)")
-    epicenterLat: float = Field(default=1.2136, description="Latitud del epicentro")
-    epicenterLon: float = Field(default=-77.2811, description="Longitud del epicentro")
-    duration: float = Field(default=60, description="Duración de simulación (s)")
-    dx: float = Field(default=100, description="Espaciado de malla (m)")
-    dt: float = Field(default=0.02, description="Paso temporal (s)")
+    magnitude: float = Field(default=5.0, ge=2.0, le=9.0, description="Magnitud momento (Mw)")
+    depth: float = Field(default=15, ge=1, le=100, description="Profundidad focal (km)")
+    epicenterLat: float = Field(default=1.2136, ge=-1.0, le=3.0, description="Latitud del epicentro (Nariño y entorno)")
+    epicenterLon: float = Field(default=-77.2811, ge=-79.5, le=-75.5, description="Longitud del epicentro (Nariño y entorno)")
+    duration: float = Field(default=60, ge=5, le=120, description="Duración de simulación (s)")
+    dx: float = Field(default=100, ge=10, le=200, description="Espaciado de malla (m)")
+    dt: float = Field(default=0.02, gt=0, description="Paso temporal (s)")
+    # Mecanismo focal (solo fuente tectónica). Convención Aki & Richards:
+    # strike (rumbo) 0-360° medido desde el norte en sentido horario; dip
+    # (buzamiento) 0-90° desde la horizontal; rake (deslizamiento) -180..180°
+    # (90° = falla inversa, -90° = normal, 0° = desgarre dextral).
+    strike: float = Field(default=30, ge=0, le=360, description="Rumbo de la falla (°), 0-360 desde el norte")
+    dip: float = Field(default=45, ge=0, le=90, description="Buzamiento de la falla (°), 0-90")
+    rake: float = Field(default=90, ge=-180, le=180, description="Deslizamiento (°), 90=inversa, -90=normal, 0=desgarre")
+    # Acimut de la estación virtual respecto a la fuente: 0-360° desde el norte
+    # en sentido horario. Orienta el corte y la rotación radial/transversal→N/E.
+    stationAzimuth: float = Field(default=45, ge=0, le=360, description="Dirección de la estación (°), 0-360 desde el norte")
+
+    @model_validator(mode="after")
+    def _check_physics(self):
+        """Valida la restricción física clave: Vs < Vp/√2 para que λ > 0.
+
+        En un sólido elástico real λ = ρ(Vp² − 2·Vs²) debe ser positivo. Si el
+        usuario (o un cliente que no validó) envía Vs demasiado cerca de Vp, se
+        rechaza con un mensaje claro en español. Los rangos por campo ya los
+        cubren los límites ge/le.
+        """
+        vs_max = self.vp / math.sqrt(2.0) * VS_VP_SAFETY
+        if self.vs > vs_max:
+            raise ValueError(
+                f"Vs = {self.vs:.0f} m/s es demasiado alta para Vp = {self.vp:.0f} m/s: "
+                f"debe ser menor que {vs_max:.0f} m/s para que el parámetro de Lamé λ "
+                f"no sea negativo (roca físicamente imposible)."
+            )
+        return self
 
     class Config:
         populate_by_name = True
@@ -113,6 +167,8 @@ class GridInfo(BaseModel):
     sourceX: int
     sourceZ: int
     pointsPerWavelength: float
+    firstBounceP: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda P (s)")
+    firstBounceS: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda S (s)")
 
 
 class WaveData(BaseModel):
@@ -307,18 +363,121 @@ def _fdm_step(ux_p, ux_c, ux_n, uz_p, uz_c, uz_n, abs_coeff,
             uz_c[i, j] *= a
 
 
+@njit(cache=True, fastmath=False, parallel=True)
+def _sh_step(v_p, v_c, v_n, abs_coeff, nx, nz, dx2, dt2, cs2):
+    """Un paso temporal del problema SH 2D (onda escalar fuera del plano).
+
+    Resuelve ρ·∂²v/∂t² = μ·(∂²v/∂x² + ∂²v/∂z²), donde v es el desplazamiento
+    perpendicular al plano del corte (la componente transversal, tipo Love/SH).
+    Solo depende de Vs y ρ (cs2 = μ/ρ = Vs²). Superficie libre en z=0 por
+    condición de Neumann (∂v/∂z = 0 ⇒ v[j=0] = v[j=1]) y sponge de Cerjan en
+    next y curr, igual que el kernel P-SV. Paralelizado con prange.
+
+    Args:
+        v_p, v_c, v_n: Campo transversal en t-dt, t, t+dt (in place).
+        abs_coeff: Matriz sponge (nx, nz).
+        nx, nz: Dimensiones de malla.
+        dx2, dt2: dx² y dt².
+        cs2: Vs² = μ/ρ.
+    """
+    for i in prange(2, nx - 2):
+        for j in range(1, nz - 2):
+            lap = (v_c[i+1, j] - 2.0*v_c[i, j] + v_c[i-1, j]
+                   + v_c[i, j+1] - 2.0*v_c[i, j] + v_c[i, j-1]) / dx2
+            v_n[i, j] = 2.0*v_c[i, j] - v_p[i, j] + dt2 * cs2 * lap
+    # Superficie libre SH (Neumann): ∂v/∂z = 0 → espejo simétrico.
+    for i in prange(1, nx - 1):
+        v_n[i, 0] = v_n[i, 1]
+    for i in prange(nx):
+        for j in range(nz):
+            a = abs_coeff[i, j]
+            v_n[i, j] *= a
+            v_c[i, j] *= a
+
+
+def moment_tensor(strike: float, dip: float, rake: float) -> np.ndarray:
+    """Tensor de momento sísmico de un doble par a partir de strike/dip/rake.
+
+    Usa la convención de Aki & Richards (2002, ec. 4.29) con ejes
+    1 = Norte, 2 = Este, 3 = Abajo. El momento escalar es unitario (M₀ = 1); la
+    amplitud real la fija la magnitud por separado. El tensor tiene traza nula
+    (doble par puro, sin componente isótropa).
+
+    Args:
+        strike: Rumbo de la falla en grados (0-360, desde el norte, horario).
+        dip: Buzamiento en grados (0-90, desde la horizontal).
+        rake: Deslizamiento en grados (90 = inversa, -90 = normal, 0 = desgarre).
+
+    Returns:
+        Matriz simétrica 3×3 (float64) del tensor de momento en ejes N, E, Abajo.
+    """
+    s = math.radians(strike); d = math.radians(dip); r = math.radians(rake)
+    sd, cd = math.sin(d), math.cos(d)
+    s2d, c2d = math.sin(2*d), math.cos(2*d)
+    sl, cl = math.sin(r), math.cos(r)
+    ss, cs = math.sin(s), math.cos(s)
+    s2s, c2s = math.sin(2*s), math.cos(2*s)
+    Mxx = -(sd*cl*s2s + s2d*sl*ss*ss)
+    Mxy = (sd*cl*c2s + 0.5*s2d*sl*s2s)
+    Mxz = -(cd*cl*cs + c2d*sl*ss)
+    Myz = -(cd*cl*ss - c2d*sl*cs)
+    Mzz = (s2d*sl)
+    Myy = -(Mxx + Mzz)  # traza nula
+    return np.array([[Mxx, Mxy, Mxz],
+                     [Mxy, Myy, Myz],
+                     [Mxz, Myz, Mzz]], dtype=np.float64)
+
+
+def project_moment_to_cut(M: np.ndarray, azimuth_deg: float) -> dict:
+    """Proyecta el tensor de momento al marco del corte vertical (r, t, z).
+
+    El corte vertical se orienta según el acimut de la estación. El eje radial r
+    apunta de la fuente hacia la estación (acimut medido desde el norte, en
+    sentido horario); el transversal t es horizontal, 90° en sentido horario
+    respecto a r; z apunta hacia abajo.
+
+        e_r = (cos az, sin az, 0)   [Norte, Este, Abajo]
+        e_t = (sin az, -cos az, 0)
+        e_z = (0, 0, 1)
+
+    Las componentes en el plano (Mrr, Mrz, Mzz) excitan el sistema P-SV; las
+    fuera del plano (Mrt, Mtz) excitan el SH (transversal).
+
+    Args:
+        M: Tensor de momento 3×3 en ejes N, E, Abajo.
+        azimuth_deg: Acimut de la estación en grados (0-360, desde el norte).
+
+    Returns:
+        Dict con Mrr, Mrz, Mzz (P-SV) y Mrt, Mtz (SH).
+    """
+    az = math.radians(azimuth_deg)
+    ca, sa = math.cos(az), math.sin(az)
+    er = np.array([ca, sa, 0.0])
+    et = np.array([sa, -ca, 0.0])
+    ez = np.array([0.0, 0.0, 1.0])
+    return {
+        "Mrr": float(er @ M @ er),
+        "Mrz": float(er @ M @ ez),
+        "Mzz": float(ez @ M @ ez),
+        "Mrt": float(er @ M @ et),
+        "Mtz": float(et @ M @ ez),
+    }
+
+
 _NUMBA_WARMED = False
 
 
 def _warmup_numba():
-    """Compila el kernel Numba una vez (fuera de la ruta de medición)."""
+    """Compila los kernels Numba (P-SV y SH) una vez, fuera de la medición."""
     global _NUMBA_WARMED
     if _NUMBA_WARMED or not _HAS_NUMBA:
         return
     n = 8
     z = np.zeros((n, n), dtype=np.float32)
+    ones = np.ones((n, n), dtype=np.float32)
     _fdm_step(z.copy(), z.copy(), z.copy(), z.copy(), z.copy(), z.copy(),
-              np.ones((n, n), dtype=np.float32), n, n, 1.0, 1.0, 1.0, 1.0, 1.0)
+              ones, n, n, 1.0, 1.0, 1.0, 1.0, 1.0)
+    _sh_step(z.copy(), z.copy(), z.copy(), ones, n, n, 1.0, 1.0, 1.0)
     _NUMBA_WARMED = True
 
 
@@ -446,12 +605,36 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     amp_scale = 10 ** (magnitude - 2) * 1e4
 
     # Inicialización de campos de desplazamiento — arrays 2D (nx, nz)
+    # P-SV (en el plano del corte): ux (radial), uz (vertical).
     ux_prev = np.zeros((nx, nz), dtype=np.float32)
     ux_curr = np.zeros((nx, nz), dtype=np.float32)
     ux_next = np.zeros((nx, nz), dtype=np.float32)
     uz_prev = np.zeros((nx, nz), dtype=np.float32)
     uz_curr = np.zeros((nx, nz), dtype=np.float32)
     uz_next = np.zeros((nx, nz), dtype=np.float32)
+    # SH (fuera del plano): v = desplazamiento transversal (Love/SH).
+    v_prev = np.zeros((nx, nz), dtype=np.float32)
+    v_curr = np.zeros((nx, nz), dtype=np.float32)
+    v_next = np.zeros((nx, nz), dtype=np.float32)
+
+    # ── Fuente sísmica: tensor de momento proyectado al corte ──
+    # Para la fuente tectónica se calcula el tensor de momento del doble par
+    # (strike/dip/rake) y se proyecta al marco del corte (r, t, z) según el
+    # acimut de la estación. Las componentes en el plano (Mrr, Mrz, Mzz) excitan
+    # el P-SV; las fuera del plano (Mrt, Mtz) excitan el SH. La fuente volcánica
+    # es isótropa (radial): excita P-SV pero NO genera SH (transversal ≈ 0).
+    if source_type == "tectonic":
+        M = moment_tensor(params.strike, params.dip, params.rake)
+        proj = project_moment_to_cut(M, params.stationAzimuth)
+        Mrr, Mrz, Mzz = proj["Mrr"], proj["Mrz"], proj["Mzz"]
+        Mrt, Mtz = proj["Mrt"], proj["Mtz"]
+    else:
+        Mrr = Mrz = Mzz = Mrt = Mtz = 0.0
+
+    # Ángulo de rotación radial/transversal → Norte/Este (acimut de la estación).
+    az_rad = math.radians(params.stationAzimuth)
+    cos_az = math.cos(az_rad)
+    sin_az = math.sin(az_rad)
 
     # Coeficientes de frontera absorbente (sponge layer) — vectorizado
     abs_coeff = _build_sponge_2d(nx, nz, abs_thick=abs_thick)
@@ -462,6 +645,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     c1 = (lam + 2 * mu) / density
     c2 = mu / density
     c3 = (lam + mu) / density
+    cs2 = mu / density  # Vs² para el kernel SH
 
     _warmup_numba()
 
@@ -469,6 +653,9 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     north_arr = []
     east_arr = []
     vert_arr = []
+    # Radial (en el plano) para la detección de arribos, independiente de la
+    # rotación a N/E: la S es clara en la radial y la vertical.
+    radial_arr = []
     snapshot_count = 0
 
     # ── Preparación de snapshots submuestreados para el mapa de calor ──
@@ -503,55 +690,71 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     for step in range(total_steps):
         t = step * dt
 
-        # Inyección de fuente distribuida
+        # ── Inyección de fuente distribuida ──
         src_val = ricker(t, f0, t0) * amp_scale
         spread = 2
+        beta = 0.8 * spread
         for di in range(-spread, spread + 1):
             for dj in range(-spread, spread + 1):
                 si, sj = src_x + di, src_z + dj
                 if si < 2 or si >= nx - 2 or sj < 2 or sj >= nz - 2:
                     continue
                 dist = math.sqrt(di * di + dj * dj)
-                weight = math.exp(-dist * dist / (spread * 0.8))
+                weight = math.exp(-dist * dist / beta)
                 if source_type == "tectonic":
-                    # Doble par (falla de cizalla): campo con patrón de cuatro
-                    # lóbulos que genera ONDA S dominante y componentes
-                    # horizontales fuertes. Cizalla antisimétrica: el
-                    # desplazamiento horizontal depende del offset vertical (dj)
-                    # y el vertical del offset horizontal (di) → ∇×u ≠ 0.
-                    norm = (1.0 / spread) if dist > 1e-6 else 0.0
-                    ux_curr[si, sj] += src_val * weight * 1.0 * (dj * norm)
-                    uz_curr[si, sj] += src_val * weight * 1.0 * (di * norm)
+                    # Fuente por DIVERGENCIA del tensor de momento:
+                    # f_i = −M_ij·∂(δ)/∂x_j. Aproximamos ∂(δ)/∂x_j con la derivada
+                    # del kernel gaussiano de esparcido. En el corte, el eje r
+                    # (radial) es el índice horizontal (di) y z el vertical (dj).
+                    #   f_r = −(Mrr·g_r + Mrz·g_z)   → ux (radial, P-SV)
+                    #   f_z = −(Mrz·g_r + Mzz·g_z)   → uz (vertical, P-SV)
+                    #   f_t = −(Mrt·g_r + Mtz·g_z)   → v  (transversal, SH)
+                    g_r = -2.0 * di / beta * weight
+                    g_z = -2.0 * dj / beta * weight
+                    ux_curr[si, sj] += src_val * (-(Mrr * g_r + Mrz * g_z))
+                    uz_curr[si, sj] += src_val * (-(Mrz * g_r + Mzz * g_z))
+                    v_curr[si, sj] += src_val * (-(Mrt * g_r + Mtz * g_z))
                 else:
                     # Explosión isótropa (volcánica): expansión RADIAL uniforme
-                    # → ∇·u ≠ 0, ∇×u ≈ 0. ONDA P dominante y radiación simétrica.
-                    # El nodo central no tiene dirección radial, se omite.
+                    # → ∇·u ≠ 0, ∇×u ≈ 0. ONDA P dominante, radiación simétrica y
+                    # SIN componente transversal (no excita SH). El nodo central
+                    # no tiene dirección radial, se omite.
                     if dist > 1e-6:
                         angle = math.atan2(dj, di)
-                        ux_curr[si, sj] += src_val * weight * 1.0 * math.cos(angle)
-                        uz_curr[si, sj] += src_val * weight * 1.0 * math.sin(angle)
+                        ux_curr[si, sj] += src_val * weight * math.cos(angle)
+                        uz_curr[si, sj] += src_val * weight * math.sin(angle)
 
-        # ── Actualización FDM (kernel compilado con Numba) ──
-        # Stencil de 2º orden + derivada cruzada de 4 puntos, superficie libre en
-        # z=0 y sponge de Cerjan aplicado a next y curr. Ver _fdm_step.
+        # ── Actualización FDM (kernels compilados con Numba, en paralelo) ──
+        # P-SV: stencil 2º orden + derivada cruzada + superficie libre + sponge.
+        # SH: onda escalar transversal (Vs, ρ), misma malla/sponge/superficie.
         _fdm_step(ux_prev, ux_curr, ux_next, uz_prev, uz_curr, uz_next, abs_coeff,
                   nx, nz, dx2, dt2, c1, c2, c3)
+        _sh_step(v_prev, v_curr, v_next, abs_coeff, nx, nz, dx2, dt2, cs2)
 
         # Intercambio de buffers temporales
         ux_prev, ux_curr, ux_next = ux_curr, ux_next, ux_prev
         uz_prev, uz_curr, uz_next = uz_curr, uz_next, uz_prev
+        v_prev, v_curr, v_next = v_curr, v_next, v_prev
 
-        # Registro en el receptor
-        ux_val = float(ux_curr[rec_x, rec_z])
-        uz_val = float(uz_curr[rec_x, rec_z])
-        rec_up_z = max(1, rec_z - 2)
-        rec_down_z = min(nz - 2, rec_z + 2)
-        transverse_val = float((ux_curr[rec_x, rec_up_z] - ux_curr[rec_x, rec_down_z]) / (4 * dx) * dx * 0.5)
+        # ── Registro triaxial en el receptor ──
+        # Componentes en el marco del corte: radial (R = ux), transversal
+        # (T = v, del SH) y vertical (Z = uz). Se rotan R y T a Norte y Este
+        # según el acimut de la estación (medido desde el norte, horario):
+        #   Norte = R·cos(az) − T·sin(az)
+        #   Este  = R·sin(az) + T·cos(az)
+        # Convención: radial positiva alejándose de la fuente; transversal
+        # positiva 90° en sentido horario respecto a la radial.
+        radial_val = float(ux_curr[rec_x, rec_z])
+        transverse_val = float(v_curr[rec_x, rec_z])
+        vertical_val = float(uz_curr[rec_x, rec_z])
+        north_val = radial_val * cos_az - transverse_val * sin_az
+        east_val = radial_val * sin_az + transverse_val * cos_az
 
         time_arr.append(t)
-        north_arr.append(transverse_val)
-        east_arr.append(ux_val)
-        vert_arr.append(uz_val)
+        north_arr.append(north_val)
+        east_arr.append(east_val)
+        vert_arr.append(vertical_val)
+        radial_arr.append(radial_val)
 
         if step % snapshot_interval == 0:
             snapshot_count += 1
@@ -599,7 +802,9 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     wavelet_duration = 3.0 / f0
     s_search_start_time = p_arrival + wavelet_duration
     s_search_start_idx = max(10, int(s_search_start_time / dt))
-    s_arrival_det = detect_arrival(np.array(east_arr), dt, 0.05, start_idx=s_search_start_idx)
+    # Se detecta sobre la radial (en el plano), independiente de la rotación a
+    # N/E; la S llega clara en la componente radial P-SV.
+    s_arrival_det = detect_arrival(np.array(radial_arr), dt, 0.05, start_idx=s_search_start_idx)
     if s_arrival_det > 0:
         # Validate: 15% tolerance against theoretical
         s_rel_err = abs(s_arrival_det - s_theoretical) / s_theoretical
@@ -621,6 +826,26 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     f_max = 2.5 * f0
     lambda_min = vs / f_max
     points_per_wavelength = lambda_min / dx
+
+    # ── Tiempo del primer rebote de borde al receptor (geometría real) ──
+    # Se calcula por el método de la imagen especular: la reflexión en un borde
+    # exterior (izquierdo, derecho, inferior) equivale a una fuente imagen al otro
+    # lado del borde (tomado en el límite INTERNO de la zona absorbente, que es
+    # donde la onda aún tiene energía). El primer rebote es el mínimo sobre los
+    # tres bordes; P usa Vp y S usa Vs. La superficie libre (z=0) no cuenta como
+    # rebote artificial (es una condición física real).
+    right_edge = nx - 1 - abs_thick
+    left_edge = abs_thick
+    bottom_edge = nz - 1 - abs_thick
+    _edges = (
+        (2 * right_edge - src_x, src_z),
+        (2 * left_edge - src_x, src_z),
+        (src_x, 2 * bottom_edge - src_z),
+    )
+    _bounce_dists = [math.hypot((ix - rec_x) * dx, (iz - rec_z) * dx) for ix, iz in _edges]
+    _min_bounce = min(_bounce_dists) if _bounce_dists else 0.0
+    first_bounce_p = _min_bounce / vp + t0
+    first_bounce_s = _min_bounce / vs + t0
 
     # Submuestreo para limitar tamaño de respuesta
     max_points = 3000
@@ -647,6 +872,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             nx=nx, nz=nz, dx=dx, dt=dt, dtAdjusted=dt_adjusted, dxAdjusted=dx_adjusted,
             totalSteps=total_steps, receiverX=rec_x, receiverZ=rec_z,
             sourceX=src_x, sourceZ=src_z, pointsPerWavelength=points_per_wavelength,
+            firstBounceP=first_bounce_p, firstBounceS=first_bounce_s,
         ),
         pArrival=p_arrival,
         sArrival=s_arrival,

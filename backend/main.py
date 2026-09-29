@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
@@ -136,6 +137,27 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": f"Error interno del servidor: {exc}"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+# Errores de validación de parámetros (fuera de rango o combinación física
+# inválida): FastAPI devuelve 422 con un cuerpo genérico en inglés. Aquí lo
+# traducimos a un mensaje claro en español para que el frontend lo muestre. El
+# backend NUNCA confía en la validación del navegador: valida siempre lo mismo.
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errores = []
+    for err in exc.errors():
+        campo = err.get("loc", ["?"])[-1]
+        msg = err.get("msg", "valor inválido")
+        # Los mensajes de nuestros validadores (ValueError) ya vienen en español.
+        msg = msg.replace("Value error, ", "")
+        errores.append(f"{campo}: {msg}")
+    detalle = "Parámetros inválidos. " + " · ".join(errores)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": detalle},
         headers={"Access-Control-Allow-Origin": "*"},
     )
 
