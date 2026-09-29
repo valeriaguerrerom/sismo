@@ -21,4 +21,5 @@ from core.fdm import (  # noqa: F401
     detect_arrival,
     run_fdm,
     run_fdm_full,
+    warmup_fdm,
 )

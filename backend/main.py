@@ -29,7 +29,7 @@ from supabase import create_client, Client
 
 from simulation import (
     SimulationParams, SimulationResult, SimulationFullResult,
-    run_fdm, run_fdm_full, compute_lame,
+    run_fdm, run_fdm_full, compute_lame, warmup_fdm,
 )
 from api.travel_times import router as travel_times_router
 from api.scene import router as scene_router
@@ -92,6 +92,18 @@ async def lifespan(app: FastAPI):
             supabase = None
     else:
         print("[API] WARNING: Supabase not configured")
+
+    # Precompila el kernel Numba del FDM AL ARRANCAR (no en la 1ª petición de un
+    # usuario). Se ejecuta en un hilo para no bloquear el loop async del startup.
+    try:
+        import asyncio
+        elapsed = await asyncio.to_thread(warmup_fdm)
+        if elapsed > 0:
+            print(f"[API] Numba FDM kernel precompilado en {elapsed:.1f}s")
+        else:
+            print("[API] Numba no disponible o ya precompilado (motor NumPy de respaldo)")
+    except Exception as e:
+        print(f"[API] WARNING: warmup del kernel FDM fallo: {e}")
     yield
 
 
