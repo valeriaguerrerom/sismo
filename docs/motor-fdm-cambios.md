@@ -71,6 +71,25 @@ dependencia obligatoria). En despliegue (Railway, `python:3.11-slim`) `numba`
 se instala desde `requirements.txt` con las ruedas manylinux (incluye llvmlite,
 sin dependencias del sistema adicionales).
 
+**Kernel paralelo (`prange`).** El bucle externo sobre X usa `numba.prange`
+(`parallel=True`): cada índice `i` escribe una columna distinta y solo lee
+vecinos (i±1), sin condición de carrera. En el dominio grande (820×700) esto
+acelera ~7× frente al kernel serial en máquinas multinúcleo. Es lo que mantiene
+el cómputo dentro del presupuesto en el stack de producción (ver más abajo);
+sin él, en Python 3.11 el motor serial tardaba ~16 s (fuera del límite).
+
+**Verificación en el stack de producción.** Se creó un entorno con las versiones
+exactas del despliegue (Python 3.11.4, NumPy 1.26.4, Numba 0.60.0, Pydantic
+2.9.0) y se corrieron las simulaciones por defecto y las pruebas del motor. Las
+trazas coinciden con el entorno de desarrollo (P y S idénticas al milisegundo,
+misma amplitud máxima) y el cómputo con el kernel paralelo es de ~3 s por
+simulación (tectónica y volcánica), holgadamente bajo 15 s.
+
+**Compilación al arrancar.** El kernel se precompila en el evento de arranque de
+FastAPI (`lifespan`), en un hilo aparte, así la primera petición de un usuario
+ya no paga el costo de compilación JIT (~2 s). El arranque del servidor añade
+ese tiempo una sola vez; después la primera simulación corre a plena velocidad.
+
 ### Dominio grande + geometría simétrica (primer rebote > 8 s)
 
 Con el bucle ~5× más rápido, el dominio se agranda mucho manteniendo el cómputo
@@ -81,8 +100,14 @@ lo más tardío posible.
 
 | Preset    | dx (m) | Malla (nx × nz) | Dominio     | nodos/λ | dt (s) | dur | cómputo (+~80 fotogramas) |
 |-----------|--------|-----------------|-------------|---------|--------|-----|---------------------------|
-| Tectónico | 22     | 820 × 700       | 18.0×15.4 km | 10.4   | 0.004  | 13 s | ~9–10 s                  |
-| Volcánico | 30     | 820 × 700       | 24.6×21.0 km | 11.3   | 0.006  | 13 s | ~6 s                     |
+| Tectónico | 22     | 820 × 700       | 18.0×15.4 km | 10.4   | 0.004  | 8 s  | ~3 s (kernel paralelo)    |
+| Volcánico | 30     | 820 × 700       | 24.6×21.0 km | 11.3   | 0.006  | 13 s | ~3 s (kernel paralelo)    |
+
+La duración por defecto del tectónico es **8 s**: termina antes del primer rebote
+de borde de la S (8.40 s), dejando margen tras la P, la S y la superficial. El
+volcánico usa 13 s porque su primer rebote llega a 13.35 s. El control de
+duración permite pedir más, y el panel avisa cuando la duración supera el primer
+rebote (aparecerían reflexiones artificiales al final del registro).
 
 **Tiempos del primer rebote de borde al receptor** (borde derecho, el más
 cercano por la geometría):
