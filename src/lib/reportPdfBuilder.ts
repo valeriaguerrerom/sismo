@@ -104,23 +104,19 @@ function drawTrace(
   const px = (t: number) => x + ((t - tMin) / tSpan) * w;
   const py = (v: number) => y + h / 2 - (v / vMax) * (h / 2) * 0.9;
 
-  // Marcadores de arribo: ambos en GRIS, diferenciados por el patrón de línea
-  // (P punteada fina, S guiones largos) y su etiqueta, no por color.
-  const marker = (t: number | undefined, dash: number[], letter: string) => {
+  // Líneas verticales de arribo: ambas en GRIS, diferenciadas por el patrón de
+  // línea (P punteada fina, S guiones largos). Las LETRAS se dibujan al final,
+  // arriba y sobre un chip blanco, para que la curva no las tape (B1).
+  const markerLine = (t: number | undefined, dash: number[]) => {
     if (t === undefined || t < tMin || t > tMax) return;
     doc.setDrawColor(...COLORS.muted);
     doc.setLineWidth(0.3);
     doc.setLineDashPattern(dash, 0);
     doc.line(px(t), y, px(t), y + h);
     doc.setLineDashPattern([], 0);
-    doc.setFontSize(6.5);
-    doc.setTextColor(...COLORS.muted);
-    doc.setFont(FONT, 'bold');
-    doc.text(letter, px(t) + 0.6, y + h - 1.5);
-    doc.setFont(FONT, 'normal');
   };
-  marker(pArrival, [0.6, 0.6], 'P');
-  marker(sArrival, [1.6, 0.8], 'S');
+  markerLine(pArrival, [0.6, 0.6]);
+  markerLine(sArrival, [1.6, 0.8]);
   // Marca de reflexiones de borde (terracota tenue): lo que hay a la derecha
   // es artificial (rebotes de los límites de la malla), no señal real.
   if (reflectionsAfter !== undefined && reflectionsAfter > tMin && reflectionsAfter <= tMax) {
@@ -143,10 +139,30 @@ function drawTrace(
     doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
   }
 
-  // Etiqueta
+  // Letras P/S encima de la traza, con chip blanco, para que no se pierdan
+  // bajo la curva (B1). Se sitúan en el borde superior del marco.
+  const markerLabel = (t: number | undefined, letter: string) => {
+    if (t === undefined || t < tMin || t > tMax) return;
+    const lx = px(t) + 0.4;
+    doc.setFontSize(6.5);
+    doc.setFont(FONT, 'bold');
+    const tw = doc.getTextWidth(letter);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(lx - 0.4, y + 0.6, tw + 0.8, 3, 'F');
+    doc.setTextColor(...COLORS.muted);
+    doc.text(letter, lx, y + 3);
+    doc.setFont(FONT, 'normal');
+  };
+  markerLabel(pArrival, 'P');
+  markerLabel(sArrival, 'S');
+
+  // Etiqueta de la componente (esquina superior izquierda), sobre chip blanco.
   doc.setFontSize(8);
-  doc.setTextColor(...color);
   doc.setFont(FONT, 'bold');
+  const lw = doc.getTextWidth(label);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(x + 1.2, y + 0.6, lw + 1, 3.6, 'F');
+  doc.setTextColor(...color);
   doc.text(label, x + 1.5, y + 3.5);
   doc.setFont(FONT, 'normal');
   doc.setTextColor(...COLORS.muted);
@@ -189,13 +205,18 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   doc.setTextColor(...COLORS.text);
   doc.setFont(FONT, 'bold');
   doc.setFontSize(13);
-  doc.text(title, MARGIN, y);
-  y += 6;
+  // El título es texto del usuario: puede ser largo, así que se envuelve al
+  // ancho de contenido y nunca se corta (B1).
+  const titleLines = doc.splitTextToSize(title, CONTENT_W) as string[];
+  doc.text(titleLines, MARGIN, y);
+  y += titleLines.length * 5.4 + 0.6;
   doc.setFont(FONT, 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...COLORS.muted);
-  doc.text(`Generado: ${fmtDate(createdAt)}${author ? `  ·  Autor: ${author}` : ''}`, MARGIN, y);
-  y += 8;
+  const genLine = `Generado: ${fmtDate(createdAt)}${author ? `  ·  Autor: ${author}` : ''}`;
+  const genLines = doc.splitTextToSize(genLine, CONTENT_W) as string[];
+  doc.text(genLines, MARGIN, y);
+  y += genLines.length * 3.6 + 5;
 
   // ── Parámetros ──
   // Dibuja un título de sección en mayúscula/minúscula (sentence case), no en
@@ -310,8 +331,9 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     if (real && results.realLabel) {
       doc.setFontSize(8);
       doc.setTextColor(...COLORS.muted);
-      doc.text(results.realLabel, MARGIN, y);
-      y += 5;
+      const rl = doc.splitTextToSize(results.realLabel, CONTENT_W) as string[];
+      doc.text(rl, MARGIN, y);
+      y += rl.length * 3.6 + 2;
     }
     const wd = results.waveData;
     const traceH = 24;
@@ -365,54 +387,78 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const winNote = (win.start > (wd.time[0] ?? 0) + 0.1 || win.end < (wd.time[wd.time.length - 1] ?? 0) - 0.1)
       ? ` Ventana ajustada al evento (${win.start.toFixed(0)}–${win.end.toFixed(0)} s).`
       : '';
-    doc.text(
-      real
-        ? `Registro real de la red del SGC/OVSP, señal decimada. ${scaleNote}${winNote}`
-        : `Líneas grises: arribo P (punteada) y S (guiones). ${scaleNote} Señal no calibrada.${winNote}`,
-      MARGIN, y);
-    y += 7;
+    const seisNote = real
+      ? `Registro real de la red del SGC/OVSP, señal decimada. ${scaleNote}${winNote}`
+      : `Líneas grises: arribo P (punteada) y S (guiones). ${scaleNote} Señal no calibrada.${winNote}`;
+    const seisLines = doc.splitTextToSize(seisNote, CONTENT_W) as string[];
+    doc.text(seisLines, MARGIN, y);
+    y += seisLines.length * 3.2 + 4;
   }
 
   // ── Mapa de calor del subsuelo (tres fotogramas ordenados) ──
   if (sec.crossSection && results.crossSection && results.crossSection.frames.length) {
     const cs = results.crossSection;
-    // Los tres fotogramas caben mejor juntos: se dibujan a media anchura de
-    // contenido para que entren dos por fila o uno por bloque segun el alto.
-    // Los tres fotogramas se dibujan en UNA fila (P, S, después) para leer la
-    // secuencia de un vistazo; si no caben tres, se reparten y centran.
     const frames = cs.frames;
-    // Ancho de imagen: tres columnas en una fila (A4). Gap fijo entre marcos.
     const gapX = 4;
-    const cols = Math.min(3, Math.max(1, frames.length));
-    const imgW = (CONTENT_W - gapX * (cols - 1)) / cols;
-    // Alto de la primera imagen (todos los fotogramas comparten proporción).
-    const firstProps = doc.getImageProperties(frames[0].dataUrl);
-    const firstH = imgW * (firstProps.height / firstProps.width);
-    // El título debe quedarse junto a: línea "Componente:" (5) + rótulos (5) +
-    // la fila de imágenes (firstH). Así no queda huérfano (A3).
-    section('Mapa de calor del subsuelo', 5 + 5 + firstH + 4);
+    // Disposición '2plus1' (por defecto con 3 fotogramas): dos arriba y uno
+    // centrado abajo, más grande. Así los rótulos de los ejes se leen a ≥7 pt
+    // en la página (B1). Con menos de 3 fotogramas, una fila centrada.
+    const use2plus1 = (cs.layout ?? (frames.length === 3 ? '2plus1' : 'row')) === '2plus1' && frames.length === 3;
+
+    // Alto del primer fotograma para el cálculo de huérfanos (A3).
+    const firstProps0 = doc.getImageProperties(frames[0].dataUrl);
+    const topW0 = use2plus1 ? (CONTENT_W - gapX) / 2 : (CONTENT_W - gapX * (Math.min(3, frames.length) - 1)) / Math.min(3, frames.length);
+    const firstH0 = topW0 * (firstProps0.height / firstProps0.width);
+    section('Mapa de calor del subsuelo', 5 + 5 + firstH0 + 4);
     // Componente mostrada.
     doc.setFont(FONT, 'normal'); doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
     doc.text(`Componente: ${cs.component}`, MARGIN, y);
     y += 5;
-    // Fila de fotogramas centrada. Si el nº de columnas < 3 (pocos frames),
-    // se centra el bloque para evitar un hueco grande a la derecha (A4).
-    const rowW = cols * imgW + (cols - 1) * gapX;
-    const rowX0 = MARGIN + (CONTENT_W - rowW) / 2;
-    const rowY = y;
-    let rowH = 0;
-    frames.forEach((fr, i) => {
+
+    // Dibuja un fotograma (rótulo + tiempo + imagen) en (cx, ty) con ancho w.
+    // Devuelve el alto total ocupado.
+    const drawFrame = (fr: { time: number; label: string; dataUrl: string }, cx: number, ty: number, w: number): number => {
       const props = doc.getImageProperties(fr.dataUrl);
-      const imgH = imgW * (props.height / props.width);
-      const cx = rowX0 + i * (imgW + gapX);
+      const imgH = w * (props.height / props.width);
       doc.setFont(FONT, 'bold'); doc.setFontSize(7.5); doc.setTextColor(...COLORS.text);
-      doc.text(`${fr.label}`, cx, rowY);
+      const ll = doc.splitTextToSize(fr.label, w) as string[];
+      doc.text(ll, cx, ty);
+      const labelH = ll.length * 3.1;
       doc.setFont(FONT, 'normal'); doc.setTextColor(...COLORS.muted);
-      doc.text(`t = ${fr.time.toFixed(2)} s`, cx, rowY + 3.3);
-      doc.addImage(fr.dataUrl, 'PNG', cx, rowY + 4.5, imgW, imgH);
-      rowH = Math.max(rowH, imgH + 4.5);
-    });
-    y = rowY + rowH + 6;
+      doc.text(`t = ${fr.time.toFixed(2)} s`, cx, ty + labelH + 0.4);
+      doc.addImage(fr.dataUrl, 'PNG', cx, ty + labelH + 1.6, w, imgH);
+      return labelH + 1.6 + imgH;
+    };
+
+    if (use2plus1) {
+      const topW = (CONTENT_W - gapX) / 2;
+      // Fila superior: dos fotogramas.
+      const topH = Math.max(
+        drawFrame(frames[0], MARGIN, y, topW),
+        drawFrame(frames[1], MARGIN + topW + gapX, y, topW),
+      );
+      y += topH + 6;
+      // Fila inferior: un fotograma centrado, más grande (coordinado con
+      // buildCrossSectionFrames que lo rindió con la tipografía adecuada).
+      const botW = 118;
+      const botProps = doc.getImageProperties(frames[2].dataUrl);
+      const botTotalH = (botProps.height / botProps.width) * botW + 6;
+      if (y + botTotalH > 285) { doc.addPage(); y = MARGIN; }
+      const botX = MARGIN + (CONTENT_W - botW) / 2;
+      const bh = drawFrame(frames[2], botX, y, botW);
+      y += bh + 6;
+    } else {
+      const cols = Math.min(3, Math.max(1, frames.length));
+      const imgW = (CONTENT_W - gapX * (cols - 1)) / cols;
+      const rowW = cols * imgW + (cols - 1) * gapX;
+      const rowX0 = MARGIN + (CONTENT_W - rowW) / 2;
+      let rowH = 0;
+      frames.forEach((fr, i) => {
+        const cx = rowX0 + i * (imgW + gapX);
+        rowH = Math.max(rowH, drawFrame(fr, cx, y, imgW));
+      });
+      y += rowH + 6;
+    }
     // Leyenda única de escala (barra de color) + nota de escala global.
     if (y + 16 > 290) { doc.addPage(); y = MARGIN; }
     const barW = 42, barH = 3.2;

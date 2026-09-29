@@ -58,6 +58,12 @@ export interface ParticleMotionData {
 /** Imágenes PNG (data URL) de los tres fotogramas del corte, con su tiempo. */
 export interface CrossSectionData {
   frames: { time: number; label: string; dataUrl: string }[];
+  /**
+   * Disposición en el PDF: '2plus1' dibuja dos fotogramas arriba y uno centrado
+   * abajo (más grande), para que los rótulos se lean a ≥7 pt. Si se omite, el
+   * PDF los reparte en una fila.
+   */
+  layout?: '2plus1' | 'row';
   /** Componente mostrada (magnitud, radial o vertical). */
   component: string;
   /** Nota al pie del corte (misma que en pantalla, con la nota de escala global). */

@@ -49,9 +49,10 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#FAFAF8');
 
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  // Cámara un poco más alta y cercana para llenar el encuadre y dar relieve.
-  camera.position.set(2.15, 1.75, 2.15);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  // Cámara más cercana (FOV menor + menor distancia) para que la trayectoria
+  // llene el encuadre y no quede tanto margen vacío alrededor (B1).
+  camera.position.set(1.85, 1.5, 1.85);
   camera.lookAt(0, 0, 0);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.95));
@@ -118,12 +119,20 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
     return { x: (p.x * 0.5 + 0.5) * sizePx, y: (-p.y * 0.5 + 0.5) * sizePx };
   };
   const labelAt = (v: THREE.Vector3, text: string) => {
-    const { x, y } = project(v);
+    const proj = project(v);
     ctx.font = `600 ${Math.round(sizePx * 0.03)}px Inter, system-ui, sans-serif`;
     const w = ctx.measureText(text).width;
     const padX = sizePx * 0.012, padY = sizePx * 0.009;
-    const bx = x - w / 2 - padX, by = y - Math.round(sizePx * 0.03) / 2 - padY;
     const bw = w + padX * 2, bh = Math.round(sizePx * 0.03) + padY * 2;
+    // Se mantiene la caja de la etiqueta DENTRO del lienzo (con 2 px de aire),
+    // así ningún rótulo (p. ej. "Vertical (Z)" arriba) queda cortado (B1).
+    const margin = 2;
+    let bx = proj.x - bw / 2;
+    let by = proj.y - bh / 2;
+    bx = Math.max(margin, Math.min(sizePx - bw - margin, bx));
+    by = Math.max(margin, Math.min(sizePx - bh - margin, by));
+    const x = bx + bw / 2;
+    const y = by + bh / 2;
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.strokeStyle = '#e7e5e4';
     ctx.lineWidth = 1;

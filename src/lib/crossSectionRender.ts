@@ -254,6 +254,12 @@ export interface CrossSectionRenderOpts {
   widthPx?: number;
   /** Retardo del pico del pulso (t0, s): los frentes parten en t0. */
   sourceDelay?: number;
+  /**
+   * Escala tipográfica extra. En el PDF, donde el fotograma se imprime a pocos
+   * cm, hay que subirla para que el texto llegue a ≥7 pt en la página. El
+   * constructor del PDF la calcula a partir del ancho impreso del fotograma.
+   */
+  fontScale?: number;
 }
 
 /**
@@ -274,6 +280,21 @@ export function renderCrossSectionPng(opts: CrossSectionRenderOpts): string {
     ctx, width: W, height: H, snapshot, gridInfo, fullGrid, vp, vs,
     layer: opts.layer ?? 'mag', scaleMode: opts.scaleMode ?? 'global',
     globalPeak, absThick, sourceDelay: opts.sourceDelay ?? 0,
+    fontScale: opts.fontScale ?? 1,
   });
   return canvas.toDataURL('image/png');
+}
+
+/**
+ * Escala tipográfica para que el texto del corte llegue a ≥ `minPt` puntos
+ * cuando el fotograma se imprime con ancho `imgWidthMm` en el PDF.
+ *
+ * El texto base se dibuja a 13 px lógicos en un lienzo de `canvasW` px; sobre la
+ * página ese lienzo mide `imgWidthMm`. La altura impresa (mm) del texto es
+ * 13·fontScale/1000·imgWidthMm; despejando para `minPt` (7 pt ≈ 2.47 mm).
+ */
+export function fontScaleForPdf(imgWidthMm: number, minPt = 7, canvasW = 1000): number {
+  const minMm = (minPt / 72) * 25.4;
+  const needed = (minMm * canvasW) / (13 * Math.max(imgWidthMm, 1));
+  return Math.max(1, needed);
 }

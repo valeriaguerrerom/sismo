@@ -4,7 +4,7 @@ import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from 
 import { interpretSimulation } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
-import { renderCrossSectionPng, computeGlobalPeak } from '../../lib/crossSectionRender';
+import { renderCrossSectionPng, computeGlobalPeak, fontScaleForPdf } from '../../lib/crossSectionRender';
 import { renderParticleMotionPng } from '../../lib/particleMotionRender';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
@@ -81,17 +81,27 @@ function buildCrossSectionFrames(
   // Escala GLOBAL (mismo criterio que en pantalla): pico de la magnitud sobre
   // todos los fotogramas, para que los residuos tardíos se vean tenues.
   const globalPeak = computeGlobalPeak(snaps, 'mag');
-  const frames = picks.map(p => {
+  // Disposición 2 + 1 en el PDF (dos arriba, uno centrado abajo más grande),
+  // para que los rótulos de los ejes se lean a ≥7 pt en la página impresa. Cada
+  // fotograma se rinde con una escala tipográfica acorde a SU ancho impreso.
+  // Anchos impresos (mm) coordinados con reportPdfBuilder (CONTENT_W = 180).
+  const TOP_MM = (180 - 4) / 2;   // dos arriba con 4 mm de separación
+  const BOTTOM_MM = 118;          // uno abajo, centrado, mayor
+  const layoutMm = [TOP_MM, TOP_MM, BOTTOM_MM];
+  const frames = picks.map((p, i) => {
     const idx = nearest(p.t);
+    const imgMm = layoutMm[i] ?? TOP_MM;
     const dataUrl = renderCrossSectionPng({
       snapshot: snaps[idx], gridInfo: heatmapGrid, fullGrid: result.gridInfo,
       vp: result.params.vp, vs: result.params.vs, layer: 'mag', scaleMode: 'global', globalPeak,
       sourceDelay: result.gridInfo.sourceDelay ?? heatmapGrid.sourceDelay ?? 0,
+      fontScale: fontScaleForPdf(imgMm, 7),
     });
     return { time: snaps[idx].time, label: p.label, dataUrl };
   });
   return {
     frames,
+    layout: '2plus1',
     component: 'Magnitud del movimiento |u| (combina radial y vertical)',
     caption: 'Corte vertical del subsuelo. Muestra el movimiento en el plano vertical (radial y vertical); la componente transversal (SH) se ve en los sismogramas. La zona gris de los bordes es la capa absorbente y no forma parte del modelo. La escala de color es global (igual para todos los fotogramas), así los residuos tardíos se ven tenues.',
   };
