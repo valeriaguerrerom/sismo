@@ -20,7 +20,21 @@ export interface InterpretationInput {
     totalSteps: number;
     dtAdjusted?: boolean;
     dxAdjusted?: boolean;
+    receiverX?: number;
+    sourceX?: number;
+    dx?: number;
+    epicentralDistanceKm?: number;
   };
+}
+
+/** Distancia epicentral (km) desde gridInfo, si hay datos suficientes. */
+function epicentralKm(gridInfo: InterpretationInput['gridInfo']): number | null {
+  if (!gridInfo) return null;
+  if (typeof gridInfo.epicentralDistanceKm === 'number') return gridInfo.epicentralDistanceKm;
+  if (typeof gridInfo.receiverX === 'number' && typeof gridInfo.sourceX === 'number' && typeof gridInfo.dx === 'number') {
+    return (Math.abs(gridInfo.receiverX - gridInfo.sourceX) * gridInfo.dx) / 1000;
+  }
+  return null;
 }
 
 /** Clasifica la profundidad focal según la convención sismológica. */
@@ -41,15 +55,18 @@ export function interpretSimulation(input: InterpretationInput): string {
   text += `El medio se modeló con Vp = ${params.vp} m/s, Vs = ${params.vs} m/s y densidad ${params.density} kg/m³ (Vp/Vs = ${(params.vp / params.vs).toFixed(2)}). `;
   text += `La frecuencia dominante del registro es ${dominantFrequency.toFixed(1)} Hz. `;
 
+  const distKm = epicentralKm(gridInfo);
+  if (distKm !== null) {
+    text += `El registro se tomó en una estación virtual a ${distKm.toFixed(1)} km del epicentro, en superficie. `;
+  }
+
   if (pArrival !== undefined && sArrival !== undefined) {
     text += `La onda P llega a los ${pArrival.toFixed(2)} s y la onda S a los ${sArrival.toFixed(2)} s, con una diferencia S−P de ${(sArrival - pArrival).toFixed(2)} s, proporcional a la distancia hipocentral. `;
   }
 
   text += params.sourceType === 'volcanic'
-    ? 'El mecanismo isótropo (explosivo) produce una radiación más uniforme, típica de sismicidad volcánica somera. '
-    : 'El mecanismo de doble par produce lóbulos de radiación diferenciados entre componentes, típico de fracturas tectónicas. ';
-
-  text += 'La visualización muestra la propagación del campo de ondas con frentes P (rápidos) y S (lentos) expandiéndose desde el hipocentro.';
+    ? 'El mecanismo isótropo (explosivo) produce una radiación más uniforme, típica de sismicidad volcánica somera.'
+    : 'El mecanismo de doble par produce lóbulos de radiación diferenciados entre componentes, típico de fracturas tectónicas.';
 
   if (gridInfo?.dtAdjusted) text += ' ⚠️ dt fue ajustado automáticamente por condición CFL.';
   if (gridInfo?.dxAdjusted) text += ' ⚠️ dx fue aumentado para acomodar la profundidad focal solicitada.';
