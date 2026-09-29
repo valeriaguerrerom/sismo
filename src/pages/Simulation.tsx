@@ -11,7 +11,7 @@ import { WaveChart } from '../components/simulation/WaveChart';
 import { TriaxialPlane } from '../components/simulation/TriaxialPlane';
 import { ProgressBar } from '../components/simulation/ProgressBar';
 import { ParticleMotion } from '../components/simulation/ParticleMotion';
-import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle } from '../lib/icons';
+import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle, Maximize, Minimize } from '../lib/icons';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -51,6 +51,10 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const [progress, setProgress] = useState<SimProgress | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
+  // Modo ampliado: la Visualización pasa a un panel casi a pantalla completa
+  // (sin scroll de la página) y al reducir vuelve a su tamaño normal en la
+  // columna. Es la forma de ver la simulación en grande sin scroll molesto.
+  const [vizExpanded, setVizExpanded] = useState(false);
   // Espejo de `result` para que launchTour (useCallback estable) siempre lea el
   // valor actual sin recrearse ni capturar un valor viejo.
   const resultRef = useRef<SimulationResult | null>(null);
@@ -119,6 +123,16 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // la S en horizontales); 'component' normaliza cada traza contra su propio
   // pico. Por defecto, común.
   const [ampScale, setAmpScale] = useState<'common' | 'component'>('common');
+
+  // En modo ampliado: bloquea el scroll del fondo y cierra con Escape.
+  useEffect(() => {
+    if (!vizExpanded) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setVizExpanded(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [vizExpanded]);
 
   const handleSaveReport = useCallback(async () => {
     if (!supabase || !user || !result) return;
@@ -344,7 +358,17 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           </div>
 
           <div className="flex flex-col gap-4 lg:pr-1">
-            <div data-viz-area data-tour="viz-area" className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
+            {/* Fondo oscuro cuando la Visualización está ampliada (clic para cerrar). */}
+            {vizExpanded && (
+              <div className="fixed inset-0 z-[110] bg-[#1A1A2E]/50" onClick={() => setVizExpanded(false)} />
+            )}
+            <div
+              data-viz-area
+              data-tour="viz-area"
+              className={vizExpanded
+                ? 'fixed inset-2 sm:inset-4 z-[120] bg-white rounded-2xl border border-stone-200/60 shadow-2xl p-4 overflow-y-auto scrollbar-thin'
+                : 'bg-white rounded-xl border border-stone-200/60 shadow-sm p-4'}
+            >
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                 <div>
                   <h2 className="font-bold text-[#1A1A2E]">Visualización</h2>
@@ -382,6 +406,17 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     }`}
                   >
                     <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)">Partícula</Tooltip>
+                  </button>
+                  {/* Ampliar/Reducir: abre la Visualización casi a pantalla
+                      completa (sin scroll de la página) y vuelve al tamaño normal. */}
+                  <button
+                    onClick={() => setVizExpanded(v => !v)}
+                    aria-label={vizExpanded ? 'Reducir' : 'Ampliar'}
+                    className="flex items-center justify-center w-8 h-8 rounded-md text-stone-400 hover:text-[#C4553A] hover:bg-white transition-colors"
+                  >
+                    <Tooltip content={vizExpanded ? 'Reducir la vista' : 'Ampliar a pantalla completa'}>
+                      {vizExpanded ? <Minimize size={14} /> : <Maximize size={14} />}
+                    </Tooltip>
                   </button>
                 </div>
               </div>

@@ -34,6 +34,8 @@ export {
   Database,
   Download,
   BoxArrowUpRight as ExternalLink,
+  ArrowsFullscreen as Maximize,
+  FullscreenExit as Minimize,
   Eye,
   EyeSlash,
   FileEarmarkMusic as FileAudio,
