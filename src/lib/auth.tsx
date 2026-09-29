@@ -37,8 +37,12 @@ export interface UserProfile {
   usage_purpose: string;
   /** true cuando el perfil tiene los datos mínimos (institución y ocupación). */
   profileComplete: boolean;
-  /** Tours guiados ya vistos por el usuario, mapa { modulo: true }. */
-  tours_vistos: Record<string, boolean>;
+  /**
+   * Tours guiados vistos por el usuario. Guarda la VERSIÓN vista de cada
+   * módulo, { modulo: version }. Valores antiguos `true` se tratan como
+   * versión 1. Si el tour cambia (versión mayor), se vuelve a mostrar una vez.
+   */
+  tours_vistos: Record<string, number | boolean>;
   /** Proveedor de inicio de sesión: 'email' o 'google'. */
   provider: string;
   /** Fecha de creación de la cuenta (ISO) o null si no está disponible. */
@@ -87,8 +91,8 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<string | null>;
   /** Cierra el modo recuperación (tras guardar o cancelar). */
   clearRecovery: () => void;
-  /** Marca un tour guiado como visto (persiste en profiles.tours_vistos). */
-  markTourSeen: (module: string) => void;
+  /** Marca un tour como visto guardando su versión (persiste en profiles). */
+  markTourSeen: (module: string, version?: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -107,7 +111,7 @@ const AuthContext = createContext<AuthContextType>({
   sendPasswordReset: async () => 'Auth no disponible',
   updatePassword: async () => 'Auth no disponible',
   clearRecovery: () => {},
-  markTourSeen: () => {},
+  markTourSeen: () => {},  // eslint-disable-line @typescript-eslint/no-unused-vars
 });
 
 export function useAuth() {
@@ -216,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: string; email: string; full_name: string | null; role: string | null;
         institution: string | null; active: boolean | null; occupation: string | null;
         research_area: string | null; city: string | null; country: string | null;
-        usage_purpose: string | null; tours_vistos: Record<string, boolean> | null;
+        usage_purpose: string | null; tours_vistos: Record<string, number | boolean> | null;
         created_at: string | null; data_authorization_at: string | null;
         deactivated_by: string | null;
       };
@@ -414,7 +418,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         country: (saved.country as string) ?? row.country,
         usage_purpose: (saved.usage_purpose as string) ?? row.usage_purpose,
         profileComplete: isProfileComplete(row),
-        tours_vistos: (saved.tours_vistos as Record<string, boolean>) ?? prev?.tours_vistos ?? {},
+        tours_vistos: (saved.tours_vistos as Record<string, number | boolean>) ?? prev?.tours_vistos ?? {},
         provider: prev?.provider ?? 'email',
         created_at: (saved.created_at as string) ?? prev?.created_at ?? null,
         data_authorization_at: (saved.data_authorization_at as string) ?? prev?.data_authorization_at ?? null,
@@ -540,12 +544,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearRecovery = useCallback(() => setRecoveryMode(false), []);
 
-  const markTourSeen = useCallback((module: string) => {
+  const markTourSeen = useCallback((module: string, version = 1) => {
     // Optimista: actualiza el estado local de inmediato para no relanzar el
     // tour, y persiste en segundo plano (best-effort, no bloquea la UI).
     setUser(prev => {
-      if (!prev || prev.tours_vistos?.[module]) return prev;
-      const tours_vistos = { ...prev.tours_vistos, [module]: true };
+      if (!prev) return prev;
+      const seen = prev.tours_vistos?.[module];
+      const seenVer = typeof seen === 'number' ? seen : (seen ? 1 : 0);
+      // Si ya vio esta versión (o una mayor), no reescribir.
+      if (seenVer >= version) return prev;
+      const tours_vistos = { ...prev.tours_vistos, [module]: version };
       if (supabase) {
         withTimeout(
           supabase.from('profiles').update({ tours_vistos }).eq('id', prev.id),

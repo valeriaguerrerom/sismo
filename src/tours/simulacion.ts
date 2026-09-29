@@ -6,6 +6,14 @@
  */
 import type { TourStep } from './useTour';
 
+/**
+ * Versión del tour del Simulador. Súbela cuando cambien los pasos: quien ya
+ * había visto una versión anterior lo verá una vez más automáticamente.
+ * v2: añade escenarios, mecanismo avanzado, dirección/distancia de la estación,
+ * escala de sismogramas, mapa de calor del subsuelo y diálogo del PDF.
+ */
+export const SIMULACION_TOUR_VERSION = 2;
+
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
 export type ResultSectionId = 'metricas' | 'malla' | 'interpretacion';
@@ -23,11 +31,11 @@ interface SimTourControls {
 export function buildSimulacionSteps({ openParam, openResult, hasResult = false }: SimTourControls): TourStep[] {
   const steps: TourStep[] = [
     {
-      element: '[data-tour="params-elasticas"]',
-      onHighlightStarted: () => openParam('elasticas'),
+      element: '[data-tour="params-fuente"]',
+      onHighlightStarted: () => openParam('fuente'),
       popover: {
-        title: 'Variables elásticas',
-        description: 'Ajusta aquí las propiedades del subsuelo.',
+        title: 'Elige un escenario',
+        description: 'Empieza con un escenario listo (andino, Galeras…). Carga todos los valores; luego los puedes cambiar.',
         side: 'right',
         align: 'start',
       },
@@ -36,18 +44,18 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       element: '[data-tour="params-fuente"]',
       onHighlightStarted: () => openParam('fuente'),
       popover: {
-        title: 'Fuente sísmica',
-        description: 'Elige si el sismo es tectónico o volcánico y su magnitud.',
+        title: 'Estación y mecanismo',
+        description: 'Ajusta la distancia y la dirección de la estación. En "Avanzado" defines el mecanismo de la falla (rumbo, buzamiento, deslizamiento).',
         side: 'right',
         align: 'start',
       },
     },
     {
-      element: '[data-tour="params-config"]',
-      onHighlightStarted: () => openParam('config'),
+      element: '[data-tour="params-elasticas"]',
+      onHighlightStarted: () => openParam('elasticas'),
       popover: {
-        title: 'Configuración',
-        description: 'Define la duración, la resolución de la malla y el paso de tiempo de la simulación.',
+        title: 'Propiedades del subsuelo',
+        description: 'Cambia las velocidades y la densidad de la roca. Cada término tiene un ícono de información.',
         side: 'right',
         align: 'start',
       },
@@ -56,19 +64,10 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       element: '[data-tour="btn-generar"]',
       onHighlightStarted: () => openParam('config'),
       popover: {
-        title: 'Generar',
-        description: 'Genera el pseudo-sismograma con estos valores.',
+        title: 'Genera el sismograma',
+        description: 'Pulsa para simular con estos valores. El resultado aparece a la derecha.',
         side: 'top',
         align: 'center',
-      },
-    },
-    {
-      element: '[data-tour="viz-area"]',
-      popover: {
-        title: 'Visualización',
-        description: 'Mira las tres componentes del movimiento o el corte del subsuelo.',
-        side: 'left',
-        align: 'start',
       },
     },
   ];
@@ -78,31 +77,29 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
   if (hasResult) {
     steps.push(
       {
+        element: '[data-tour="viz-area"]',
+        popover: {
+          title: 'Sismogramas',
+          description: 'Las tres componentes (Norte, Este, Vertical). Cambia "Escala de amplitud" para compararlas mejor.',
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="viz-area"]',
+        popover: {
+          title: 'Mapa de calor del subsuelo',
+          description: 'Cambia a esta pestaña para ver la onda propagándose en un corte vertical. Usa reproducir, la capa y la escala global.',
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="sim-metricas"]',
         onHighlightStarted: () => openResult('metricas'),
         popover: {
-          title: 'Métricas del sismo',
-          description: 'Aquí ves la amplitud máxima, la duración, la frecuencia dominante, la relación Vp/Vs y los arribos de las ondas P y S.',
-          side: 'left',
-          align: 'start',
-        },
-      },
-      {
-        element: '[data-tour="sim-malla"]',
-        onHighlightStarted: () => openResult('malla'),
-        popover: {
-          title: 'Malla FDM',
-          description: 'El detalle numérico de la simulación: tamaño de malla, resolución, paso de tiempo y avisos de estabilidad si algún parámetro se ajustó.',
-          side: 'left',
-          align: 'start',
-        },
-      },
-      {
-        element: '[data-tour="sim-interpretacion"]',
-        onHighlightStarted: () => openResult('interpretacion'),
-        popover: {
-          title: 'Interpretación automática',
-          description: 'Un resumen en palabras de lo que muestra tu sismograma: tipo de fuente, profundidad, arribos y mecanismo. Ideal para entender el resultado.',
+          title: 'Métricas e interpretación',
+          description: 'Aquí ves amplitud, arribos P y S, la malla y un resumen en palabras del resultado.',
           side: 'left',
           align: 'start',
         },
@@ -111,7 +108,7 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
         element: '[data-tour="sim-export"]',
         popover: {
           title: 'Exportar',
-          description: 'Descarga tu resultado en CSV (datos), PNG (imagen) o PDF (reporte completo con la interpretación).',
+          description: 'Descarga CSV, PNG o PDF. En el PDF eliges qué incluir, incluido el mapa de calor.',
           side: 'top',
           align: 'center',
         },
