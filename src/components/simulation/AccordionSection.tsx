@@ -49,7 +49,7 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
         data-tour={headerDataTour}
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors"
+        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-stone-50/70 transition-colors"
       >
         <span className="flex items-center gap-1.5 text-sm font-bold text-[#1A1A2E]">
           {icon}
@@ -61,7 +61,11 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
           style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
         />
       </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
+      {/* El cuerpo abierto tiene un tope de alto y scroll interno propio SOLO
+          si su contenido excede la ventana (caso extremo en pantallas muy
+          bajas). En pantallas normales no aparece; evita que scrollee toda la
+          columna y mantiene visibles los encabezados y los botones de abajo. */}
+      {open && <div className="px-4 pb-3 max-h-[calc(100dvh-230px)] overflow-y-auto scrollbar-thin">{children}</div>}
     </div>
   );
 }

@@ -355,12 +355,12 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
         </div>
       </div>
 
-      <div className="max-w-[1440px] mx-auto px-4 pt-4 pb-6">
+      <div className="max-w-[1440px] mx-auto px-4 pt-3 pb-3">
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-4 items-start">
           {/* Columna de parámetros: sticky en desktop, sin recortar contenido.
               Con acordeón exclusivo el contenido es corto; si una sección larga
               excede la altura, hay scroll interno suave (nunca corte). */}
-          <div className="lg:h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+          <div className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
             <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} />
           </div>
 
@@ -691,7 +691,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           {/* Columna de resultados: sticky con altura acotada. El scroll vive
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
-          <div data-tour="results-panel" className="lg:h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+          <div data-tour="results-panel" className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
             <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
           </div>
         </div>

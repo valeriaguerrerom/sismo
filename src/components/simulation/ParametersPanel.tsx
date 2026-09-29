@@ -208,7 +208,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
       </AccordionSection>
 
       <AccordionSection title="Fuente sísmica" dataTour="params-fuente" headerDataTour="params-fuente-h" open={openSections.has('fuente')} onToggle={() => toggle('fuente')}>
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {/* Selector de escenario: carga un preset completo respaldado por
               fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
           <div>
