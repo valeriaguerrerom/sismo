@@ -18,7 +18,7 @@
  *
  * @module components/simulation/ParticleMotion
  */
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
@@ -50,8 +50,14 @@ function prefersReducedMotion(): boolean {
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
+/** Modo de visualización del hodograma (B3). */
+type PmMode = 'full' | 'p' | 's';
+
 export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
+  // Modo: completo, solo P o solo S (B3). En "solo" se recorta a ese tramo y se
+  // reescala para llenar la vista (la escala queda ampliada, se avisa abajo).
+  const [mode, setMode] = useState<PmMode>('full');
   // Datos frescos para el loop de animación sin recrear la escena.
   const dataRef = useRef({ currentTime });
   dataRef.current = { currentTime };
@@ -140,11 +146,34 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     const winEnd = (sArrival > 0 && pArrival > 0)
       ? sArrival + (sArrival - pArrival) + 2.0
       : (time[nAll - 1] || 1);
-    let n = nAll;
-    for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { n = i; break; } }
-    n = Math.max(2, n);
+    let nWin = nAll;
+    for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { nWin = i; break; } }
+    nWin = Math.max(2, nWin);
+
+    // Rango de muestras según el modo (B3):
+    //  - 'full': toda la ventana limpia.
+    //  - 'p'   : solo el tramo P (entre arribo P y arribo S).
+    //  - 's'   : solo el tramo S (desde el arribo S hasta el fin de la ventana).
+    const idxAtOrAfter = (t: number) => {
+      for (let i = 0; i < nAll; i++) { if (time[i] >= t) return i; }
+      return nAll - 1;
+    };
+    let iStart = 0;
+    let iEnd = nWin; // exclusivo
+    if (mode === 'p' && pArrival > 0 && sArrival > pArrival) {
+      iStart = idxAtOrAfter(pArrival);
+      iEnd = Math.min(nWin, idxAtOrAfter(sArrival) + 1);
+    } else if (mode === 's' && sArrival > 0) {
+      iStart = idxAtOrAfter(sArrival);
+      iEnd = nWin;
+    }
+    if (iEnd - iStart < 2) { iStart = 0; iEnd = nWin; } // salvaguarda
+
+    // Escala: en 'solo' se reescala SOLO con el pico de ese tramo, para que el
+    // movimiento (pequeño en la P) llene la vista. La escala queda ampliada,
+    // se avisa en el rótulo inferior.
     let peak = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = iStart; i < iEnd; i++) {
       peak = Math.max(peak, Math.abs(north[i]), Math.abs(east[i]), Math.abs(vertical[i]));
     }
     const s = peak > 0 ? AXIS / peak : 1;
@@ -154,7 +183,7 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     // tramo P (pequeño frente a la S) se vea como una cinta clara, no un punto.
     const positions: number[] = [];
     const colors: number[] = [];
-    for (let i = 0; i < n; i++) {
+    for (let i = iStart; i < iEnd; i++) {
       positions.push(east[i] * s, vertical[i] * s, north[i] * s);
       const c = time[i] < pArrival ? COLOR_REST : time[i] < sArrival ? COLOR_P : COLOR_S;
       colors.push(c.r, c.g, c.b);
@@ -180,18 +209,21 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     );
     scene.add(head);
 
-    const lastT = time[n - 1] || 1;   // fin de la ventana limpia (no de la coda)
+    const nSeg = iEnd - iStart;        // nº de muestras dibujadas
+    const lastT = time[iEnd - 1] || 1; // fin del tramo mostrado
     const reduced = prefersReducedMotion();
 
     // Cuántos SEGMENTOS mostrar según el tiempo actual (la línea "crece"). En
     // Line2 el número de instancias dibujadas se controla con instanceCount de
-    // la geometría (cada instancia es un segmento entre dos muestras).
+    // la geometría (cada instancia es un segmento entre dos muestras). Los
+    // índices se mapean al rango [iStart, iEnd) del modo actual.
     const setDrawCount = (t: number) => {
-      let idx = 0;
-      while (idx < n && time[idx] <= t) idx++;
-      const segs = Math.max(1, Math.min(idx - 1, n - 1));
+      let idx = iStart;
+      while (idx < iEnd && time[idx] <= t) idx++;
+      const local = idx - iStart; // muestras dentro del tramo hasta t
+      const segs = Math.max(1, Math.min(local - 1, nSeg - 1));
       lineGeo.instanceCount = segs;
-      const j = Math.min(n - 1, Math.max(0, idx - 1));
+      const j = Math.min(iEnd - 1, Math.max(iStart, idx - 1));
       head.position.set(east[j] * s, vertical[j] * s, north[j] * s);
     };
     setDrawCount(dataRef.current.currentTime);
@@ -245,12 +277,35 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
       if (labelRenderer.domElement.parentNode) labelRenderer.domElement.parentNode.removeChild(labelRenderer.domElement);
     };
-    // Recrea la escena si cambian los datos o los arribos (nueva simulación).
+    // Recrea la escena si cambian los datos, los arribos (nueva simulación) o
+    // el modo de vista (completo / solo P / solo S).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waveData, pArrival, sArrival]);
+  }, [waveData, pArrival, sArrival, mode]);
+
+  // ¿Hay tramos P/S disponibles para ofrecer los botones? (arribos válidos).
+  const hasP = pArrival > 0 && sArrival > pArrival;
+  const hasS = sArrival > 0;
 
   return (
     <div className="space-y-3">
+      {/* Selector de tramo (B3): completo, solo P o solo S. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-stone-500">
+          <Tooltip content="La P mueve el suelo casi en línea recta, en la dirección en que viaja la onda. La S lo mueve de forma perpendicular. Usa estas opciones para verlas por separado." showIcon>Ver tramo</Tooltip>
+        </span>
+        <div className="flex gap-1">
+          {([['full', 'Completo', true], ['p', 'Solo P', hasP], ['s', 'Solo S', hasS]] as const).map(([m, txt, enabled]) => (
+            <button
+              key={m}
+              onClick={() => enabled && setMode(m)}
+              disabled={!enabled}
+              className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${mode === m ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'} ${!enabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              {txt}
+            </button>
+          ))}
+        </div>
+      </div>
       <div
         ref={mountRef}
         className="relative w-full h-[clamp(300px,50vh,480px)] rounded-xl border border-stone-200/60 shadow-sm overflow-hidden bg-[#FAFAF8]"
@@ -264,6 +319,11 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
           <Tooltip content="Gira la vista arrastrando con el mouse. En pausa, la escena rota sola despacio para que percibas la forma 3D (se desactiva si tu sistema pide menos movimiento).">Cómo se ve</Tooltip>
         </span>
       </div>
+      {mode !== 'full' && (
+        <p className="text-[11px] text-[#C4553A] leading-snug px-1">
+          Vista ampliada del tramo {mode === 'p' ? 'de la onda P' : 'de la onda S'}: la escala está aumentada para que el movimiento llene la vista, no es comparable con la del modo completo.
+        </p>
+      )}
       <p className="text-[13px] text-stone-500 leading-snug">
         La onda P mueve el suelo en la dirección de propagación; la S, de forma perpendicular.
       </p>
