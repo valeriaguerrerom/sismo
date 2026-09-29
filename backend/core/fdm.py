@@ -174,6 +174,7 @@ class GridInfo(BaseModel):
     pointsPerWavelength: float
     firstBounceP: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda P (s)")
     firstBounceS: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda S (s)")
+    sourceDelay: float = Field(default=0.0, description="Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes teóricos parten en t0.")
 
 
 class WaveData(BaseModel):
@@ -919,6 +920,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             totalSteps=total_steps, receiverX=rec_x, receiverZ=rec_z,
             sourceX=src_x, sourceZ=src_z, pointsPerWavelength=points_per_wavelength,
             firstBounceP=first_bounce_p, firstBounceS=first_bounce_s,
+            sourceDelay=t0,
         ),
         pArrival=p_arrival,
         sArrival=s_arrival,
@@ -935,20 +937,25 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
 class SnapshotFrame(BaseModel):
     """Un frame del campo de ondas submuestreado para el corte del subsuelo.
 
-    Cada componente se cuantiza a 8 bits (int8 con signo) usando una escala
-    GLOBAL de toda la simulación (``snapshotScale``): valor_real ≈ byte/127 ·
-    escala. Así los residuos tardíos se ven tenues (no se amplifican por
-    fotograma) y la respuesta pesa mucho menos. La magnitud |u| se calcula en
-    el navegador a partir de ``ux`` y ``uz``.
+    Cada componente se cuantiza a 8 bits (int8 con signo) usando la escala
+    PROPIA de ese fotograma (``scale``): valor_real ≈ byte/127 · scale. Al
+    cuantizar cada fotograma contra su propio máximo se aprovecha todo el rango
+    [-127, 127] incluso en los residuos tardíos (débiles), lo que elimina el
+    "escalonado" (bloques de color) que producía una única escala global. El
+    navegador recompone la escala de color global a partir de estos factores,
+    así que el aspecto en modo "global" no cambia. La magnitud |u| se calcula
+    en el navegador a partir de ``ux`` y ``uz``.
 
     Attributes:
         time: Instante de tiempo del frame (s).
         ux: Componente radial (int8 en base64), índice k = i·nz + j.
         uz: Componente vertical (int8 en base64), mismo layout.
+        scale: Factor de escala propio del fotograma (máx |ux|,|uz| del frame).
     """
     time: float
     ux: str
     uz: str
+    scale: float
 
 
 class SnapshotGrid(BaseModel):
@@ -1007,7 +1014,7 @@ def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullRe
     base = run_fdm(params, on_progress=on_progress, snapshot_sink=sink)
 
     raw_frames = sink.get("frames", [])
-    # Escala global: máximo |ux|,|uz| sobre TODOS los fotogramas.
+    # Escala global (solo referencia): máximo |ux|,|uz| sobre TODOS los fotogramas.
     global_max = 1e-30
     for fr in raw_frames:
         m1 = float(np.max(np.abs(fr["ux"]))) if fr["ux"].size else 0.0
@@ -1017,15 +1024,21 @@ def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullRe
         if m2 > global_max:
             global_max = m2
 
-    def _quant(a: np.ndarray) -> str:
-        # valor → int8 en [-127, 127] con la escala global; base64.
-        q = np.clip(np.round(a / global_max * 127.0), -127, 127).astype(np.int8)
+    def _quant(a: np.ndarray, frame_scale: float) -> str:
+        # valor → int8 en [-127, 127] con la escala PROPIA del fotograma; base64.
+        q = np.clip(np.round(a / frame_scale * 127.0), -127, 127).astype(np.int8)
         return base64.b64encode(q.tobytes()).decode("ascii")
 
     frames_out: list[SnapshotFrame] = []
     for fr in raw_frames:
+        # Escala propia del fotograma: máx |ux|,|uz| en ESE frame. Al usar todo
+        # el rango int8 por fotograma, los residuos tardíos no se "escalonan".
+        m1 = float(np.max(np.abs(fr["ux"]))) if fr["ux"].size else 0.0
+        m2 = float(np.max(np.abs(fr["uz"]))) if fr["uz"].size else 0.0
+        frame_scale = max(m1, m2, 1e-30)
         frames_out.append(SnapshotFrame(
-            time=fr["time"], ux=_quant(fr["ux"]), uz=_quant(fr["uz"]),
+            time=fr["time"], ux=_quant(fr["ux"], frame_scale),
+            uz=_quant(fr["uz"], frame_scale), scale=frame_scale,
         ))
 
     grid = SnapshotGrid(

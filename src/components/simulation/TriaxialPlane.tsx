@@ -76,6 +76,7 @@ export function TriaxialPlane({
     drawCrossSection({
       ctx, width: canvas.width, height: canvas.height,
       snapshot: snap, gridInfo, fullGrid, vp, vs, layer, scaleMode, globalPeak, absThick,
+      sourceDelay: fullGrid.sourceDelay ?? gridInfo.sourceDelay ?? 0,
     });
   }, [snapshots, gridInfo, fullGrid, vp, vs, layer, scaleMode, globalPeak, absThick]);
 

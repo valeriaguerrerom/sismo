@@ -361,3 +361,32 @@ frentes que aparecen además de la P y la S directas son:
 En resumen: la banda horizontal intermedia es física (superficie libre) y los
 arcos tenues del borde al final son el residuo artificial esperable del sponge,
 ahora correctamente atenuado en la visualización.
+
+## 7. Cuantización por fotograma y arranque de los frentes en t0
+
+Se refinó la transmisión y el dibujo del corte del subsuelo (mapa de calor):
+
+- **Cuantización por fotograma.** Antes, los fotogramas del campo se cuantizaban
+  a int8 con una única escala global (el máximo de toda la simulación). Los
+  fotogramas tardíos, con amplitudes mucho menores que el pico, usaban solo unos
+  pocos niveles del rango [-127, 127], lo que producía un **escalonado** visible
+  (bloques de color) en los residuos. Ahora cada fotograma se cuantiza contra su
+  **propio máximo** (`SnapshotFrame.scale`), aprovechando todo el rango incluso
+  cuando la energía es débil. El navegador reconstruye el valor real con la
+  escala de cada fotograma y **recompone la escala de color global** a partir de
+  esos valores, así que el modo "global" se ve igual, pero sin escalonado.
+
+- **Interpolación bilineal.** El campo submuestreado se dibuja escalado con
+  `imageSmoothingEnabled` en calidad alta (interpolación bilineal), de modo que
+  no se ven bloques al ampliar el fotograma al tamaño del lienzo.
+
+- **Frentes teóricos desde t0.** Los círculos de los frentes P y S se dibujaban
+  con radio V·t, pero la energía sale de la fuente cuando el **pulso de Ricker
+  alcanza su pico**, en t0 = 1.5/f0 (≈ 0.43 s para tectónica, ≈ 0.75 s para
+  volcánica). Se expone `gridInfo.sourceDelay = t0` y el radio pasa a ser
+  **V·(t − t0)**, con lo que los frentes teóricos dejan de ir adelantados
+  respecto al frente real del campo.
+
+- **Tipografía del corte ≥ 13 px.** Los números de los ejes, los rótulos de los
+  ejes y las etiquetas "Superficie libre", "Fuente" y "Estación" se dibujan a un
+  mínimo de 13 px, tanto en pantalla como en el PDF (mismo renderizador).

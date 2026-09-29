@@ -93,6 +93,8 @@ export interface GridInfo {
   /** Tiempo del primer rebote de borde al receptor (s), calculado por el backend. */
   firstBounceP?: number;
   firstBounceS?: number;
+  /** Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes teóricos parten en t0. */
+  sourceDelay?: number;
 }
 
 /** Resultado completo de una simulación FDM con sismogramas y métricas. */

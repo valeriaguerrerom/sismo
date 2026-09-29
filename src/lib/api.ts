@@ -148,7 +148,7 @@ export async function fetchSimulation(params: import('./types').SimulationParams
 }
 
 /** Frame del corte tal como llega del backend (ux/uz en base64 int8). */
-interface SnapshotFrameDTO { time: number; ux: string; uz: string }
+interface SnapshotFrameDTO { time: number; ux: string; uz: string; scale: number }
 /** Grid submuestreado de los snapshots (posiciones ya reescaladas). */
 interface SnapshotGridDTO {
   nx: number; nz: number;
@@ -170,7 +170,7 @@ interface SimulateFullDTO {
   snapshotCount: number;
   snapshots: SnapshotFrameDTO[];
   snapshotGrid: SnapshotGridDTO;
-  /** Escala global para reconstruir el valor real: byte/127 · snapshotScale. */
+  /** Escala global de referencia (máx |u| sobre todos los fotogramas). */
   snapshotScale: number;
 }
 
@@ -184,8 +184,11 @@ function decodeInt8(b64: string): Int8Array {
 
 /**
  * Reconstruye un frame del corte a partir de ux/uz cuantizados (int8) y la
- * escala global. Devuelve un Float32Array con el layout [Ux | Uz | |u|] que
- * espera el renderizador (|u| se calcula aquí, no viaja por la red).
+ * escala PROPIA del fotograma. Devuelve un Float32Array con el layout
+ * [Ux | Uz | |u|] que espera el renderizador (|u| se calcula aquí, no viaja
+ * por la red). Como cada fotograma trae su propia escala, los valores reales
+ * quedan reconstruidos sin escalonado; el renderizador recompone la escala de
+ * color global a partir de estos valores.
  */
 function decodeFrame(ux64: string, uz64: string, scale: number): Float32Array {
   const ux = decodeInt8(ux64);
@@ -227,12 +230,14 @@ export async function fetchSimulationFull(
   });
 
   const sg = dto.snapshotGrid;
-  const scale = dto.snapshotScale ?? 1;
+  // Cada fotograma trae su propia escala (cuantización por fotograma). Si un
+  // backend antiguo no la envía, se cae a la escala global de respaldo.
+  const fallbackScale = dto.snapshotScale ?? 1;
   const snapshots: import('./types').WavefieldSnapshot[] = dto.snapshots.map(s => ({
     time: s.time,
     nx: sg.nx,
     nz: sg.nz,
-    field: decodeFrame(s.ux, s.uz, scale),
+    field: decodeFrame(s.ux, s.uz, s.scale ?? fallbackScale),
   }));
 
   // El backend serializa los Lamé como `lambda_` (palabra reservada en Python).

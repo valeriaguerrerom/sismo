@@ -68,6 +68,12 @@ export interface CrossSectionDrawOpts {
   absThick?: number;
   /** Escala tipográfica extra (para el PDF de alta resolución). */
   fontScale?: number;
+  /**
+   * Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes
+   * teóricos empiezan a expandirse desde t0 (no desde 0), porque la energía
+   * sale de la fuente cuando el pulso alcanza su máximo. Radio = V·(t − t0).
+   */
+  sourceDelay?: number;
 }
 
 /**
@@ -82,13 +88,15 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   const domainHkm = (fullGrid.nz * fullGrid.dx) / 1000;
 
   const scale = (W / 1000) * (opts.fontScale ?? 1);
-  const fs = (px: number) => Math.max(12, px) * (W / 1000) * (opts.fontScale ?? 1);
+  // Piso de 13px: todo el texto del corte (ejes, etiquetas, "Superficie libre",
+  // "Fuente", "Estación") se dibuja a ≥13px, en pantalla y en el PDF.
+  const fs = (px: number) => Math.max(13, px) * (W / 1000) * (opts.fontScale ?? 1);
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#FAFAF8';
   ctx.fillRect(0, 0, W, H);
 
   // Márgenes (dejan sitio a los ejes y etiquetas ≥12px).
-  const mL = 74 * scale, mR = 18 * scale, mT = 30 * scale, mB = 52 * scale;
+  const mL = 74 * scale, mR = 18 * scale, mT = 30 * scale, mB = 58 * scale;
   const availW = W - mL - mR, availH = H - mT - mB;
   // Proporción real: misma escala km/px en ambos ejes.
   const kmPerPx = Math.max(domainWkm / availW, domainHkm / availH);
@@ -145,8 +153,12 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   const sx = x0 + srcFx * plotW, sz = y0 + srcFz * plotH;
   const rx = x0 + recFx * plotW, rz = y0 + recFz * plotH;
 
-  // Frentes teóricos P y S, RECORTADOS al rectángulo del dominio.
+  // Frentes teóricos P y S, RECORTADOS al rectángulo del dominio. El frente
+  // parte del instante en que el pulso de la fuente alcanza su pico (t0), no
+  // de t=0: radio = V·(t − t0). Antes de t0 no hay frente (energía aún no sale).
   const t = snapshot.time;
+  const t0 = opts.sourceDelay ?? 0;
+  const tEff = Math.max(0, t - t0);
   ctx.save();
   ctx.beginPath(); ctx.rect(x0, y0, plotW, plotH); ctx.clip();
   const front = (radiusKm: number, letter: string) => {
@@ -157,11 +169,11 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
     ctx.beginPath(); ctx.arc(sx, sz, rpx, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
     const lx = sx + rpx * 0.7, ly = sz - rpx * 0.7;
     if (lx > x0 && lx < x0 + plotW && ly > y0 && ly < y0 + plotH) {
-      ctx.fillStyle = '#57534E'; ctx.font = `bold ${fs(12)}px sans-serif`; ctx.fillText(letter, lx, ly);
+      ctx.fillStyle = '#57534E'; ctx.font = `bold ${fs(13)}px sans-serif`; ctx.fillText(letter, lx, ly);
     }
   };
-  front(vs * t / 1000, 'S');
-  front(vp * t / 1000, 'P');
+  front(vs * tEff / 1000, 'S');
+  front(vp * tEff / 1000, 'P');
   ctx.restore();
 
   // Superficie libre (borde superior).
@@ -175,34 +187,34 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   ctx.beginPath(); ctx.moveTo(rx, rz - 9 * scale); ctx.lineTo(rx - 8 * scale, rz + 5 * scale); ctx.lineTo(rx + 8 * scale, rz + 5 * scale); ctx.closePath();
   ctx.fillStyle = '#2D6A4F'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * scale; ctx.fill(); ctx.stroke();
 
-  // Etiquetas de fuente y estación.
-  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(12)}px sans-serif`; ctx.textAlign = 'center';
+  // Etiquetas de fuente y estación (texto ≥13px).
+  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
   ctx.fillText('Fuente', sx, sz + 22 * scale);
   ctx.fillText('Estación', rx, rz - 14 * scale);
   ctx.textAlign = 'start';
 
-  // Ejes en km (texto ≥12px).
-  ctx.fillStyle = '#57534E'; ctx.font = `${fs(12)}px sans-serif`;
+  // Ejes en km (texto ≥13px).
+  ctx.fillStyle = '#57534E'; ctx.font = `${fs(13)}px sans-serif`;
   ctx.textAlign = 'center';
   for (const tk of niceTicks(domainWkm, 6)) {
     const px = x0 + (tk / domainWkm) * plotW;
     ctx.strokeStyle = '#EEEBE8'; ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, y0 + plotH); ctx.stroke();
-    ctx.fillText(`${tk}`, px, y0 + plotH + 16 * scale);
+    ctx.fillText(`${tk}`, px, y0 + plotH + 18 * scale);
   }
-  ctx.fillText('Distancia horizontal (km)', x0 + plotW / 2, y0 + plotH + 34 * scale);
+  ctx.fillText('Distancia horizontal (km)', x0 + plotW / 2, y0 + plotH + 36 * scale);
   ctx.textAlign = 'right';
   for (const tk of niceTicks(domainHkm, 5)) {
     const py = y0 + (tk / domainHkm) * plotH;
     ctx.strokeStyle = '#EEEBE8'; ctx.beginPath(); ctx.moveTo(x0, py); ctx.lineTo(x0 + plotW, py); ctx.stroke();
-    ctx.fillText(`${tk}`, x0 - 7 * scale, py + fs(12) * 0.35);
+    ctx.fillText(`${tk}`, x0 - 7 * scale, py + fs(13) * 0.35);
   }
   ctx.save();
   ctx.translate(18 * scale, y0 + plotH / 2); ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = 'center'; ctx.fillStyle = '#57534E'; ctx.font = `${fs(12)}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillStyle = '#57534E'; ctx.font = `${fs(13)}px sans-serif`;
   ctx.fillText('Profundidad (km)', 0, 0);
   ctx.restore();
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(12)}px sans-serif`;
+  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(13)}px sans-serif`;
   ctx.fillText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
 }
 
@@ -231,6 +243,8 @@ export interface CrossSectionRenderOpts {
   globalPeak: number;
   absThick?: number;
   widthPx?: number;
+  /** Retardo del pico del pulso (t0, s): los frentes parten en t0. */
+  sourceDelay?: number;
 }
 
 /**
@@ -250,7 +264,7 @@ export function renderCrossSectionPng(opts: CrossSectionRenderOpts): string {
   drawCrossSection({
     ctx, width: W, height: H, snapshot, gridInfo, fullGrid, vp, vs,
     layer: opts.layer ?? 'mag', scaleMode: opts.scaleMode ?? 'global',
-    globalPeak, absThick,
+    globalPeak, absThick, sourceDelay: opts.sourceDelay ?? 0,
   });
   return canvas.toDataURL('image/png');
 }

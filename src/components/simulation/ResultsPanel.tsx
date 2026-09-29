@@ -83,6 +83,7 @@ function buildCrossSectionFrames(
     const dataUrl = renderCrossSectionPng({
       snapshot: snaps[idx], gridInfo: heatmapGrid, fullGrid: result.gridInfo,
       vp: result.params.vp, vs: result.params.vs, layer: 'mag', scaleMode: 'global', globalPeak,
+      sourceDelay: result.gridInfo.sourceDelay ?? heatmapGrid.sourceDelay ?? 0,
     });
     return { time: snaps[idx].time, label: p.label, dataUrl };
   });
