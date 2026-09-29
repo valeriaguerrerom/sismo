@@ -145,11 +145,11 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
-      {/* Columna de acordeones + botón Generar. La columna NO scrollea: las
-          secciones cerradas conservan su alto natural (encabezado completo) y la
-          sección abierta ocupa el resto con scroll interno solo en su contenido
-          (lo gestiona AccordionSection). El botón queda fijo abajo. */}
-      <div className="flex flex-col gap-3 flex-1 min-h-0 pr-0.5">
+      {/* Cada acordeón ocupa el alto de su contenido (sin scroll interno). Si el
+          conjunto (secciones + botón) no cabe en la columna, es ESTA zona la que
+          scrollea suavemente; con el acordeón exclusivo el contenido suele caber
+          y no aparece scroll. El botón Generar va justo debajo de las secciones. */}
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       <AccordionSection title="Variables elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
         <div className="space-y-4">
           <SliderRow
