@@ -106,7 +106,8 @@ const OBJETIVOS_ESPECIFICOS = [
 const TECH_GROUPS = [
   { label: 'Frontend', items: 'React, TypeScript, Vite, Tailwind CSS' },
   { label: 'Visualización', items: 'Three.js, Leaflet' },
-  { label: 'Backend', items: 'FastAPI, Uvicorn, NumPy, ObsPy' },
+  { label: 'Backend', items: 'Python, FastAPI, Uvicorn, NumPy, ObsPy' },
+  { label: 'Motor de simulación', items: 'Diferencias finitas 2D en Python + NumPy (en el servidor)' },
   { label: 'Datos', items: 'Supabase (PostgreSQL)' },
   { label: 'Exportación', items: 'jsPDF, SheetJS, html2canvas' },
   { label: 'Calidad y documentación', items: 'Vitest, pytest, TypeDoc, pdoc, Swagger/OpenAPI' },

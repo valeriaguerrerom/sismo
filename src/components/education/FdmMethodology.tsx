@@ -58,8 +58,8 @@ const STEPS = [
           u<sup>n+1</sup> = 2u<sup>n</sup> − u<sup>n−1</sup> + dt² · (L u<sup>n</sup> + f<sup>n</sup>) / ρ
         </div>
         <p>
-          Se conservan solo dos instantes anteriores, por lo que el consumo de memoria es bajo y el cálculo
-          puede correr en el navegador dentro de un Web Worker.
+          Se conservan solo dos instantes anteriores, por lo que el consumo de memoria es bajo. El cálculo
+          se ejecuta en el servidor (backend) y el resultado se envía al navegador para visualizarlo.
         </p>
       </>
     ),
