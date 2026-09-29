@@ -381,38 +381,34 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               )}
             </div>
           )}
-          <SliderRow
-            label="Tiempo de simulación"
-            tooltip="Duración total del registro sísmico simulado en segundos."
-            value={params.duration}
-            min={5}
-            max={120}
-            step={1}
-            unit="seg"
-            onChange={v => update('duration', v)}
-          />
-          {/* Avisos de configuración: SOLO cuando el usuario ha personalizado
-              los parámetros (scenarioId === ''). En un escenario predeterminado
-              (óptimo y validado) no se muestran, para no alarmar sin motivo. */}
-          {scenarioId === '' && (() => {
+          {(() => {
+            // La duración se limita al menor entre: (1) el primer rebote de
+            // borde de la S —después de él aparecen reflexiones artificiales— y
+            // (2) el presupuesto de cómputo (tope de pasos ≈ 15 s de cómputo).
+            // Así el dominio se mantiene grande y solo se acota el tiempo.
             const MAX_STEPS = 8000;
-            const eff = Math.min(params.duration, MAX_STEPS * params.dt);
-            if (eff >= params.duration - 0.05) return null;
-            return (
-              <p className="text-[10px] text-[#D4A853] bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20 -mt-2">
-                Se simularán ≈ {eff.toFixed(0)} s (tope de {formatBigInt(MAX_STEPS)} pasos). Sube dx o baja Vp para alcanzar {params.duration} s.
-              </p>
-            );
-          })()}
-          {scenarioId === '' && (() => {
+            const computeCap = Math.floor(MAX_STEPS * params.dt); // s que caben en el tope de pasos
             const bounceS = (typeof firstBounceS === 'number' && firstBounceS > 0)
-              ? firstBounceS
-              : (params.sourceType === 'volcanic' ? 13.3 : 8.4);
-            if (params.duration <= bounceS + 0.05) return null;
+              ? Math.floor(firstBounceS)
+              : (params.sourceType === 'volcanic' ? 13 : 8);
+            const maxDur = Math.max(5, Math.min(120, bounceS, computeCap));
+            const capReason = bounceS <= computeCap
+              ? `Máx ${maxDur} s: hasta el primer rebote de borde. Después aparecerían reflexiones artificiales de los límites de la malla.`
+              : `Máx ${maxDur} s por el presupuesto de cómputo (tope de ${formatBigInt(MAX_STEPS)} pasos).`;
             return (
-              <p className="text-[10px] text-[#C4553A] bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10 -mt-2">
-                ⚠️ La duración supera el primer rebote de borde (≈ {bounceS.toFixed(1)} s). Después de ese tiempo pueden aparecer reflexiones artificiales de los límites de la malla.
-              </p>
+              <>
+                <SliderRow
+                  label="Tiempo de simulación"
+                  tooltip="Duración total del registro sísmico simulado en segundos. Se limita para que la ventana no contenga reflexiones artificiales de los bordes de la malla."
+                  value={Math.min(params.duration, maxDur)}
+                  min={5}
+                  max={maxDur}
+                  step={1}
+                  unit="seg"
+                  onChange={v => update('duration', Math.min(v, maxDur))}
+                />
+                <p className="text-[10px] text-stone-400 -mt-1">{capReason}</p>
+              </>
             );
           })()}
           <SliderRow
