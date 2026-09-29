@@ -81,6 +81,9 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     labelRenderer.domElement.style.top = '0';
     labelRenderer.domElement.style.left = '0';
     labelRenderer.domElement.style.pointerEvents = 'none';
+    // z-index bajo: las etiquetas de los ejes viven dentro de la tarjeta y no
+    // deben flotar por encima de diálogos/modales (que usan z alto).
+    labelRenderer.domElement.style.zIndex = '0';
     mount.appendChild(labelRenderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);

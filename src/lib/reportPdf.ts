@@ -42,6 +42,17 @@ export interface SavedResults {
    * pasa cuando el usuario marca esa sección y hay fotogramas disponibles.
    */
   crossSection?: CrossSectionData;
+  /**
+   * Imagen del "Movimiento de partícula" (hodograma 3D) para el PDF. Opcional:
+   * solo se pasa cuando el usuario marca esa sección y hay señal disponible.
+   */
+  particleMotion?: ParticleMotionData;
+}
+
+/** Imagen PNG (data URL) del hodograma 3D + su pie de figura. */
+export interface ParticleMotionData {
+  dataUrl: string;
+  caption: string;
 }
 
 /** Imágenes PNG (data URL) de los tres fotogramas del corte, con su tiempo. */
@@ -59,6 +70,7 @@ export interface PdfSections {
   metrics: boolean;
   seismograms: boolean;
   crossSection: boolean;
+  particleMotion: boolean;
   interpretation: boolean;
 }
 

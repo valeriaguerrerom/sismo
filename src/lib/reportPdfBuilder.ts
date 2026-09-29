@@ -141,7 +141,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   const { title, author, notes, createdAt, params, results } = input;
   // Secciones a incluir (todas por defecto si no se especifica).
   const sec = input.sections ?? {
-    params: true, metrics: true, seismograms: true, crossSection: true, interpretation: true,
+    params: true, metrics: true, seismograms: true, crossSection: true, particleMotion: true, interpretation: true,
   };
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   registerFont(doc);
@@ -367,6 +367,29 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     doc.text('máx', MARGIN + barW, y + barH + 3, { align: 'right' });
     y += barH + 6;
     const capLines = doc.splitTextToSize(cs.caption, CONTENT_W) as string[];
+    doc.text(capLines, MARGIN, y);
+    y += capLines.length * 3.5 + 4;
+  }
+
+  // ── Movimiento de partícula (hodograma 3D) ──
+  if (sec.particleMotion && results.particleMotion && results.particleMotion.dataUrl) {
+    const pm = results.particleMotion;
+    if (y > 210) { doc.addPage(); y = MARGIN; }
+    section('Movimiento de partícula');
+    // Imagen cuadrada centrada, a media anchura de contenido.
+    const props = doc.getImageProperties(pm.dataUrl);
+    const imgW = Math.min(CONTENT_W, 96);
+    const imgH = imgW * (props.height / props.width);
+    if (y + imgH + 10 > 285) { doc.addPage(); y = MARGIN; }
+    const cx = MARGIN + (CONTENT_W - imgW) / 2;
+    doc.addImage(pm.dataUrl, 'PNG', cx, y, imgW, imgH);
+    y += imgH + 4;
+    // Leyenda de tramos (P terracota, S verde, reposo gris).
+    doc.setFont(FONT, 'normal'); doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
+    doc.text('Tramos: gris = reposo · terracota = onda P · verde = onda S', MARGIN, y);
+    y += 4;
+    const capLines = doc.splitTextToSize(pm.caption, CONTENT_W) as string[];
+    doc.setTextColor(...COLORS.text);
     doc.text(capLines, MARGIN, y);
     y += capLines.length * 3.5 + 4;
   }

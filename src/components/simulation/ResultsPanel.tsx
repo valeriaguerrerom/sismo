@@ -5,6 +5,7 @@ import { interpretSimulation } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
 import { renderCrossSectionPng, computeGlobalPeak } from '../../lib/crossSectionRender';
+import { renderParticleMotionPng } from '../../lib/particleMotionRender';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
@@ -115,6 +116,22 @@ async function exportPDF(
   const crossSection = (sections.crossSection && !realRecord)
     ? buildCrossSectionFrames(result, heatmapGrid)
     : undefined;
+  // Movimiento de partícula: usa la señal que ve el usuario (real si está
+  // cargada, o el pseudo-sismograma FDM) y los arribos de la simulación.
+  let particleMotion: { dataUrl: string; caption: string } | undefined;
+  if (sections.particleMotion) {
+    const pmWave = realRecord ? realRecord.waveData : result.waveData;
+    if (pmWave && pmWave.time.length) {
+      particleMotion = {
+        dataUrl: renderParticleMotionPng({
+          waveData: pmWave,
+          pArrival: realRecord ? 0 : result.pArrival,
+          sArrival: realRecord ? 0 : result.sArrival,
+        }),
+        caption: 'Trayectoria 3D del suelo en la estación (Norte, Este, Vertical), con las tres componentes a la misma escala. La onda P mueve el suelo en la dirección de propagación; la S, de forma perpendicular.',
+      };
+    }
+  }
   await downloadReportPdf({
     title,
     params,
@@ -134,6 +151,7 @@ async function exportPDF(
       realLabel: realRecord?.label,
       ampScale,
       crossSection,
+      particleMotion,
     },
   }, 'sismograma_narino');
 }
@@ -146,11 +164,13 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   // Diálogo de opciones del PDF: qué secciones incluir (todas por defecto).
   const [pdfDialog, setPdfDialog] = useState(false);
   const [pdfSections, setPdfSections] = useState<PdfSections>({
-    params: true, metrics: true, seismograms: true, crossSection: true, interpretation: true,
+    params: true, metrics: true, seismograms: true, crossSection: true, particleMotion: true, interpretation: true,
   });
   const [pdfBusy, setPdfBusy] = useState(false);
   // Con registro real no hay corte del subsuelo propio de esa señal.
   const canCrossSection = Boolean(result && result.snapshots.length && !realRecord);
+  // El movimiento de partícula se puede dibujar siempre que haya señal triaxial.
+  const canParticleMotion = Boolean(result && (realRecord ? realRecord.waveData : result.waveData)?.time.length);
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
@@ -286,7 +306,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
 
       {/* Diálogo de opciones del PDF */}
       {pdfDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !pdfBusy && setPdfDialog(false)}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={() => !pdfBusy && setPdfDialog(false)}>
           <div className="bg-white rounded-2xl shadow-xl border border-stone-200 w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-[#1A1A2E] text-sm mb-1 flex items-center gap-2"><FileDown size={16} className="text-[#C4553A]" /> Contenido del PDF</h3>
             <p className="text-[11px] text-stone-500 mb-3">Elige qué secciones incluir.</p>
@@ -296,9 +316,11 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
                 ['metrics', 'Métricas'],
                 ['seismograms', 'Sismogramas'],
                 ['crossSection', 'Corte del subsuelo'],
+                ['particleMotion', 'Movimiento de partícula'],
                 ['interpretation', 'Interpretación'],
               ] as [keyof PdfSections, string][]).map(([key, label]) => {
-                const disabled = key === 'crossSection' && !canCrossSection;
+                const disabled = (key === 'crossSection' && !canCrossSection)
+                  || (key === 'particleMotion' && !canParticleMotion);
                 return (
                   <label key={key} className={`flex items-center gap-2 text-sm ${disabled ? 'opacity-40' : 'text-[#1A1A2E]'}`}>
                     <input
@@ -320,7 +342,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
                 onClick={async () => {
                   setPdfBusy(true);
                   try {
-                    await exportPDF(result, { ...pdfSections, crossSection: pdfSections.crossSection && canCrossSection }, realRecord, ampScale, heatmapGrid);
+                    await exportPDF(result, { ...pdfSections, crossSection: pdfSections.crossSection && canCrossSection, particleMotion: pdfSections.particleMotion && canParticleMotion }, realRecord, ampScale, heatmapGrid);
                     setPdfDialog(false);
                   } finally {
                     setPdfBusy(false);
