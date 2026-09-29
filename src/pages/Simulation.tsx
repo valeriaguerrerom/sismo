@@ -349,11 +349,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   <p className="text-xs text-stone-400 mt-0.5">
                     {viewMode === '2d' && 'Sismogramas triaxiales · Componentes N · E · Z'}
                     {viewMode === 'triaxial' && 'Propagación del campo de ondas en un corte vertical'}
-                    {viewMode === 'particle' && 'Trayectoria del suelo en la estación (Norte · Este · Vertical)'}
+                    {viewMode === 'particle' && 'Trayectoria del suelo en la estación: norte, este y vertical'}
                   </p>
                 </div>
-                {/* View toggle: en pantallas estrechas envuelve a varias líneas
-                    (no genera scroll horizontal). */}
+                {/* View toggle: nombres cortos para que las tres pestañas quepan
+                    en una fila en escritorio; cada una tiene un tooltip con el
+                    nombre completo. En pantallas estrechas envuelve sin scroll
+                    horizontal. */}
                 <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 gap-0.5">
                   <button
                     onClick={() => setViewMode('2d')}
@@ -361,7 +363,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === '2d' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Waves size={13} /> Sismogramas
+                    <Waves size={13} /> <Tooltip content="Sismogramas triaxiales (Norte, Este, Vertical)">Sismogramas</Tooltip>
                   </button>
                   <button
                     onClick={() => setViewMode('triaxial')}
@@ -369,7 +371,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Grid3X3 size={13} /> Mapa de calor del subsuelo
+                    <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)">Mapa de calor</Tooltip>
                   </button>
                   <button
                     onClick={() => setViewMode('particle')}
@@ -377,7 +379,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Box size={13} /> Movimiento de partícula
+                    <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)">Partícula</Tooltip>
                   </button>
                 </div>
               </div>

@@ -22,6 +22,9 @@ import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { WaveData } from '../../lib/types';
 import { Tooltip } from '../ui/Tooltip';
 
@@ -120,8 +123,11 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     scene.add(grid);
 
     // ── Trayectoria de la partícula ──
-    // Normaliza cada componente contra el pico común de las tres para conservar
-    // las proporciones reales del movimiento (no deforma la forma 3D).
+    // Se usan las MUESTRAS REALES de las tres componentes, con la resolución
+    // temporal completa de la ventana (sin diezmar ni suavizar). Los tres ejes
+    // comparten UNA SOLA escala: el máximo absoluto común de las tres
+    // componentes, para no deformar las proporciones reales del movimiento
+    // (así la vertical se ve tan pequeña o grande como es respecto a N y E).
     const { time, north, east, vertical } = waveData;
     const n = time.length;
     let peak = 0;
@@ -129,26 +135,34 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       peak = Math.max(peak, Math.abs(north[i]), Math.abs(east[i]), Math.abs(vertical[i]));
     }
     const s = peak > 0 ? AXIS / peak : 1;
-    // Posiciones y color por vértice (según arribo P/S).
-    const positions = new Float32Array(n * 3);
-    const colors = new Float32Array(n * 3);
+    // Posiciones (x=Este, y=Vertical hacia arriba, z=Norte) y color por vértice
+    // según el arribo (gris reposo, terracota P, verde S). Line2 interpola el
+    // color entre vértices y permite un grosor real en píxeles, para que el
+    // tramo P (pequeño frente a la S) se vea como una cinta clara, no un punto.
+    const positions: number[] = [];
+    const colors: number[] = [];
     for (let i = 0; i < n; i++) {
-      positions[i * 3] = east[i] * s;      // x = Este
-      positions[i * 3 + 1] = vertical[i] * s; // y = Vertical
-      positions[i * 3 + 2] = north[i] * s;    // z = Norte
+      positions.push(east[i] * s, vertical[i] * s, north[i] * s);
       const c = time[i] < pArrival ? COLOR_REST : time[i] < sArrival ? COLOR_P : COLOR_S;
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      colors.push(c.r, c.g, c.b);
     }
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    lineGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const lineMat = new THREE.LineBasicMaterial({ vertexColors: true });
-    const line = new THREE.Line(lineGeo, lineMat);
+    const lineGeo = new LineGeometry();
+    lineGeo.setPositions(positions);
+    lineGeo.setColors(colors);
+    const lineMat = new LineMaterial({
+      vertexColors: true,
+      linewidth: 3,          // grosor en píxeles (Line2 sí respeta el ancho)
+      worldUnits: false,
+      alphaToCoverage: true,
+    });
+    lineMat.resolution.set(width, height);
+    const line = new Line2(lineGeo, lineMat);
+    line.computeLineDistances();
     scene.add(line);
 
     // Punta que marca la posición actual de la partícula.
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.03, 16, 16),
+      new THREE.SphereGeometry(0.035, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0x1a1a2e }),
     );
     scene.add(head);
@@ -156,14 +170,16 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     const lastT = time[n - 1] || 1;
     const reduced = prefersReducedMotion();
 
-    // Cuántos vértices mostrar según el tiempo actual (línea que "crece").
+    // Cuántos SEGMENTOS mostrar según el tiempo actual (la línea "crece"). En
+    // Line2 el número de instancias dibujadas se controla con instanceCount de
+    // la geometría (cada instancia es un segmento entre dos muestras).
     const setDrawCount = (t: number) => {
-      // índice del último vértice con time <= t.
       let idx = 0;
       while (idx < n && time[idx] <= t) idx++;
-      lineGeo.setDrawRange(0, Math.max(1, idx));
+      const segs = Math.max(1, Math.min(idx - 1, n - 1));
+      lineGeo.instanceCount = segs;
       const j = Math.min(n - 1, Math.max(0, idx - 1));
-      head.position.set(positions[j * 3], positions[j * 3 + 1], positions[j * 3 + 2]);
+      head.position.set(east[j] * s, vertical[j] * s, north[j] * s);
     };
     setDrawCount(dataRef.current.currentTime);
 
@@ -196,6 +212,8 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
       labelRenderer.setSize(w, h);
+      // Line2 necesita la resolución del lienzo para calcular el grosor en px.
+      lineMat.resolution.set(w, h);
     };
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(mount);
