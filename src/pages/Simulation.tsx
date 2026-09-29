@@ -10,7 +10,8 @@ import { ResultsPanel } from '../components/simulation/ResultsPanel';
 import { WaveChart } from '../components/simulation/WaveChart';
 import { TriaxialPlane } from '../components/simulation/TriaxialPlane';
 import { ProgressBar } from '../components/simulation/ProgressBar';
-import { Activity, Info, Waves, Grid3X3, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle } from '../lib/icons';
+import { ParticleMotion } from '../components/simulation/ParticleMotion';
+import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle } from '../lib/icons';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -26,7 +27,7 @@ interface Props {
   onRealLoadUsed?: () => void;
 }
 
-type ViewMode = '2d' | 'triaxial';
+type ViewMode = '2d' | 'triaxial' | 'particle';
 
 export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUsed }: Props) {
   // Al abrir, se carga el escenario más didáctico (P y S bien separadas). Si
@@ -277,7 +278,10 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // en el corte del subsuelo el reproductor del propio componente avanza el
   // mismo tiempo compartido (wave2dRatio), evitando un doble avance.
   useEffect(() => {
-    if (viewMode !== '2d') return;
+    // El corte del subsuelo (triaxial) tiene su propio reproductor interno que
+    // avanza el tiempo compartido; aquí solo animamos los sismogramas (2d) y el
+    // movimiento de partícula (particle), que no tienen loop propio.
+    if (viewMode === 'triaxial') return;
     if (!wave2dPlaying || (!result && !realData)) return;
     // Playback takes ~15s at 1x speed regardless of simulation duration
     const baseSpeed = (1 / (15 * 60)) * wave2dSpeed; // 15 seconds * 60fps
@@ -342,7 +346,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   <p className="text-xs text-stone-400 mt-0.5">
                     {viewMode === '2d' && 'Sismogramas triaxiales · Componentes N · E · Z'}
                     {viewMode === 'triaxial' && 'Propagación del campo de ondas en un corte vertical'}
-                    {/* (el subtítulo del corte no cambia; solo la pestaña se renombra) */}
+                    {viewMode === 'particle' && 'Trayectoria del suelo en la estación (Norte · Este · Vertical)'}
                   </p>
                 </div>
                 {/* View toggle */}
@@ -362,6 +366,14 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     }`}
                   >
                     <Grid3X3 size={13} /> Mapa de calor del subsuelo
+                  </button>
+                  <button
+                    onClick={() => setViewMode('particle')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                      viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
+                    }`}
+                  >
+                    <Box size={13} /> Movimiento de partícula
                   </button>
                 </div>
               </div>
@@ -544,6 +556,51 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   onPlayingChange={setWave2dPlaying}
                 />
               )}
+
+              {/* Movimiento de partícula (hodograma 3D). Usa las tres componentes
+                  reales que ve el usuario: el registro real si está cargado, o
+                  el pseudo-sismograma FDM en una simulación pura. Los arribos P/S
+                  vienen de la simulación (result). */}
+              {!loading && (result || realData) && viewMode === 'particle' && (() => {
+                const pmWave = realData ? realData.waveData : result!.waveData;
+                const pmLastT = pmWave.time[pmWave.time.length - 1] ?? 0;
+                return (
+                  <div className="space-y-3">
+                    {/* Reproductor compartido (mismo tiempo que sismogramas y corte). */}
+                    <div className="flex items-center gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
+                      <button onClick={() => { setWave2dRatio(0); setWave2dPlaying(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500 shadow-sm">
+                        <SkipBack size={13} />
+                      </button>
+                      <button onClick={() => { if (wave2dRatio >= 1) { setWave2dRatio(0); } setWave2dPlaying(!wave2dPlaying); }} className="p-2 rounded-lg bg-[#C4553A] text-white shadow-md shadow-[#C4553A]/20">
+                        {wave2dPlaying ? <Pause size={14} /> : <Play size={14} />}
+                      </button>
+                      <button onClick={() => { setWave2dRatio(0); setWave2dPlaying(true); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500 shadow-sm">
+                        <RotateCcw size={13} />
+                      </button>
+                      <input
+                        type="range" min={0} max={100} value={Math.round(wave2dRatio * 100)}
+                        onChange={e => { setWave2dRatio(Number(e.target.value) / 100); setWave2dPlaying(false); }}
+                        className="flex-1"
+                      />
+                      <span className="text-xs font-mono text-stone-400 w-20 text-right">
+                        {(wave2dRatio * pmLastT).toFixed(1)}s / {pmLastT.toFixed(0)}s
+                      </span>
+                      <div className="flex gap-1">
+                        {[0.5, 1, 2].map(sp => (
+                          <button key={sp} onClick={() => setWave2dSpeed(sp)}
+                            className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${wave2dSpeed === sp ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{sp}x</button>
+                        ))}
+                      </div>
+                    </div>
+                    <ParticleMotion
+                      waveData={pmWave}
+                      pArrival={result?.pArrival ?? 0}
+                      sArrival={result?.sArrival ?? 0}
+                      currentTime={wave2dRatio * pmLastT}
+                    />
+                  </div>
+                );
+              })()}
 
             </div>
 

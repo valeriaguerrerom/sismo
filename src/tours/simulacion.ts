@@ -11,8 +11,9 @@ import type { TourStep } from './useTour';
  * había visto una versión anterior lo verá una vez más automáticamente.
  * v2: añade escenarios, mecanismo avanzado, dirección/distancia de la estación,
  * escala de sismogramas, mapa de calor del subsuelo y diálogo del PDF.
+ * v3: añade la pestaña "Movimiento de partícula" (hodograma 3D).
  */
-export const SIMULACION_TOUR_VERSION = 2;
+export const SIMULACION_TOUR_VERSION = 3;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -90,6 +91,15 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
         popover: {
           title: 'Mapa de calor del subsuelo',
           description: 'Cambia a esta pestaña para ver la onda propagándose en un corte vertical. Usa reproducir, la capa y la escala global.',
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="viz-area"]',
+        popover: {
+          title: 'Movimiento de partícula',
+          description: 'En esta pestaña ves la trayectoria 3D del suelo. Gírala con el mouse: la P (terracota) empuja en la dirección de propagación y la S (verde), perpendicular.',
           side: 'left',
           align: 'start',
         },
