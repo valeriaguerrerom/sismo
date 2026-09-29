@@ -321,7 +321,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               Con acordeón exclusivo el contenido es corto; si una sección larga
               excede la altura, hay scroll interno suave (nunca corte). */}
           <div className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
-            <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} />
+            <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} />
           </div>
 
           <div className="flex flex-col gap-4 lg:max-h-[calc(100dvh-154px)] lg:overflow-y-auto scrollbar-thin lg:pr-1">

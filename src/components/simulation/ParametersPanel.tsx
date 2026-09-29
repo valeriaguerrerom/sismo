@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SimulationParams } from '../../lib/types';
 import { computeLame, presetForSource } from '../../lib/simulation';
 import { formatBigInt } from '../../lib/format';
+import { validateParams } from '../../lib/paramLimits';
 import { Tooltip } from '../ui/Tooltip';
 import { Play, Loader } from '../../lib/icons';
 import { AccordionSection } from './AccordionSection';
@@ -24,6 +25,12 @@ interface Props {
   loading: boolean;
   /** Sección que el tour guiado quiere abrir (cambia por paso). */
   forceSection?: ParamSection | null;
+  /**
+   * Tiempo del primer rebote de borde de la S (s) de la última simulación,
+   * calculado por el backend con la geometría real. Si está disponible, el aviso
+   * de duración lo usa en vez de un valor fijo por tipo de fuente.
+   */
+  firstBounceS?: number | null;
 }
 
 function SliderRow({
@@ -78,10 +85,12 @@ function SliderRow({
   );
 }
 
-export function ParametersPanel({ params, onChange, onRun, loading, forceSection }: Props) {
+export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS }: Props) {
   // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
   const [openSection, setOpenSection] = useState<ParamSection>('elasticas');
   const toggle = (s: ParamSection) => setOpenSection(prev => (prev === s ? ('' as ParamSection) : s));
+  // Mensajes de autoajuste por campo (por qué se corrigió un valor).
+  const [limitMsgs, setLimitMsgs] = useState<Record<string, string>>({});
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
@@ -99,13 +108,22 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
       next.lambda = lambda;
       next.mu = mu;
     }
+    // Validación/autoajuste: rangos por campo + restricciones físicas
+    // (Vs < Vp/√2 para λ ≥ 0, dx ≥ 10 nodos/λ). Se corrige al valor válido más
+    // cercano y se guarda el motivo para mostrarlo junto al control.
+    const { params: fixed, messages } = validateParams(next);
+    // Recalcular Lamé si Vs se ajustó por la restricción física.
+    if (messages.vs) {
+      const { lambda, mu } = computeLame(fixed.vp, fixed.vs, fixed.density);
+      fixed.lambda = lambda;
+      fixed.mu = mu;
+    }
     // dt se calcula AUTOMÁTICAMENTE para respetar la estabilidad (CFL) en todo
     // el rango de Vp/dx: dt = 0.9 · dx / (Vp·√2). Así el paso temporal que se
     // muestra y se envía al motor es siempre estable, sin depender del usuario.
-    if (key === 'vp' || key === 'dx') {
-      next.dt = cflDt(next.vp, next.dx);
-    }
-    onChange(next);
+    fixed.dt = cflDt(fixed.vp, fixed.dx);
+    setLimitMsgs(messages);
+    onChange(fixed);
   };
 
   return (
@@ -236,6 +254,60 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               />
             </div>
           </div>
+          <p className="text-[10px] text-stone-400 -mt-1">
+            En este modelo homogéneo 2D la ubicación del epicentro es solo una referencia geográfica: no cambia el cálculo. La distancia y el acimut de la estación sí afectan el registro.
+          </p>
+
+          {/* Dirección de la estación: orienta el corte y la rotación
+              radial/transversal → Norte/Este. Aplica a ambas fuentes. */}
+          <SliderRow
+            label="Dirección de la estación"
+            tooltip="Acimut de la estación virtual respecto a la fuente, medido desde el norte en sentido horario (0-360°). Orienta el corte del subsuelo y cómo se reparten las componentes Norte y Este."
+            value={params.stationAzimuth ?? 45}
+            min={0}
+            max={360}
+            step={5}
+            unit="°"
+            onChange={v => update('stationAzimuth', v)}
+          />
+
+          {/* Mecanismo focal (avanzado): solo para fuente tectónica (doble par).
+              Define el tensor de momento que excita P-SV y SH. */}
+          {params.sourceType === 'tectonic' && (
+            <div className="pt-2 border-t border-stone-200/60 space-y-3">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide">Mecanismo focal (avanzado)</span>
+              <SliderRow
+                label="Rumbo (strike)"
+                tooltip="Orientación de la traza de la falla en superficie, medida desde el norte en sentido horario (0-360°). Por defecto ~30° (rumbo andino de Nariño)."
+                value={params.strike ?? 30}
+                min={0}
+                max={360}
+                step={5}
+                unit="°"
+                onChange={v => update('strike', v)}
+              />
+              <SliderRow
+                label="Buzamiento (dip)"
+                tooltip="Inclinación del plano de falla respecto a la horizontal (0-90°). 90° es una falla vertical."
+                value={params.dip ?? 45}
+                min={0}
+                max={90}
+                step={5}
+                unit="°"
+                onChange={v => update('dip', v)}
+              />
+              <SliderRow
+                label="Deslizamiento (rake)"
+                tooltip="Dirección del movimiento del bloque sobre el plano de falla (-180 a 180°). 90° = falla inversa, -90° = normal, 0° = desgarre. Por defecto 90° (inversa, régimen compresivo)."
+                value={params.rake ?? 90}
+                min={-180}
+                max={180}
+                step={5}
+                unit="°"
+                onChange={v => update('rake', v)}
+              />
+            </div>
+          )}
         </div>
       </AccordionSection>
 
@@ -263,11 +335,14 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               </p>
             );
           })()}
-          {/* Aviso de rebote de borde: con la geometría por defecto el primer
-              rebote de la S llega a ~8.4 s (tectónico) o ~13.3 s (volcánico). Si
-              la duración lo supera, se verán reflexiones artificiales al final. */}
+          {/* Aviso de rebote de borde: el backend calcula el tiempo del primer
+              rebote de la S con la geometría real de cada simulación y lo
+              devuelve. Si aún no hay resultado, se usa una estimación por tipo de
+              fuente. Si la duración lo supera, aparecen reflexiones artificiales. */}
           {(() => {
-            const bounceS = params.sourceType === 'volcanic' ? 13.3 : 8.4;
+            const bounceS = (typeof firstBounceS === 'number' && firstBounceS > 0)
+              ? firstBounceS
+              : (params.sourceType === 'volcanic' ? 13.3 : 8.4);
             if (params.duration <= bounceS + 0.05) return null;
             return (
               <p className="text-[10px] text-[#C4553A] bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10 -mt-2">
@@ -299,6 +374,17 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           </div>
         </div>
       </AccordionSection>
+
+      {/* Avisos de autoajuste: por qué se corrigió algún valor al validar. */}
+      {Object.keys(limitMsgs).length > 0 && (
+        <div className="shrink-0 space-y-1">
+          {Object.entries(limitMsgs).map(([k, m]) => (
+            <p key={k} className="text-[10px] text-[#D4A853] bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20">
+              {m}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Botón Generar: justo debajo de Configuración. */}
       <button

@@ -25,7 +25,10 @@ export function tectonicParams(): SimulationParams {
   const vp = 3500, vs = 2000, density = 2600;
   const mu = density * vs * vs;
   const lambda = density * vp * vp - 2 * mu;
-  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 8, dx: 22, dt: 0.004 };
+  // Mecanismo por defecto para Nariño: falla inversa de rumbo andino
+  // (strike 30° ≈ NNE-SSO, dip 45°, rake 90° inversa pura), coherente con el
+  // régimen compresivo de la subducción de Nazca. Estación al NE (acimut 45°).
+  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 8, dx: 22, dt: 0.004, strike: 30, dip: 45, rake: 90, stationAzimuth: 45 };
 }
 
 /**
@@ -35,13 +38,15 @@ export function tectonicParams(): SimulationParams {
  * ventana útil (medio homogéneo: sin coda).
  *  · dt = 0.006 s < CFL (dx/(Vp·√2) ≈ 0.00707 s), estable.
  *  · Vp = 3000, Vs = 1700, ρ = 2500 y epicentro en el Galeras.
- *  · duración 13 s (cómputo ~6 s en el servidor, con ~80 fotogramas).
+ *  · duración 7 s: termina antes del primer rebote de la P (~7.56 s); la S
+ *    directa (4.53 s) queda dentro. Cómputo ~4 s con ~80 fotogramas.
+ *  · fuente isótropa (explosiva): no genera componente transversal (SH ≈ 0).
  */
 export function volcanicParams(): SimulationParams {
   const vp = 3000, vs = 1700, density = 2500;
   const mu = density * vs * vs;
   const lambda = density * vp * vp - 2 * mu;
-  return { vp, vs, density, lambda, mu, sourceType: 'volcanic', magnitude: 4.5, depth: 6, epicenterLat: 1.2216, epicenterLon: -77.3742, duration: 13, dx: 30, dt: 0.006 };
+  return { vp, vs, density, lambda, mu, sourceType: 'volcanic', magnitude: 4.5, depth: 6, epicenterLat: 1.2216, epicenterLon: -77.3742, duration: 7, dx: 30, dt: 0.006 };
 }
 
 /** Preset óptimo según el tipo de fuente elegido. */

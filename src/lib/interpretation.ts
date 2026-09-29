@@ -65,8 +65,8 @@ export function interpretSimulation(input: InterpretationInput): string {
   }
 
   text += params.sourceType === 'volcanic'
-    ? 'El mecanismo isótropo (explosivo) produce una radiación más uniforme, típica de sismicidad volcánica somera.'
-    : 'El mecanismo de doble par produce lóbulos de radiación diferenciados entre componentes, típico de fracturas tectónicas.';
+    ? 'El mecanismo isótropo (explosivo) irradia de forma uniforme y casi sin ondas de cizalla, por lo que la componente transversal es prácticamente nula: la energía se reparte entre la radial y la vertical, típico de sismicidad volcánica somera.'
+    : 'El registro triaxial se arma con dos simulaciones 2D en el plano del corte: P-SV (radial y vertical) y SH (transversal), excitadas por el tensor de momento del doble par; luego la radial y la transversal se rotan a Norte y Este según el acimut de la estación, así las tres componentes son independientes.';
 
   if (gridInfo?.dtAdjusted) text += ' ⚠️ dt fue ajustado automáticamente por condición CFL.';
   if (gridInfo?.dxAdjusted) text += ' ⚠️ dx fue aumentado para acomodar la profundidad focal solicitada.';

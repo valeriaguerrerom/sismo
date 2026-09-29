@@ -38,6 +38,20 @@ export interface SimulationParams {
   duration: number;
   dx: number;
   dt: number;
+  /**
+   * Mecanismo focal del doble par (solo fuente tectónica), convención
+   * Aki & Richards. strike (rumbo, 0-360° desde el norte, horario), dip
+   * (buzamiento, 0-90°) y rake (deslizamiento, 90°=inversa, -90°=normal,
+   * 0°=desgarre). Definen el tensor de momento que excita P-SV y SH.
+   */
+  strike?: number;
+  dip?: number;
+  rake?: number;
+  /**
+   * Acimut de la estación virtual respecto a la fuente (0-360° desde el norte,
+   * horario). Orienta el corte y la rotación radial/transversal → Norte/Este.
+   */
+  stationAzimuth?: number;
 }
 
 /** Series temporales triaxiales registradas en el receptor virtual. */
@@ -70,6 +84,9 @@ export interface GridInfo {
   sourceX: number;
   sourceZ: number;
   pointsPerWavelength: number;
+  /** Tiempo del primer rebote de borde al receptor (s), calculado por el backend. */
+  firstBounceP?: number;
+  firstBounceS?: number;
 }
 
 /** Resultado completo de una simulación FDM con sismogramas y métricas. */
