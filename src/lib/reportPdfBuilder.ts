@@ -128,6 +128,10 @@ function drawTrace(
 /** Construye el documento PDF (sin descargarlo). */
 export function buildReportPdf(input: ReportInput): jsPDF {
   const { title, author, notes, createdAt, params, results } = input;
+  // Secciones a incluir (todas por defecto si no se especifica).
+  const sec = input.sections ?? {
+    params: true, metrics: true, seismograms: true, crossSection: true, interpretation: true,
+  };
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   registerFont(doc);
   let y = MARGIN;
@@ -205,6 +209,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   const lambdaGPa = lambdaVal / 1e9;
   const muGPa = muVal / 1e9;
 
+  if (sec.params) {
   section('Parámetros del subsuelo y de la fuente');
   kv([
     ['Tipo de fuente', params.sourceType === 'volcanic' ? 'Volcánica (isótropa)' : 'Tectónica (doble par)'],
@@ -220,7 +225,9 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     ['Duración', `${results.duration.toFixed(0)} s`],
     ['dx / dt', `${params.dx} m / ${params.dt} s`],
   ]);
+  }
 
+  if (sec.metrics) {
   section('Métricas del resultado');
   const metricRows: [string, string][] = [
     ['Amplitud máxima', `${results.maxAmplitude.toExponential(2)} u.a.`],
@@ -240,9 +247,10 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     }
   }
   kv(metricRows);
+  }
 
   // ── Sismogramas ──
-  if (results.waveData && results.waveData.time.length > 1) {
+  if (sec.seismograms && results.waveData && results.waveData.time.length > 1) {
     const real = results.isRealRecord === true;
     // Con registro real, el reporte muestra la MISMA señal que la pantalla y no
     // las llegadas P/S teóricas del FDM (el registro real no las trae).
@@ -294,7 +302,34 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     y += 7;
   }
 
+  // ── Corte del subsuelo (tres fotogramas) ──
+  if (sec.crossSection && results.crossSection && results.crossSection.frames.length) {
+    const cs = results.crossSection;
+    // Cada fotograma se dibuja a lo ancho del contenido; alto proporcional a la
+    // imagen (ratio real del PNG). Se estima el alto por el ratio típico ~0.62.
+    const frames = cs.frames;
+    for (const fr of frames) {
+      // Alto estimado del bloque (imagen + título). Salto de página si no cabe.
+      const imgW = CONTENT_W;
+      // Deducimos el alto real a partir de las dimensiones del PNG.
+      const props = doc.getImageProperties(fr.dataUrl);
+      const imgH = imgW * (props.height / props.width);
+      if (y + imgH + 12 > 285) { doc.addPage(); y = MARGIN; }
+      if (fr === frames[0]) { section('Corte del subsuelo'); }
+      doc.setFont(FONT, 'bold'); doc.setFontSize(8.5); doc.setTextColor(...COLORS.text);
+      doc.text(`${fr.label} · t = ${fr.time.toFixed(2)} s`, MARGIN, y);
+      y += 3;
+      doc.addImage(fr.dataUrl, 'PNG', MARGIN, y, imgW, imgH);
+      y += imgH + 5;
+    }
+    doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
+    const capLines = doc.splitTextToSize(cs.caption, CONTENT_W) as string[];
+    doc.text(capLines, MARGIN, y);
+    y += capLines.length * 3.5 + 4;
+  }
+
   // ── Interpretación ──
+  if (sec.interpretation) {
   if (y > 230) { doc.addPage(); y = MARGIN; }
   section('Interpretación educativa');
   doc.setFontSize(9);
@@ -310,6 +345,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   const lines = doc.splitTextToSize(interp, CONTENT_W) as string[];
   doc.text(lines, MARGIN, y);
   y += lines.length * 4.5 + 4;
+  }
 
   if (notes && notes.trim()) {
     if (y > 250) { doc.addPage(); y = MARGIN; }

@@ -36,6 +36,28 @@ export interface SavedResults {
    * PDF la replica y la indica en la leyenda. Por defecto 'common'.
    */
   ampScale?: 'common' | 'component';
+  /**
+   * Datos del corte del subsuelo para incluir tres fotogramas en el PDF
+   * (llegada de la P, llegada de la S y un momento después). Opcional: solo se
+   * pasa cuando el usuario marca esa sección y hay fotogramas disponibles.
+   */
+  crossSection?: CrossSectionData;
+}
+
+/** Imágenes PNG (data URL) de los tres fotogramas del corte, con su tiempo. */
+export interface CrossSectionData {
+  frames: { time: number; label: string; dataUrl: string }[];
+  /** Nota al pie del corte (misma que en pantalla). */
+  caption: string;
+}
+
+/** Qué secciones incluir en el PDF (todas por defecto). */
+export interface PdfSections {
+  params: boolean;
+  metrics: boolean;
+  seismograms: boolean;
+  crossSection: boolean;
+  interpretation: boolean;
 }
 
 /** Datos de entrada para el reporte. */
@@ -46,6 +68,8 @@ export interface ReportInput {
   createdAt?: string | Date;
   params: SimulationParams;
   results: SavedResults;
+  /** Secciones a incluir. Si se omite, se incluyen todas. */
+  sections?: PdfSections;
 }
 
 /**
