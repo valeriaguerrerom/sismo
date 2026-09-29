@@ -24,6 +24,17 @@ function groupInt(n: number): string {
   return sign + Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
+/** Interpola dos colores hex (#rrggbb) y devuelve [r,g,b] 0-255. */
+function mixHex(a: string, b: string, t: number): [number, number, number] {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  return [
+    Math.round(pa[0] + (pb[0] - pa[0]) * t),
+    Math.round(pa[1] + (pb[1] - pa[1]) * t),
+    Math.round(pa[2] + (pb[2] - pa[2]) * t),
+  ];
+}
+
 /**
  * Registra la fuente TTF Unicode (IBM Plex Sans, subset) en el documento para
  * que rinda griegas (λ, μ), símbolos (√, ·, ×), tildes y ñ sin caracteres raros.
@@ -302,27 +313,59 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     y += 7;
   }
 
-  // ── Corte del subsuelo (tres fotogramas) ──
+  // ── Mapa de calor del subsuelo (tres fotogramas ordenados) ──
   if (sec.crossSection && results.crossSection && results.crossSection.frames.length) {
     const cs = results.crossSection;
-    // Cada fotograma se dibuja a lo ancho del contenido; alto proporcional a la
-    // imagen (ratio real del PNG). Se estima el alto por el ratio típico ~0.62.
+    // Los tres fotogramas caben mejor juntos: se dibujan a media anchura de
+    // contenido para que entren dos por fila o uno por bloque segun el alto.
+    // Aqui usamos ancho completo apilados en orden (P, S, despues).
+    if (y > 250) { doc.addPage(); y = MARGIN; }
+    section('Mapa de calor del subsuelo');
+    // Componente mostrada.
+    doc.setFont(FONT, 'normal'); doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
+    doc.text(`Componente: ${cs.component}`, MARGIN, y);
+    y += 5;
     const frames = cs.frames;
+    // Ancho de imagen: dos columnas si caben (más compacto), si no una.
+    const imgW = (CONTENT_W - 6) / 2;
+    let col = 0;
+    let rowY = y;
+    let rowH = 0;
     for (const fr of frames) {
-      // Alto estimado del bloque (imagen + título). Salto de página si no cabe.
-      const imgW = CONTENT_W;
-      // Deducimos el alto real a partir de las dimensiones del PNG.
       const props = doc.getImageProperties(fr.dataUrl);
       const imgH = imgW * (props.height / props.width);
-      if (y + imgH + 12 > 285) { doc.addPage(); y = MARGIN; }
-      if (fr === frames[0]) { section('Corte del subsuelo'); }
-      doc.setFont(FONT, 'bold'); doc.setFontSize(8.5); doc.setTextColor(...COLORS.text);
-      doc.text(`${fr.label} · t = ${fr.time.toFixed(2)} s`, MARGIN, y);
-      y += 3;
-      doc.addImage(fr.dataUrl, 'PNG', MARGIN, y, imgW, imgH);
-      y += imgH + 5;
+      // Salto de fila cada 2 columnas.
+      if (col === 2) { col = 0; y = rowY + rowH + 8; rowY = y; rowH = 0; }
+      if (y + imgH + 12 > 285) { doc.addPage(); y = MARGIN; rowY = y; col = 0; rowH = 0; }
+      const cx = MARGIN + col * (imgW + 6);
+      doc.setFont(FONT, 'bold'); doc.setFontSize(8); doc.setTextColor(...COLORS.text);
+      doc.text(`${fr.label}`, cx, rowY);
+      doc.setFont(FONT, 'normal'); doc.setTextColor(...COLORS.muted);
+      doc.text(`t = ${fr.time.toFixed(2)} s`, cx, rowY + 3.5);
+      doc.addImage(fr.dataUrl, 'PNG', cx, rowY + 5, imgW, imgH);
+      rowH = Math.max(rowH, imgH + 5);
+      col += 1;
+    }
+    y = rowY + rowH + 6;
+    // Leyenda única de escala (barra de color) + nota de escala global.
+    if (y + 16 > 290) { doc.addPage(); y = MARGIN; }
+    const barW = 42, barH = 3.2;
+    const grad = ['#faf6f0', '#c4553a', '#7a2a1c'];
+    const steps = 40;
+    for (let i = 0; i < steps; i++) {
+      const tt = i / (steps - 1);
+      // interpolación simple crema→terracota→oscuro
+      const seg = tt < 0.5 ? tt / 0.5 : (tt - 0.5) / 0.5;
+      const c0 = tt < 0.5 ? grad[0] : grad[1];
+      const c1 = tt < 0.5 ? grad[1] : grad[2];
+      const rgb = mixHex(c0, c1, seg);
+      doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+      doc.rect(MARGIN + (i / steps) * barW, y, barW / steps + 0.2, barH, 'F');
     }
     doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
+    doc.text('0', MARGIN, y + barH + 3);
+    doc.text('máx', MARGIN + barW, y + barH + 3, { align: 'right' });
+    y += barH + 6;
     const capLines = doc.splitTextToSize(cs.caption, CONTENT_W) as string[];
     doc.text(capLines, MARGIN, y);
     y += capLines.length * 3.5 + 4;

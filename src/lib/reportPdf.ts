@@ -47,7 +47,9 @@ export interface SavedResults {
 /** Imágenes PNG (data URL) de los tres fotogramas del corte, con su tiempo. */
 export interface CrossSectionData {
   frames: { time: number; label: string; dataUrl: string }[];
-  /** Nota al pie del corte (misma que en pantalla). */
+  /** Componente mostrada (magnitud, radial o vertical). */
+  component: string;
+  /** Nota al pie del corte (misma que en pantalla, con la nota de escala global). */
   caption: string;
 }
 

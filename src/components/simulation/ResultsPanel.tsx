@@ -4,7 +4,7 @@ import { Download, FileText, AlertCircle, Grid3X3, Image, FileDown } from '../..
 import { interpretSimulation } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
-import { renderCrossSectionPng } from '../../lib/crossSectionRender';
+import { renderCrossSectionPng, computeGlobalPeak } from '../../lib/crossSectionRender';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
@@ -71,23 +71,25 @@ function buildCrossSectionFrames(
   };
   const afterS = Math.min(lastT, result.sArrival + (result.sArrival - result.pArrival) + 0.5);
   const picks: { t: number; label: string }[] = [
-    { t: result.pArrival, label: 'Llegada de la onda P a la estación' },
-    { t: result.sArrival, label: 'Llegada de la onda S a la estación' },
+    { t: result.pArrival, label: 'La onda P alcanza la estación' },
+    { t: result.sArrival, label: 'La onda S alcanza la estación' },
     { t: afterS, label: 'Un momento después de la S' },
   ];
-  const seen = new Set<number>();
+  // Escala GLOBAL (mismo criterio que en pantalla): pico de la magnitud sobre
+  // todos los fotogramas, para que los residuos tardíos se vean tenues.
+  const globalPeak = computeGlobalPeak(snaps, 'mag');
   const frames = picks.map(p => {
     const idx = nearest(p.t);
-    seen.add(idx);
     const dataUrl = renderCrossSectionPng({
       snapshot: snaps[idx], gridInfo: heatmapGrid, fullGrid: result.gridInfo,
-      vp: result.params.vp, vs: result.params.vs,
+      vp: result.params.vp, vs: result.params.vs, layer: 'mag', scaleMode: 'global', globalPeak,
     });
     return { time: snaps[idx].time, label: p.label, dataUrl };
   });
   return {
     frames,
-    caption: 'Corte vertical del subsuelo (capa de magnitud). Muestra el movimiento en el plano vertical (radial y vertical); la componente transversal (SH) se ve en los sismogramas. La zona gris de los bordes es la capa absorbente y no forma parte del modelo.',
+    component: 'Magnitud del movimiento |u| (combina radial y vertical)',
+    caption: 'Corte vertical del subsuelo. Muestra el movimiento en el plano vertical (radial y vertical); la componente transversal (SH) se ve en los sismogramas. La zona gris de los bordes es la capa absorbente y no forma parte del modelo. La escala de color es global (igual para todos los fotogramas), así los residuos tardíos se ven tenues.',
   };
 }
 
@@ -289,7 +291,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
                       className="accent-[#C4553A] w-4 h-4"
                     />
                     {label}
-                    {disabled && <span className="text-[10px] text-stone-400">(no disponible)</span>}
+                    {disabled && <span className="text-[10px] text-stone-400">— Disponible solo al exportar desde el Simulador</span>}
                   </label>
                 );
               })}
