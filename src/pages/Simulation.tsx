@@ -15,7 +15,7 @@ import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, 
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { Tooltip } from '../components/ui/Tooltip';
-import { startTour } from '../tours/useTour';
+import { startTour, refreshActiveTour } from '../tours/useTour';
 import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
 
 interface Props {
@@ -67,16 +67,18 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
   const launchTour = useCallback(() => {
     // Al abrir un acordeón cambia la altura del panel y la posición del elemento
-    // resaltado; Driver.js reposiciona el popover al oír 'resize'. Disparamos
-    // varios en los siguientes frames para cubrir el reflujo del acordeón (la
-    // sección abierta pasa a ocupar el espacio restante), evitando que el
-    // popover quede desalineado o "pegado" al reposicionar tarde.
+    // resaltado. Pedimos a Driver.js que RECALCULE la posición del popover
+    // (refresh) tras el reflujo de React. Varios frames cubren el reflujo del
+    // acordeón (crece/encoge), evitando que el popover quede desalineado.
     const reposition = () => {
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new Event('resize'));
-        setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
-        setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
-      });
+      // Doble rAF: el primero espera al commit de React, el segundo al paint
+      // (cuando el acordeón ya tiene su nueva altura). Luego un par de refresh
+      // extra por si el reflujo tarda un poco más.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        refreshActiveTour();
+        setTimeout(refreshActiveTour, 120);
+        setTimeout(refreshActiveTour, 260);
+      }));
     };
     const steps = buildSimulacionSteps({
       openParam: (s) => { setTourParam(s); reposition(); },

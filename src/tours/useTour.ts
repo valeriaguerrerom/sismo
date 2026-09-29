@@ -28,6 +28,18 @@ export interface StartTourOptions {
 let activeDriver: ReturnType<typeof driver> | null = null;
 
 /**
+ * Reposiciona el popover del tour activo sobre su elemento resaltado. Se usa
+ * cuando la página cambia de tamaño por una acción del propio tour (p. ej.
+ * abrir un acordeón, que crece y desplaza el elemento). Driver.js recalcula la
+ * posición con `refresh()`, más fiable que disparar eventos `resize` sintéticos.
+ */
+export function refreshActiveTour(): void {
+  if (activeDriver) {
+    try { if (activeDriver.isActive()) activeDriver.refresh(); } catch { /* tour ya cerrado */ }
+  }
+}
+
+/**
  * Lanza un tour con los pasos dados. Aplica el tema de la app, los botones en
  * español y un indicador de progreso "N de M". `onDone` se dispara tanto al
  * terminar como al omitir/cerrar, para persistir que ya se vio.
