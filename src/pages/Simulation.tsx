@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { downsampleWave } from '../lib/reportPdf';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
 import { defaultScenario } from '../lib/scenarios';
-import { epicentralDistanceKm, commonMaxAmplitude } from '../lib/format';
+import { commonMaxAmplitude } from '../lib/format';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
@@ -11,9 +10,8 @@ import { WaveChart } from '../components/simulation/WaveChart';
 import { TriaxialPlane } from '../components/simulation/TriaxialPlane';
 import { ProgressBar } from '../components/simulation/ProgressBar';
 import { ParticleMotion } from '../components/simulation/ParticleMotion';
-import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, Save, Check, HelpCircle, Maximize, Minimize } from '../lib/icons';
+import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, HelpCircle, Maximize, Minimize } from '../lib/icons';
 import { useAuth } from '../lib/auth';
-import { supabase } from '../lib/supabase';
 import { Tooltip } from '../components/ui/Tooltip';
 import { startTour, refreshActiveTour } from '../tours/useTour';
 import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
@@ -134,10 +132,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     const id = requestAnimationFrame(() => setTimeout(() => launchTour(), 350));
     return () => cancelAnimationFrame(id);
   }, [user, launchTour]);
-  const [reportTitle, setReportTitle] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
-
   // Datos reales del Galeras/CM cargados desde el Explorador (si los hay).
   const [realData, setRealData] = useState<{ waveData: WaveData; label: string } | null>(null);
   // Escala de amplitud de los sismogramas: 'common' normaliza las tres
@@ -162,54 +156,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     const id = setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
     return () => clearTimeout(id);
   }, [vizExpanded]);
-
-  const handleSaveReport = useCallback(async () => {
-    if (!supabase || !user || !result) return;
-    setSaving(true);
-    setSaveMsg(null);
-    const title = reportTitle.trim() || (realData
-      ? `Registro real ${realData.label}`
-      : `Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`);
-    // Guardamos las métricas, la malla y una versión submuestreada de las series
-    // (≤ 600 puntos) para poder regenerar el reporte PDF desde "Mis Reportes".
-    // Con registro real cargado, se guarda la señal REAL que ve el usuario (no
-    // el pseudo-sismograma FDM), para que el PDF coincida con la pantalla.
-    // Los snapshots del campo de onda no se guardan (demasiado pesados).
-    const { error } = await supabase.from('simulation_reports').insert({
-      user_id: user.id,
-      title,
-      params: result.params,
-      results: {
-        maxAmplitude: result.maxAmplitude,
-        duration: result.duration,
-        dominantFrequency: result.dominantFrequency,
-        pArrival: result.pArrival,
-        sArrival: result.sArrival,
-        pArrivalDetected: result.pArrivalDetected,
-        sArrivalDetected: result.sArrivalDetected,
-        gridInfo: {
-          nx: result.gridInfo.nx,
-          nz: result.gridInfo.nz,
-          totalSteps: result.gridInfo.totalSteps,
-          dtAdjusted: result.gridInfo.dtAdjusted,
-          dxAdjusted: result.gridInfo.dxAdjusted,
-          epicentralDistanceKm: epicentralDistanceKm(result.gridInfo),
-        },
-        waveData: downsampleWave(realData ? realData.waveData : result.waveData, 600),
-        isRealRecord: Boolean(realData),
-        realLabel: realData?.label,
-        ampScale,
-      },
-    });
-    if (error) {
-      setSaveMsg({ type: 'error', text: 'No se pudo guardar el reporte. Inténtalo de nuevo.' });
-      console.error('Error guardando reporte:', error.message);
-    } else {
-      setSaveMsg({ type: 'ok', text: '¡Reporte guardado! Míralo en "Mis Reportes".' });
-      setReportTitle('');
-    }
-    setSaving(false);
-  }, [user, result, reportTitle, realData, ampScale]);
 
   // Ref a la última versión de runSimulation para poder llamarla desde el
   // efecto de datos reales sin meterla en sus dependencias (evita re-lanzar).
@@ -315,12 +261,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const handleRun = useCallback(() => {
     runSimulation(undefined, false);
   }, [runSimulation]);
-
-  // Limpiar el mensaje de guardado cuando cambia el resultado
-  useEffect(() => {
-    setSaveMsg(null);
-    setReportTitle('');
-  }, [result]);
 
   // 2D waveform playback animation. Solo corre en la pestaña de sismogramas;
   // en el corte del subsuelo el reproductor del propio componente avanza el
@@ -667,50 +607,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
             </div>
 
-            {/* Guardar reporte */}
-            {result && (
-              <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
-                {user ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Save size={16} className="text-[#2D6A4F]" />
-                      <h3 className="font-bold text-[#1A1A2E] text-sm">Guardar como reporte</h3>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={reportTitle}
-                        onChange={e => setReportTitle(e.target.value)}
-                        placeholder={`Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`}
-                        className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#C4553A] bg-stone-50"
-                      />
-                      <button
-                        onClick={handleSaveReport}
-                        disabled={saving}
-                        className="flex items-center justify-center gap-2 bg-[#2D6A4F] text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 btn-hover"
-                      >
-                        {saving ? 'Guardando...' : <><Save size={14} /> Guardar</>}
-                      </button>
-                    </div>
-                    {saveMsg && (
-                      <p className={`text-xs rounded-lg p-2 border flex items-center gap-1.5 ${
-                        saveMsg.type === 'ok'
-                          ? 'text-green-600 bg-green-50 border-green-100'
-                          : 'text-red-500 bg-red-50 border-red-100'
-                      }`}>
-                        {saveMsg.type === 'ok' && <Check size={13} />}
-                        {saveMsg.text}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-xs text-stone-400">
-                    <Info size={14} />
-                    Inicia sesión para guardar esta simulación como reporte y exportarla luego.
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Columna de resultados: sticky con altura acotada. El scroll vive

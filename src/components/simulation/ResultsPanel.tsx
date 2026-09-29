@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimulationResult, WaveData, GridInfo } from '../../lib/types';
-import { Download, FileText, Grid3X3, Image, FileDown } from '../../lib/icons';
+import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
+import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from '../../lib/icons';
 import { interpretSimulation } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
@@ -9,6 +9,8 @@ import { renderParticleMotionPng } from '../../lib/particleMotionRender';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
+import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 
 /** Identificadores de las secciones del panel de resultados. */
 type ResultSection = 'metricas' | 'malla' | 'interpretacion';
@@ -171,6 +173,65 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
     params: true, metrics: true, seismograms: true, crossSection: true, particleMotion: true, interpretation: true,
   });
   const [pdfBusy, setPdfBusy] = useState(false);
+
+  // ── Guardar como reporte (obligatorio ANTES de exportar) ──
+  const { user } = useAuth();
+  const [reportTitle, setReportTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  // Solo tras guardar el reporte se habilitan las descargas (CSV/PNG/PDF).
+  const [hasSaved, setHasSaved] = useState(false);
+
+  // Al cambiar la simulación, se vuelve a exigir guardar antes de exportar.
+  useEffect(() => {
+    setHasSaved(false);
+    setSaveMsg(null);
+    setReportTitle('');
+  }, [result]);
+
+  const handleSaveReport = async () => {
+    if (!supabase || !user || !result) return;
+    setSaving(true);
+    setSaveMsg(null);
+    const title = reportTitle.trim() || (realRecord
+      ? `Registro real ${realRecord.label}`
+      : `Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`);
+    const { error } = await supabase.from('simulation_reports').insert({
+      user_id: user.id,
+      title,
+      params: result.params as SimulationParams,
+      results: {
+        maxAmplitude: result.maxAmplitude,
+        duration: result.duration,
+        dominantFrequency: result.dominantFrequency,
+        pArrival: result.pArrival,
+        sArrival: result.sArrival,
+        pArrivalDetected: result.pArrivalDetected,
+        sArrivalDetected: result.sArrivalDetected,
+        gridInfo: {
+          nx: result.gridInfo.nx,
+          nz: result.gridInfo.nz,
+          totalSteps: result.gridInfo.totalSteps,
+          dtAdjusted: result.gridInfo.dtAdjusted,
+          dxAdjusted: result.gridInfo.dxAdjusted,
+          epicentralDistanceKm: epicentralDistanceKm(result.gridInfo),
+        },
+        waveData: downsampleWave(realRecord ? realRecord.waveData : result.waveData, 600),
+        isRealRecord: Boolean(realRecord),
+        realLabel: realRecord?.label,
+        ampScale,
+      },
+    });
+    if (error) {
+      setSaveMsg({ type: 'error', text: 'No se pudo guardar el reporte. Inténtalo de nuevo.' });
+      console.error('Error guardando reporte:', error.message);
+    } else {
+      setSaveMsg({ type: 'ok', text: '¡Guardado! Ya puedes descargar y verlo en "Mis Reportes".' });
+      setHasSaved(true);
+    }
+    setSaving(false);
+  };
+
   // Con registro real no hay corte del subsuelo propio de esa señal.
   const canCrossSection = Boolean(result && result.snapshots.length && !realRecord);
   // El movimiento de partícula se puede dibujar siempre que haya señal triaxial.
@@ -267,18 +328,60 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       </AccordionSection>
       </div>
 
-      {/* Botones de exportación: FIJOS debajo de los acordeones (fuera del área
-          scrolleable), siempre visibles. */}
-      <div data-tour="sim-export" className="flex gap-2 pt-1 shrink-0">
-        <button onClick={() => exportCSV(result)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
-          <Download size={14} /> CSV
-        </button>
-        <button onClick={() => exportPNG()} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
-          <Image size={14} /> PNG
-        </button>
-        <button onClick={() => setPdfDialog(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
-          <FileDown size={14} /> PDF
-        </button>
+      {/* Guardar + exportar: FIJOS debajo de los acordeones. Primero se guarda
+          como reporte; solo entonces se habilitan las descargas. */}
+      <div data-tour="sim-export" className="shrink-0 space-y-2 pt-1">
+        {user ? (
+          <>
+            {/* Paso 1: guardar como reporte (título opcional + botón). */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={reportTitle}
+                onChange={e => setReportTitle(e.target.value)}
+                placeholder={`Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`}
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
+              />
+              <button
+                onClick={handleSaveReport}
+                disabled={saving}
+                className="flex items-center justify-center gap-2 bg-[#2D6A4F] text-white px-3 py-2 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 shrink-0"
+              >
+                {saving ? 'Guardando…' : hasSaved ? <><Check size={14} /> Guardado</> : <><Save size={14} /> Guardar</>}
+              </button>
+            </div>
+            {saveMsg && (
+              <p className={`text-xs rounded-lg p-2 border flex items-center gap-1.5 ${
+                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-500 bg-red-50 border-red-100'
+              }`}>
+                {saveMsg.type === 'ok' && <Check size={13} />}
+                {saveMsg.text}
+              </p>
+            )}
+            {/* Paso 2: descargas. Deshabilitadas hasta guardar el reporte. */}
+            {!hasSaved && (
+              <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                <Info size={12} /> Guarda el reporte para habilitar las descargas.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => exportCSV(result)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <Download size={14} /> CSV
+              </button>
+              <button onClick={() => exportPNG()} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <Image size={14} /> PNG
+              </button>
+              <button onClick={() => setPdfDialog(true)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <FileDown size={14} /> PDF
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-stone-400 bg-stone-50 border border-stone-200/60 rounded-xl p-3">
+            <Info size={14} className="shrink-0" />
+            Inicia sesión para guardar la simulación como reporte y descargarla.
+          </div>
+        )}
       </div>
 
       {/* Diálogo de opciones del PDF */}
