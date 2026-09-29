@@ -15,7 +15,7 @@ import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { Tooltip } from '../components/ui/Tooltip';
 import { startTour } from '../tours/useTour';
-import { buildSimulacionSteps, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
+import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
 
 interface Props {
   initialParams?: Partial<SimulationParams> | null;
@@ -82,7 +82,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     });
     startTour(steps, {
       onDone: () => {
-        markTourSeen('simulacion');
+        markTourSeen('simulacion', SIMULACION_TOUR_VERSION);
         setTourParam(null);
         setTourResult(null);
       },
@@ -93,7 +93,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // módulo, tras el primer render (rAF asegura que el DOM ya está pintado).
   useEffect(() => {
     if (tourRef.current || !user) return;
-    if (user.tours_vistos?.simulacion) return;
+    // Versión vista del tour (valores antiguos `true` = versión 1). Si es menor
+    // que la actual, el tour cambió y se muestra una vez más.
+    const seen = user.tours_vistos?.simulacion;
+    const seenVer = typeof seen === 'number' ? seen : (seen ? 1 : 0);
+    if (seenVer >= SIMULACION_TOUR_VERSION) return;
     tourRef.current = true;
     const id = requestAnimationFrame(() => setTimeout(launchTour, 350));
     return () => cancelAnimationFrame(id);
@@ -306,7 +310,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   type="button"
                   onClick={launchTour}
                   aria-label="Ver guía"
-                  className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.simulacion ? 'help-pulse' : ''}`}
+                  className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && ((typeof user.tours_vistos?.simulacion === 'number' ? user.tours_vistos.simulacion : (user.tours_vistos?.simulacion ? 1 : 0)) < SIMULACION_TOUR_VERSION) ? 'help-pulse' : ''}`}
                 >
                   <HelpCircle size={14} />
                 </button>
@@ -316,7 +320,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           </div>
           <div className="hidden lg:flex items-center gap-2 bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-1.5 text-xs text-stone-400">
             <Info size={12} />
-            Pase el cursor sobre los parámetros para ver su descripción
+            Pasa el cursor o toca el ícono de información para ver qué significa cada término
           </div>
         </div>
       </div>
@@ -338,6 +342,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   <p className="text-xs text-stone-400 mt-0.5">
                     {viewMode === '2d' && 'Sismogramas triaxiales · Componentes N · E · Z'}
                     {viewMode === 'triaxial' && 'Propagación del campo de ondas en un corte vertical'}
+                    {/* (el subtítulo del corte no cambia; solo la pestaña se renombra) */}
                   </p>
                 </div>
                 {/* View toggle */}
@@ -356,7 +361,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Grid3X3 size={13} /> Corte del subsuelo
+                    <Grid3X3 size={13} /> Mapa de calor del subsuelo
                   </button>
                 </div>
               </div>
@@ -396,7 +401,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                         {realData.label.startsWith('CM')
                           ? 'Sismograma triaxial real de la Red Sismológica Nacional (SGC).'
                           : 'Sismograma triaxial real del Volcán Galeras (OVSP).'}
-                        {' '}El corte del subsuelo con la propagación (parámetros equivalentes) se genera automáticamente; véalo en la pestaña "Corte del subsuelo".
+                        {' '}El mapa de calor del subsuelo con la propagación (parámetros equivalentes) se genera automáticamente; véalo en la pestaña "Mapa de calor del subsuelo".
                       </p>
                     </div>
                     <button onClick={() => setRealData(null)} className="text-[10px] text-stone-400 px-2 py-1 rounded bg-white border border-stone-200">
@@ -488,7 +493,9 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
                   {/* Selector de escala de amplitud */}
                   <div className="flex items-center justify-between gap-2 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100">
-                    <span className="text-[11px] text-stone-500">Escala de amplitud</span>
+                    <span className="text-[11px] text-stone-500">
+                      <Tooltip content="Común: las tres trazas se miden con la misma regla (el máximo de las tres), así ves cuál se mueve más. Por componente: cada traza se estira a su propio máximo (ves su forma aunque sea pequeña)." showIcon>Escala de amplitud</Tooltip>
+                    </span>
                     <div className="flex gap-1">
                       {([['common', 'Común'], ['component', 'Por componente']] as const).map(([mode, txt]) => (
                         <button key={mode} onClick={() => setAmpScale(mode)}
