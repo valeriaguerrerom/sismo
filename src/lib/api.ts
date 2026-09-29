@@ -18,11 +18,28 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * @returns Respuesta parseada como JSON del tipo T.
  * @throws Error si la respuesta HTTP no es exitosa.
  */
-async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+async function fetchAPI<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  const { timeoutMs, ...init } = options ?? {};
+  // Timeout con AbortController: si el backend se cae, se reinicia o demora
+  // demasiado, la petición se cancela en vez de dejar la UI colgada.
+  const controller = new AbortController();
+  const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      ...init,
+    });
+  } catch (e) {
+    // AbortError (timeout) o fallo de red (backend caído, sin conexión).
+    if ((e as Error).name === 'AbortError') {
+      throw new Error('La simulación tardó demasiado y se canceló.');
+    }
+    throw new Error('No se pudo conectar con el servidor.');
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${res.statusText}`);
   }
@@ -177,9 +194,13 @@ function decodeField(b64: string): Float32Array {
 export async function fetchSimulationFull(
   params: import('./types').SimulationParams,
 ): Promise<{ result: import('./types').SimulationResult; heatmapGrid: import('./types').GridInfo }> {
+  // La simulación corre en el servidor (~10-15 s). Damos margen amplio (45 s)
+  // antes de cancelar; si se agota o el backend falla, fetchAPI lanza un
+  // mensaje claro que Simulation.tsx muestra al usuario.
   const dto = await fetchAPI<SimulateFullDTO>('/api/simulate/full', {
     method: 'POST',
     body: JSON.stringify(params),
+    timeoutMs: 45000,
   });
 
   const sg = dto.snapshotGrid;
@@ -190,13 +211,26 @@ export async function fetchSimulationFull(
     field: decodeField(s.field),
   }));
 
+  // El backend serializa los Lamé como `lambda_` (palabra reservada en Python).
+  // Normalizamos a `lambda`/`mu` en el frontend y, si faltan, los recalculamos
+  // desde Vp/Vs/ρ para que nunca queden NaN (métricas, panel y PDF).
+  const rawParams = dto.params as unknown as Record<string, number | string>;
+  const mu = Number(rawParams.mu) > 0
+    ? Number(rawParams.mu)
+    : Number(rawParams.density) * Number(rawParams.vs) ** 2;
+  const lambdaRaw = rawParams.lambda ?? rawParams.lambda_;
+  const lambda = Number(lambdaRaw) !== 0 && Number.isFinite(Number(lambdaRaw))
+    ? Number(lambdaRaw)
+    : Number(rawParams.density) * Number(rawParams.vp) ** 2 - 2 * mu;
+  const normParams = { ...dto.params, lambda, mu } as import('./types').SimulationParams;
+
   const result: import('./types').SimulationResult = {
     waveData: dto.waveData,
     snapshots,
     maxAmplitude: dto.maxAmplitude,
     duration: dto.duration,
     dominantFrequency: dto.dominantFrequency,
-    params: dto.params,
+    params: normParams,
     gridInfo: dto.gridInfo,
     pArrival: dto.pArrival,
     sArrival: dto.sArrival,

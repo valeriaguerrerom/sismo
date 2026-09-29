@@ -72,10 +72,12 @@ export function WaveChart({ data, label, component, color, height = 120, visible
       return { x: toX(t), label: t.toFixed(0) + 's' };
     });
 
+    // Amplitud NORMALIZADA: la señal FDM no está calibrada, así que el eje se
+    // muestra en [-1, 0, +1] respecto al pico de referencia (sin µm/s).
     const ampLabels = [
-      { y: toY(maxAbs), label: `+${(maxAbs * 1e6).toFixed(1)}μm/s` },
+      { y: toY(maxAbs), label: '+1' },
       { y: toY(0), label: '0' },
-      { y: toY(-maxAbs), label: `-${(maxAbs * 1e6).toFixed(1)}μm/s` },
+      { y: toY(-maxAbs), label: '−1' },
     ];
 
     // Arrival marker positions
@@ -108,18 +110,19 @@ export function WaveChart({ data, label, component, color, height = 120, visible
             <text key={i} x={svgData.padLeft - 4} y={al.y + 3} textAnchor="end" fontSize="7" fill="#a8a29e">{al.label}</text>
           ))}
 
-          {/* P-wave arrival marker */}
+          {/* Arribo P: gris, línea punteada fina (se distingue por el trazo y la
+              etiqueta, no por color). */}
           {svgData.pX !== null && (
             <>
-              <line x1={svgData.pX} y1={svgData.padTop} x2={svgData.pX} y2={svgData.h - svgData.padBottom} stroke="#2D6A4F" strokeWidth="1" strokeDasharray="4,3" opacity="0.6" />
-              <text x={svgData.pX + 3} y={svgData.padTop + 10} fontSize="7" fill="#2D6A4F" fontWeight="bold">P</text>
+              <line x1={svgData.pX} y1={svgData.padTop} x2={svgData.pX} y2={svgData.h - svgData.padBottom} stroke="#78716C" strokeWidth="1" strokeDasharray="2,2" opacity="0.8" />
+              <text x={svgData.pX + 3} y={svgData.padTop + 10} fontSize="8" fill="#57534E" fontWeight="bold">P</text>
             </>
           )}
-          {/* S-wave arrival marker */}
+          {/* Arribo S: gris, línea de guiones largos (distinta de la P). */}
           {svgData.sX !== null && (
             <>
-              <line x1={svgData.sX} y1={svgData.padTop} x2={svgData.sX} y2={svgData.h - svgData.padBottom} stroke="#C4553A" strokeWidth="1" strokeDasharray="4,3" opacity="0.6" />
-              <text x={svgData.sX + 3} y={svgData.padTop + 10} fontSize="7" fill="#C4553A" fontWeight="bold">S</text>
+              <line x1={svgData.sX} y1={svgData.padTop} x2={svgData.sX} y2={svgData.h - svgData.padBottom} stroke="#78716C" strokeWidth="1" strokeDasharray="7,3" opacity="0.8" />
+              <text x={svgData.sX + 3} y={svgData.padTop + 10} fontSize="8" fill="#57534E" fontWeight="bold">S</text>
             </>
           )}
 

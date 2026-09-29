@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SimulationResult, WaveData } from '../../lib/types';
 import { Download, FileText, AlertCircle, Grid3X3, Image, FileDown } from '../../lib/icons';
 import { interpretSimulation } from '../../lib/interpretation';
+import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave } from '../../lib/reportPdf';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
@@ -37,8 +38,9 @@ function exportCSV(result: SimulationResult) {
 }
 
 function formatAmplitude(maxAmplitude: number): string {
-  // Amplitude is uncalibrated displacement — show as relative
-  return maxAmplitude.toExponential(2) + ' (u.a.)';
+  // La señal no está calibrada: se reporta el pico en unidades arbitrarias
+  // (u.a.). Las gráficas muestran la amplitud normalizada a este pico (±1).
+  return maxAmplitude.toExponential(2) + ' u.a.';
 }
 
 function interpretResult(result: SimulationResult): string {
@@ -65,7 +67,7 @@ function exportPDF(result: SimulationResult, realRecord?: RealRecordInfo | null)
       sArrival: result.sArrival,
       pArrivalDetected: result.pArrivalDetected,
       sArrivalDetected: result.sArrivalDetected,
-      gridInfo: result.gridInfo,
+      gridInfo: { ...result.gridInfo, epicentralDistanceKm: epicentralDistanceKm(result.gridInfo) },
       // Con registro real: la señal real que se ve en pantalla, sin marcas P/S.
       waveData: downsampleWave(realRecord ? realRecord.waveData : result.waveData, 1200),
       isRealRecord: Boolean(realRecord),
@@ -108,7 +110,7 @@ export function ResultsPanel({ result, realRecord, forceSection }: Props) {
       <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSection === 'metricas'} onToggle={() => toggle('metricas')}>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Amplitud Máx.', value: formatAmplitude(maxAmplitude), tip: 'Mayor desplazamiento del suelo registrado en cualquier componente. Está en unidades arbitrarias porque la señal no está calibrada.' },
+            { label: 'Amplitud Máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1).' },
             { label: 'Duración', value: `${duration.toFixed(0)} s`, tip: 'Tiempo total del registro sísmico simulado.' },
             { label: 'Frec. Dominante', value: `${dominantFrequency.toFixed(1)} Hz`, tip: 'Frecuencia principal de la fuente (ondícula de Ricker). Más alta = ondas más cortas y detalladas.' },
             { label: 'Vp/Vs', value: `${(params.vp / params.vs).toFixed(2)}`, tip: 'Relación entre la velocidad de la onda P y la S. Valores típicos rondan 1.7 en la corteza.' },
@@ -131,7 +133,7 @@ export function ResultsPanel({ result, realRecord, forceSection }: Props) {
           </p>
         )}
         <p className="text-[10px] text-stone-400 mt-1">
-          Amplitud en unidades arbitrarias (desplazamiento no calibrado).
+          Señal no calibrada: las gráficas muestran amplitud normalizada (±1); el pico está en unidades arbitrarias (u.a.).
         </p>
       </AccordionSection>
 
@@ -143,7 +145,8 @@ export function ResultsPanel({ result, realRecord, forceSection }: Props) {
             { label: 'Resolución (dx)', value: `${gridInfo.dx} m${gridInfo.dxAdjusted ? ' ⚠️' : ''}`, tip: 'Distancia entre nodos de la malla. Menor dx = más detalle, pero más costo de cálculo.' },
             { label: 'Paso temporal (dt)', value: `${(gridInfo.dt * 1000).toFixed(2)} ms${gridInfo.dtAdjusted ? ' ⚠️' : ''}`, tip: 'Intervalo de tiempo entre pasos de la simulación. Debe cumplir la condición de estabilidad CFL: dt ≤ dx/(Vp·√2).' },
             { label: 'Nodos/λ mín.', value: `${gridInfo.pointsPerWavelength.toFixed(1)}${gridInfo.pointsPerWavelength < 10 ? ' ⚠️' : ''}`, tip: 'Cuántos nodos caben en la onda más corta. Se recomiendan al menos 10 para evitar dispersión numérica.' },
-            { label: 'Total pasos', value: gridInfo.totalSteps.toLocaleString(), tip: 'Número de iteraciones temporales que ejecutó la simulación.' },
+            { label: 'Total pasos', value: formatBigInt(gridInfo.totalSteps), tip: 'Número de iteraciones temporales que ejecutó la simulación.' },
+            { label: 'Estación virtual', value: epicentralDistanceLabel(gridInfo), tip: 'Distancia horizontal del receptor (estación virtual) al epicentro, en superficie. Se calcula desde la malla: |receptorX − fuenteX| · dx.' },
             { label: 'Fuente', value: params.sourceType === 'volcanic' ? 'Volcánica' : 'Tectónica', tip: 'Mecanismo de la fuente: volcánica (explosión isótropa, más onda P) o tectónica (doble par de cizalla, más onda S).' },
             { label: 'Magnitud', value: `Mw ${params.magnitude.toFixed(1)}`, tip: 'Magnitud momento del evento simulado. Escala logarítmica: +1 equivale a ~32× más energía.' },
           ].map(p => (
@@ -153,6 +156,9 @@ export function ResultsPanel({ result, realRecord, forceSection }: Props) {
             </div>
           ))}
         </div>
+        <p className="text-[10px] text-stone-400 mt-2">
+          Estación virtual a {epicentralDistanceLabel(gridInfo)} del epicentro, en superficie.
+        </p>
         {gridInfo.pointsPerWavelength < 10 && (
           <p className="text-[10px] text-[#D4A853] mt-2 bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20">
             ⚠️ Malla gruesa para la frecuencia simulada ({gridInfo.pointsPerWavelength.toFixed(1)} nodos/λ, mínimo recomendado: 10). Posible dispersión numérica: las altas frecuencias se propagan más lento de lo debido.

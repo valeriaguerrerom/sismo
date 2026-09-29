@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { downsampleWave } from '../lib/reportPdf';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
+import { epicentralDistanceKm, epicentralDistanceLabel } from '../lib/format';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
@@ -128,6 +129,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           totalSteps: result.gridInfo.totalSteps,
           dtAdjusted: result.gridInfo.dtAdjusted,
           dxAdjusted: result.gridInfo.dxAdjusted,
+          epicentralDistanceKm: epicentralDistanceKm(result.gridInfo),
         },
         waveData: downsampleWave(realData ? realData.waveData : result.waveData, 600),
         isRealRecord: Boolean(realData),
@@ -229,14 +231,15 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       })
       .catch((err) => {
         stopProg();
+        console.error('Error en la simulación:', err);
+        // En cualquier fallo (conexión, reinicio del servidor, tiempo de espera
+        // agotado o error del backend) mostramos un mensaje claro y devolvemos
+        // el control: setLoading(false) rehabilita el botón "Generar" y quita la
+        // pantalla de carga, nunca se queda congelada.
         if (!background) {
           setLoading(false);
           setProgress(null);
-          setSimError(
-            err instanceof Error && err.message.includes('Failed to fetch')
-              ? 'No se pudo conectar con el servidor de simulación. Verifica que el backend esté activo.'
-              : 'Ocurrió un error al ejecutar la simulación en el servidor.'
-          );
+          setSimError('No pudimos completar la simulación. Revisa tu conexión e inténtalo de nuevo.');
         }
       });
   }, [params]);
@@ -421,14 +424,14 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
                     <div className="flex gap-4 text-xs text-stone-500 mb-3">
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Norte</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Este</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Norte</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
                     </div>
-                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#C4553A" height={110} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
                     <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} robustScale />
@@ -472,15 +475,18 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <div className="flex gap-4 text-xs text-stone-500 mb-3">
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Norte</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Este</span>
+                    <div className="flex gap-4 text-xs text-stone-500 mb-1">
+                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Norte</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
                     </div>
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
+                    <p className="text-[10px] text-stone-400 mb-3">
+                      Estación virtual a {epicentralDistanceLabel(result.gridInfo)} del epicentro, en superficie.
+                    </p>
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#C4553A" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
                     <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />

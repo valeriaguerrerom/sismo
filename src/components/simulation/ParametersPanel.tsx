@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
 import { SimulationParams } from '../../lib/types';
 import { computeLame, presetForSource } from '../../lib/simulation';
+import { formatBigInt } from '../../lib/format';
 import { Tooltip } from '../ui/Tooltip';
 import { Play, Loader } from '../../lib/icons';
 import { AccordionSection } from './AccordionSection';
 
 /** Identificadores de las secciones del panel de parámetros. */
 type ParamSection = 'elasticas' | 'fuente' | 'config';
+
+/** dt estable (CFL) para un Vp y dx dados: 0.9·dx/(Vp·√2), redondeado a 4 dec. */
+function cflDt(vp: number, dx: number): number {
+  const safe = 0.9 * dx / (vp * Math.SQRT2);
+  // Redondeo a 5 decimales; piso muy bajo para que en combinaciones extremas
+  // (Vp alto + dx pequeño) el dt siga siendo estable.
+  return Math.max(0.0002, Math.round(safe * 100000) / 100000);
+}
 
 interface Props {
   params: SimulationParams;
@@ -89,6 +98,12 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
       );
       next.lambda = lambda;
       next.mu = mu;
+    }
+    // dt se calcula AUTOMÁTICAMENTE para respetar la estabilidad (CFL) en todo
+    // el rango de Vp/dx: dt = 0.9 · dx / (Vp·√2). Así el paso temporal que se
+    // muestra y se envía al motor es siempre estable, sin depender del usuario.
+    if (key === 'vp' || key === 'dx') {
+      next.dt = cflDt(next.vp, next.dx);
     }
     onChange(next);
   };
@@ -195,24 +210,28 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             unit="km"
             onChange={v => update('depth', v)}
           />
+          {/* Lat/Lon como texto con punto decimal SIEMPRE (los inputs number
+              usan la coma del locale del navegador). inputMode decimal para
+              teclado numérico en móvil; se acepta coma al escribir y se
+              normaliza a punto. */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="text-xs font-medium text-stone-600 block mb-1">Latitud</span>
               <input
-                type="number"
-                value={params.epicenterLat}
-                step={0.01}
-                onChange={e => onChange({ ...params, epicenterLat: Number(e.target.value) })}
+                type="text"
+                inputMode="decimal"
+                value={String(params.epicenterLat)}
+                onChange={e => { const v = Number(e.target.value.replace(',', '.')); if (!Number.isNaN(v)) onChange({ ...params, epicenterLat: v }); }}
                 className="w-full text-xs border border-stone-200 rounded px-2 py-1 text-stone-700 bg-stone-50 focus:outline-none focus:border-[#2D6A4F]"
               />
             </div>
             <div>
               <span className="text-xs font-medium text-stone-600 block mb-1">Longitud</span>
               <input
-                type="number"
-                value={params.epicenterLon}
-                step={0.01}
-                onChange={e => onChange({ ...params, epicenterLon: Number(e.target.value) })}
+                type="text"
+                inputMode="decimal"
+                value={String(params.epicenterLon)}
+                onChange={e => { const v = Number(e.target.value.replace(',', '.')); if (!Number.isNaN(v)) onChange({ ...params, epicenterLon: v }); }}
                 className="w-full text-xs border border-stone-200 rounded px-2 py-1 text-stone-700 bg-stone-50 focus:outline-none focus:border-[#2D6A4F]"
               />
             </div>
@@ -232,6 +251,18 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             unit="seg"
             onChange={v => update('duration', v)}
           />
+          {/* Aviso de duración efectiva: el motor tiene un tope de pasos, así que
+              la duración realmente simulada puede ser menor que la pedida. */}
+          {(() => {
+            const MAX_STEPS = 8000;
+            const eff = Math.min(params.duration, MAX_STEPS * params.dt);
+            if (eff >= params.duration - 0.05) return null;
+            return (
+              <p className="text-[10px] text-[#D4A853] bg-[#D4A853]/10 rounded-lg p-2 border border-[#D4A853]/20 -mt-2">
+                Se simularán ≈ {eff.toFixed(0)} s (tope de {formatBigInt(MAX_STEPS)} pasos). Sube dx o baja Vp para alcanzar {params.duration} s.
+              </p>
+            );
+          })()}
           <SliderRow
             label="Resolución Espacial (dx)"
             tooltip="Tamaño del paso de malla espacial en metros. Valores menores dan mayor precisión pero mayor costo computacional."
@@ -242,22 +273,18 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             unit="m"
             onChange={v => update('dx', v)}
           />
-          <SliderRow
-            label="Paso Temporal (dt)"
-            tooltip="Incremento de tiempo en segundos entre muestras. Debe cumplir la condición CFL: dt ≤ dx / (Vp·√2)."
-            value={params.dt}
-            min={0.001}
-            max={0.1}
-            step={0.001}
-            unit="s"
-            onChange={v => update('dt', v)}
-          />
-          {/* CFL stability check */}
-          {params.dt > params.dx / (params.vp * Math.SQRT2) && (
-            <p className="text-[10px] text-[#C4553A] bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-              ⚠️ dt excede el límite CFL ({(params.dx / (params.vp * Math.SQRT2) * 1000).toFixed(1)} ms). Se ajustará automáticamente.
-            </p>
-          )}
+          {/* Paso temporal (dt): automático según CFL (dt = 0.9·dx/(Vp·√2)). No
+              es editable porque se calcula para garantizar estabilidad en todo
+              el rango de Vp y dx; se muestra solo como información. */}
+          <div>
+            <div className="flex items-center justify-between">
+              <Tooltip content="Se calcula automáticamente para cumplir la condición de estabilidad CFL: dt = 0.9·dx/(Vp·√2). Así la simulación es siempre estable." showIcon>
+                <span className="text-xs font-medium text-stone-600">Paso Temporal (dt)</span>
+              </Tooltip>
+              <span className="text-xs font-mono font-semibold text-[#1A1A2E]">{(params.dt * 1000).toFixed(2)} ms</span>
+            </div>
+            <p className="text-[10px] text-stone-400 mt-1">Automático (estabilidad CFL). Courant ≈ {(params.dt * params.vp * Math.SQRT2 / params.dx).toFixed(2)}.</p>
+          </div>
         </div>
       </AccordionSection>
 
