@@ -334,13 +334,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           {/* Columna de parámetros: sticky en desktop, sin recortar contenido.
               Con acordeón exclusivo el contenido es corto; si una sección larga
               excede la altura, hay scroll interno suave (nunca corte). */}
-          <div className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+          <div className="lg:h-[calc(100dvh-154px)] lg:sticky lg:top-16">
             <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} />
           </div>
 
           <div className="flex flex-col gap-4 lg:max-h-[calc(100dvh-154px)] lg:overflow-y-auto scrollbar-thin lg:pr-1">
             <div data-viz-area data-tour="viz-area" className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                 <div>
                   <h2 className="font-bold text-[#1A1A2E]">Visualización</h2>
                   <p className="text-xs text-stone-400 mt-0.5">
@@ -349,8 +349,9 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     {viewMode === 'particle' && 'Trayectoria del suelo en la estación (Norte · Este · Vertical)'}
                   </p>
                 </div>
-                {/* View toggle */}
-                <div className="flex bg-stone-100 rounded-lg p-0.5">
+                {/* View toggle: en pantallas estrechas envuelve a varias líneas
+                    (no genera scroll horizontal). */}
+                <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 gap-0.5">
                   <button
                     onClick={() => setViewMode('2d')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
@@ -422,7 +423,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   {/* Playback controls for real data */}
-                  <div className="flex items-center gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
                     <button onClick={() => { setWave2dRatio(0); setWave2dPlaying(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500 shadow-sm">
                       <SkipBack size={13} />
                     </button>
@@ -438,7 +439,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     <input
                       type="range" min={0} max={100} value={Math.round(wave2dRatio * 100)}
                       onChange={e => { setWave2dRatio(Number(e.target.value) / 100); setWave2dPlaying(false); }}
-                      className="flex-1"
+                      className="flex-1 min-w-[140px]"
                     />
                     <span className="text-xs font-mono text-stone-400 w-20 text-right">
                       {(wave2dRatio * (realData.waveData.time[realData.waveData.time.length - 1] ?? 0)).toFixed(1)}s / {(realData.waveData.time[realData.waveData.time.length - 1] ?? 0).toFixed(0)}s
@@ -474,7 +475,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               {!loading && result && !realData && viewMode === '2d' && (
                 <div className="space-y-3">
                   {/* Playback controls */}
-                  <div className="flex items-center gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
                     <button onClick={() => { setWave2dRatio(0); setWave2dPlaying(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500 shadow-sm">
                       <SkipBack size={13} />
                     </button>
@@ -490,7 +491,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     <input
                       type="range" min={0} max={100} value={Math.round(wave2dRatio * 100)}
                       onChange={e => { setWave2dRatio(Number(e.target.value) / 100); setWave2dPlaying(false); }}
-                      className="flex-1"
+                      className="flex-1 min-w-[140px]"
                     />
                     <span className="text-xs font-mono text-stone-400 w-20 text-right">
                       {(wave2dRatio * (result.waveData.time[result.waveData.time.length - 1] ?? 0)).toFixed(1)}s / {(result.waveData.time[result.waveData.time.length - 1] ?? 0).toFixed(0)}s
@@ -567,7 +568,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 return (
                   <div className="space-y-3">
                     {/* Reproductor compartido (mismo tiempo que sismogramas y corte). */}
-                    <div className="flex items-center gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-stone-50 rounded-xl p-2.5 border border-stone-100">
                       <button onClick={() => { setWave2dRatio(0); setWave2dPlaying(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500 shadow-sm">
                         <SkipBack size={13} />
                       </button>
@@ -580,7 +581,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       <input
                         type="range" min={0} max={100} value={Math.round(wave2dRatio * 100)}
                         onChange={e => { setWave2dRatio(Number(e.target.value) / 100); setWave2dPlaying(false); }}
-                        className="flex-1"
+                        className="flex-1 min-w-[140px]"
                       />
                       <span className="text-xs font-mono text-stone-400 w-20 text-right">
                         {(wave2dRatio * pmLastT).toFixed(1)}s / {pmLastT.toFixed(0)}s
@@ -653,7 +654,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           {/* Columna de resultados: sticky con altura acotada. El scroll vive
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
-          <div data-tour="results-panel" className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
+          <div data-tour="results-panel" className="lg:h-[calc(100dvh-154px)] lg:sticky lg:top-16">
             <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
           </div>
         </div>
