@@ -64,18 +64,44 @@ export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
     return () => document.removeEventListener('pointerdown', onDocDown, true);
   }, [pinned]);
 
+  // Alterna el tooltip fijado (toque). Solo lo llama el ícono de información (o
+  // el texto cuando NO hay control envuelto), nunca el contenedor de un botón.
+  const toggle = () => setPinned(p => { const np = !p; setVisible(np); return np; });
+
   return (
     <span
       ref={triggerRef}
       className="relative inline-flex items-center gap-1"
+      // El hover (escritorio) se mantiene en todo el disparador; NO se pone
+      // onClick aquí para no interceptar los clics del control que se envuelve
+      // (botones, selectores, deslizadores). El toque táctil se maneja en el
+      // ícono de información (o en el texto si no hay ícono).
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => { if (!pinned) setVisible(false); }}
-      // Toque/clic: alterna el tooltip fijado (clave para pantallas táctiles,
-      // donde no hay hover). Evita que el gesto dispare acciones del contenedor.
-      onClick={(e) => { e.stopPropagation(); setPinned(p => { const np = !p; setVisible(np); return np; }); }}
     >
-      {children}
-      {showIcon && <Info size={13} className="text-stone-400 cursor-help" />}
+      {/* Cuando NO hay ícono, el contenido suele ser solo texto informativo: se
+          hace tocable directamente, SIN stopPropagation (no hay acción que
+          bloquear, y si el texto está dentro de un botón, el clic fluye a él).
+          Cuando hay ícono, el texto/control se deja intacto. */}
+      {showIcon ? children : (
+        <span className="cursor-help" onClick={() => toggle()}>
+          {children}
+        </span>
+      )}
+      {showIcon && (
+        <Info
+          size={13}
+          className="text-stone-400 cursor-help shrink-0"
+          role="button"
+          aria-label="Ver explicación"
+          tabIndex={0}
+          // El toque/clic SOBRE EL ÍCONO fija el tooltip. stopPropagation aquí
+          // evita que el gesto sobre el ícono active el control envuelto, pero
+          // el clic sobre el control (fuera del ícono) fluye normal.
+          onClick={(e) => { e.stopPropagation(); toggle(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+        />
+      )}
       {visible && pos && createPortal(
         <span
           style={{
