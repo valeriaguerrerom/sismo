@@ -222,3 +222,116 @@ duración (13 s), adecuado para pseudo-sismogramas con fines educativos. El
 rebote P del tectónico (4.8 s) es la única reflexión que entra en la ventana; su
 amplitud es baja y el sponge la atenúa, por lo que no compromete la lectura de
 la P, la S ni la superficial.
+
+## 5. Registro triaxial real: P-SV + SH y rotación a Norte/Este
+
+El motor es 2D en un corte vertical, pero el sismograma debe ser triaxial
+(Norte, Este, Vertical). Antes, "Norte" se obtenía derivando la componente
+horizontal `ux`, así que no era una componente independiente y el registro no
+era realmente triaxial. Ahora se construye combinando **dos** simulaciones 2D en
+la misma malla, con la misma zona absorbente y superficie libre:
+
+- **P-SV** (en el plano del corte): resuelve `ux` (radial) y `uz` (vertical),
+  las ondas P y SV.
+- **SH** (fuera del plano): resuelve una ecuación de onda **escalar**
+  `ρ·∂²v/∂t² = μ·(∂²v/∂x² + ∂²v/∂z²)` para el desplazamiento transversal `v`
+  (tipo Love/SH). Solo depende de Vs y ρ. Superficie libre por Neumann
+  (`∂v/∂z = 0`). Es un tercer campo independiente.
+
+### Fuente: tensor de momento del doble par
+
+Para la fuente tectónica se define el mecanismo con **rumbo (strike), buzamiento
+(dip) y deslizamiento (rake)** (convención Aki & Richards, ejes 1 = Norte,
+2 = Este, 3 = Abajo). Con ellos se calcula el **tensor de momento** M (traza
+nula, doble par puro) y se **proyecta al marco del corte** (r, t, z) según el
+acimut de la estación:
+
+- `e_r = (cos az, sin az, 0)` (radial, apunta de la fuente a la estación),
+- `e_t = (sin az, −cos az, 0)` (transversal, 90° horario respecto a r),
+- `e_z = (0, 0, 1)` (hacia abajo).
+
+Las componentes **en el plano** (Mrr, Mrz, Mzz) excitan el P-SV; las de **fuera
+del plano** (Mrt, Mtz) excitan el SH. La fuente se inyecta como la **divergencia
+del tensor de momento** (`f_i = −M_ij·∂δ/∂x_j`), no como un lóbulo aproximado a
+mano, de modo que la amplitud y la polaridad de P-SV y SH son físicamente
+consistentes.
+
+**Mecanismo por defecto para Nariño:** falla **inversa de rumbo andino**
+(strike 30° ≈ NNE-SSO, dip 45°, rake 90° inversa pura). Es coherente con el
+régimen compresivo de la subducción de la placa de Nazca bajo Sudamérica, que
+domina la tectónica de Nariño. Está disponible como parámetro avanzado en la
+sección "Fuente sísmica".
+
+### Rotación radial/transversal → Norte/Este
+
+En el receptor se registran la radial (R = `ux`), la transversal (T = `v`) y la
+vertical (Z = `uz`), y se rotan R y T a Norte y Este según el acimut de la
+estación (0-360° desde el norte, en sentido horario):
+
+```
+Norte = R·cos(az) − T·sin(az)
+Este  = R·sin(az) + T·cos(az)
+```
+
+Convención de signos: radial positiva **alejándose** de la fuente; transversal
+positiva 90° en **sentido horario** respecto a la radial. Así las tres
+componentes N, E, Z son genuinamente independientes.
+
+### Validación: la fuente volcánica no genera SH
+
+La fuente volcánica es **isótropa** (explosiva): irradia P de forma uniforme y
+no produce cizalla, por lo que **no excita el SH**. Como prueba de validación se
+mide la razón entre el pico transversal y el radial: para la volcánica por
+defecto **T/R = 0.0000** (transversal nula, como debe ser), mientras que para la
+tectónica por defecto **T/R ≈ 0.28** (transversal significativa e independiente).
+Hay tests automáticos que verifican ambos casos.
+
+### Costo de cómputo
+
+El SH añade un solve escalar (más barato que el P-SV, que actualiza dos campos
+con derivada cruzada). Con el kernel paralelo (`prange`), el costo total por
+simulación queda en ~7 s (tectónica) y ~4 s (volcánica), bajo el límite de 15 s.
+
+### Límites y validación de parámetros
+
+Cada parámetro tiene un rango válido (fuente de verdad en `PARAM_RANGES`,
+espejada en `src/lib/paramLimits.ts` y en el modelo Pydantic del backend). Las
+restricciones físicas clave:
+
+- **Vs < Vp/√2** para que el parámetro de Lamé λ = ρ(Vp² − 2·Vs²) no sea
+  negativo (roca físicamente imposible).
+- **Profundidad focal** dentro del dominio, con margen sobre la zona absorbente.
+- **dx** que dé al menos **10 nodos por longitud de onda** mínima (evita
+  dispersión numérica).
+
+En el Simulador, si el usuario escribe un valor fuera de rango o una combinación
+inválida, se ajusta automáticamente al valor válido más cercano y se muestra el
+motivo junto al control. El **backend valida exactamente lo mismo** (validadores
+Pydantic) y responde con un mensaje claro en español si recibe algo inválido;
+nunca confía solo en la validación del navegador.
+
+**Primer rebote de borde:** el backend calcula, en cada simulación y con la
+geometría real, el tiempo del primer rebote de borde para P y S (método de la
+imagen especular sobre los bordes exteriores) y lo devuelve en `gridInfo`
+(`firstBounceP`, `firstBounceS`). El aviso de duración del panel usa ese valor,
+no una estimación fija por tipo de fuente.
+
+**Latitud y longitud:** se limitan al área de Nariño y su entorno (incluida la
+red CM Colombia-Ecuador de los registros reales). Como el medio es homogéneo y
+2D, la ubicación del epicentro es **solo una referencia geográfica** y no cambia
+el cálculo; así se aclara bajo los campos en el Simulador.
+
+## Limitación: fuente lineal 2D vs. fuente puntual 3D
+
+La simulación es 2D, lo que físicamente equivale a una **fuente lineal**
+(infinita en la dirección perpendicular al corte), no a una **fuente puntual
+3D**. La consecuencia principal es el **decaimiento geométrico**: en 2D la
+amplitud decae como ~1/√r, mientras que en 3D una fuente puntual decae como
+~1/r (y las ondas superficiales como ~1/√r). Por eso las amplitudes relativas
+entre fases y con la distancia no son idénticas a las de un registro real 3D.
+Para fines educativos (mostrar P, S, superficial, el carácter triaxial y el
+efecto del mecanismo focal) esto es aceptable. Como **trabajo futuro** existe una
+**corrección 2D→3D** (filtro de conversión en el dominio de la frecuencia, del
+tipo √(t) / transformada, que ajusta el decaimiento y la fase de la respuesta de
+fuente lineal a la de fuente puntual) que podría aplicarse a las trazas para
+aproximar mejor las amplitudes 3D.
