@@ -316,7 +316,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 </button>
               </Tooltip>
             </h1>
-            <p className="hidden sm:block text-stone-400 text-[11px] mt-0.5">Diferencias Finitas · Ecuación de Onda Elástica · Pseudo-sismogramas del subsuelo de Nariño</p>
+            <p className="hidden sm:block text-stone-400 text-[11px] mt-0.5">Diferencias finitas en 2D sobre la ecuación de onda elástica</p>
           </div>
           <div className="hidden lg:flex items-center gap-2 bg-stone-50 border border-stone-200/60 rounded-lg px-3 py-1.5 text-xs text-stone-400">
             <Info size={12} />
@@ -383,9 +383,9 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   <div className="w-14 h-14 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
                     <Activity size={26} className="text-stone-300" />
                   </div>
-                  <h3 className="font-semibold text-stone-400 mb-1">Esperando simulación</h3>
+                  <h3 className="font-semibold text-stone-500 mb-1">Aún no has generado un sismograma</h3>
                   <p className="text-stone-400 text-sm max-w-xs leading-relaxed">
-                    Configure los parámetros y presione "Generar Pseudo-Sismograma"
+                    Ajusta los parámetros de la izquierda y pulsa "Generar pseudo-sismograma". Tienes la guía paso a paso en la columna de la derecha.
                   </p>
                 </div>
               )}
@@ -546,23 +546,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               )}
 
             </div>
-
-            {/* Quick stats */}
-            {result && (
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { label: 'Método', value: 'FDM 2D', color: 'text-[#2D6A4F]' },
-                  { label: 'Malla', value: `${result.gridInfo.nx}×${result.gridInfo.nz}`, color: 'text-[#6B5B95]' },
-                  { label: 'Fuente', value: result.params.sourceType === 'volcanic' ? 'Volcánica' : 'Tectónica', color: result.params.sourceType === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]' },
-                  { label: 'Vp/Vs', value: `${(result.params.vp / result.params.vs).toFixed(2)}`, color: 'text-[#1A1A2E]' },
-                ].map(stat => (
-                  <div key={stat.label} className="bg-white rounded-xl border border-stone-200/60 p-3 shadow-sm text-center">
-                    <div className={`text-lg font-black ${stat.color}`}>{stat.value}</div>
-                    <div className="text-[10px] text-stone-400 uppercase tracking-wide mt-0.5">{stat.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* Guardar reporte */}
             {result && (

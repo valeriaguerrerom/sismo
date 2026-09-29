@@ -13,7 +13,7 @@ import { type ReactNode } from 'react';
 import { ChevronRight } from '../../lib/icons';
 
 interface AccordionSectionProps {
-  /** Título mostrado en el encabezado (se pinta en mayúsculas). */
+  /** Título mostrado en el encabezado (en formato oración, sin mayúsculas). */
   title: string;
   /** Ícono opcional a la izquierda del título. */
   icon?: ReactNode;
@@ -42,7 +42,7 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
         aria-expanded={open}
         className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors"
       >
-        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#1A1A2E]">
+        <span className="flex items-center gap-1.5 text-sm font-bold text-[#1A1A2E]">
           {icon}
           {title}
         </span>

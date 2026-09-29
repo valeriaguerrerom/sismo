@@ -41,7 +41,7 @@ export function ProgressBar({ progress }: Props) {
           </div>
           <div className="w-full h-2.5 bg-stone-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-[#C4553A] to-[#D4A853] rounded-full transition-all duration-300 ease-out"
+              className="h-full bg-[#C4553A] rounded-full transition-all duration-300 ease-out"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
@@ -49,7 +49,7 @@ export function ProgressBar({ progress }: Props) {
 
         {/* Dato curioso rotativo (entretiene la espera). */}
         <div className="mt-6 w-full rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-[#C4553A] mb-1">¿Sabías que…?</p>
+          <p className="text-[11px] font-semibold text-[#C4553A] mb-1">¿Sabías que…?</p>
           <p key={factIndex} className="text-[12px] leading-snug text-stone-600 animate-fade-in">
             {LOADER_FACTS[factIndex]}
           </p>

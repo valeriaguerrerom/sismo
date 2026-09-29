@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SimulationResult, WaveData, GridInfo } from '../../lib/types';
-import { Download, FileText, AlertCircle, Grid3X3, Image, FileDown } from '../../lib/icons';
+import { Download, FileText, Grid3X3, Image, FileDown } from '../../lib/icons';
 import { interpretSimulation } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
@@ -157,13 +157,26 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   }, [forceSection]);
 
   if (!result) {
+    const steps = [
+      { n: 1, title: 'Elige un escenario o ajusta el subsuelo', text: 'Parte de un caso listo (sismo andino, volcánico del Galeras…) o mueve las velocidades y la densidad en "Variables elásticas".' },
+      { n: 2, title: 'Revisa la fuente', text: 'Define el tipo de fuente, la magnitud, la profundidad y la distancia de la estación en "Fuente sísmica".' },
+      { n: 3, title: 'Genera el pseudo-sismograma', text: 'Pulsa "Generar pseudo-sismograma" y aquí aparecerán tus métricas, la malla y la interpretación.' },
+    ];
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-6">
-        <div className="w-16 h-16 rounded-2xl bg-stone-100 flex items-center justify-center mb-4">
-          <AlertCircle size={28} className="text-stone-400" />
-        </div>
-        <h3 className="text-sm font-semibold text-stone-500 mb-2">Sin resultados</h3>
-        <p className="text-xs text-stone-500 leading-relaxed">Configure los parámetros y presione "Generar Pseudo-Sismograma".</p>
+      <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full">
+        <h3 className="text-sm font-bold text-[#1A1A2E] mb-1">Empieza tu simulación en 3 pasos</h3>
+        <p className="text-xs text-stone-500 mb-4 leading-relaxed">Cuando generes tu primer resultado, esta columna mostrará las métricas y la interpretación.</p>
+        <ol className="space-y-3">
+          {steps.map(s => (
+            <li key={s.n} className="flex gap-3">
+              <span className="shrink-0 w-6 h-6 rounded-full bg-[#C4553A]/10 text-[#C4553A] text-xs font-bold flex items-center justify-center">{s.n}</span>
+              <div>
+                <p className="text-xs font-semibold text-[#1A1A2E]">{s.title}</p>
+                <p className="text-[11px] text-stone-500 leading-relaxed mt-0.5">{s.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
     );
   }
@@ -180,20 +193,20 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSection === 'metricas'} onToggle={() => toggle('metricas')}>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Amplitud Máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1).' },
+            { label: 'Amplitud máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1).' },
             { label: 'Duración', value: `${duration.toFixed(0)} s`, tip: 'Tiempo total del registro sísmico simulado.' },
-            { label: 'Frec. Dominante', value: `${dominantFrequency.toFixed(1)} Hz`, tip: 'Frecuencia principal de la fuente (ondícula de Ricker). Más alta = ondas más cortas y detalladas.' },
+            { label: 'Frecuencia dominante', value: `${dominantFrequency.toFixed(1)} Hz`, tip: 'Frecuencia principal de la fuente (ondícula de Ricker). Más alta = ondas más cortas y detalladas.' },
             { label: 'Vp/Vs', value: `${(params.vp / params.vs).toFixed(2)}`, tip: 'Relación entre la velocidad de la onda P y la S. Valores típicos rondan 1.7 en la corteza.' },
-            { label: 'Arribo Onda P', value: `${pArrival.toFixed(2)} s${pArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda P (la más rápida). Un * indica que se estimó teóricamente, no se detectó en la señal.' },
-            { label: 'Arribo Onda S', value: `${sArrival.toFixed(2)} s${sArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda S (más lenta que la P). La diferencia S−P crece con la distancia al foco.' },
+            { label: 'Arribo de la onda P', value: `${pArrival.toFixed(2)} s${pArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda P (la más rápida). Un * indica que se estimó teóricamente, no se detectó en la señal.' },
+            { label: 'Arribo de la onda S', value: `${sArrival.toFixed(2)} s${sArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda S (más lenta que la P). La diferencia S−P crece con la distancia al foco.' },
             { label: 'Impedancia', value: `${(impedance / 1e6).toFixed(2)} MRayl`, tip: 'Producto de la densidad por Vp (ρ·Vp). Los contrastes de impedancia generan reflexiones de las ondas.' },
             { label: 'Fotogramas', value: `${result.snapshots.length}`, tip: 'Número de fotogramas del campo de ondas guardados para animar el corte del subsuelo.' },
           ].map(m => (
             <div key={m.label} className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-              <div className="text-[10px] text-stone-500 uppercase tracking-wide mb-1">
+              <div className="text-[10px] text-stone-500 mb-1">
                 <Tooltip content={m.tip} showIcon>{m.label}</Tooltip>
               </div>
-              <div className="text-sm font-bold font-mono text-[#1A1A2E]">{m.value}</div>
+              <div className="text-sm font-bold text-[#1A1A2E]">{m.value}</div>
             </div>
           ))}
         </div>
@@ -222,7 +235,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
           ].map(p => (
             <div key={p.label} className="flex justify-between items-center text-xs">
               <span className="text-stone-500"><Tooltip content={p.tip} showIcon>{p.label}</Tooltip></span>
-              <span className="font-mono font-semibold text-[#1A1A2E]">{p.value}</span>
+              <span className="font-semibold text-[#1A1A2E]">{p.value}</span>
             </div>
           ))}
         </div>
@@ -260,7 +273,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         <button onClick={() => exportPNG()} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <Image size={14} /> PNG
         </button>
-        <button onClick={() => setPdfDialog(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-[#C4553A]/30 bg-[#C4553A]/5 text-[#C4553A] font-semibold text-sm">
+        <button onClick={() => setPdfDialog(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <FileDown size={14} /> PDF
         </button>
       </div>

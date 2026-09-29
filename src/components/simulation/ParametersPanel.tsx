@@ -147,10 +147,10 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* Zona scrolleable: acordeones + botón Generar (justo bajo Configuración). */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
-      <AccordionSection title="Variables Elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
+      <AccordionSection title="Variables elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
         <div className="space-y-4">
           <SliderRow
-            label="Velocidad de Onda P (Vp)"
+            label="Velocidad de onda P (Vp)"
             tooltip="Velocidad de propagación de ondas de compresión (primarias) a través del medio. Depende del módulo volumétrico y la densidad del material."
             value={params.vp}
             min={1000}
@@ -160,7 +160,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             onChange={v => update('vp', v)}
           />
           <SliderRow
-            label="Velocidad de Onda S (Vs)"
+            label="Velocidad de onda S (Vs)"
             tooltip="Velocidad de propagación de ondas de corte (secundarias) a través del medio. Depende del módulo de rigidez y la densidad del material."
             value={params.vs}
             min={200}
@@ -170,7 +170,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             onChange={v => update('vs', v)}
           />
           <SliderRow
-            label="Densidad del Medio (ρ)"
+            label="Densidad del medio (ρ)"
             tooltip="Densidad volumétrica del material geológico. Varía entre ~1800 kg/m³ (suelo blando) y ~3200 kg/m³ (roca ígnea densa)."
             value={params.density}
             min={1500}
@@ -200,7 +200,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Fuente Sísmica" dataTour="params-fuente" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
+      <AccordionSection title="Fuente sísmica" dataTour="params-fuente" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
         <div className="space-y-4">
           {/* Selector de escenario: carga un preset completo respaldado por
               fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
@@ -227,7 +227,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
           <div>
             <Tooltip content="Tectónica: una falla que se desliza (genera onda S fuerte). Volcánica: una explosión que empuja en todas direcciones por igual (onda P fuerte, casi sin transversal)." showIcon>
-              <span className="text-xs font-medium text-stone-600">Tipo de Fuente</span>
+              <span className="text-xs font-medium text-stone-600">Tipo de fuente</span>
             </Tooltip>
             <div className="grid grid-cols-2 gap-2 mt-1.5">
               {(['tectonic', 'volcanic'] as const).map(t => (
@@ -239,9 +239,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                   onClick={() => { if (params.sourceType !== t) { setScenarioId(''); setLimitMsgs({}); onChange(presetForSource(t)); } }}
                   className={`py-1.5 rounded-lg text-xs font-semibold transition-all border ${
                     params.sourceType === t
-                      ? t === 'tectonic'
-                        ? 'bg-[#6B5B95] text-white border-[#6B5B95]'
-                        : 'bg-[#C4553A] text-white border-[#C4553A]'
+                      ? 'bg-[#C4553A] text-white border-[#C4553A]'
                       : 'bg-stone-50 text-stone-500 border-stone-200'
                   }`}
                 >
@@ -261,7 +259,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             onChange={v => update('magnitude', v)}
           />
           <SliderRow
-            label="Profundidad Focal"
+            label="Profundidad focal"
             tooltip="Distancia vertical desde la superficie hasta el hipocentro (foco) del sismo. Fuentes más profundas retrasan y separan más la P y la S."
             value={params.depth}
             min={1}
@@ -384,7 +382,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
       <AccordionSection title="Configuración" dataTour="params-config" open={openSection === 'config'} onToggle={() => toggle('config')}>
         <div className="space-y-4">
           <SliderRow
-            label="Tiempo de Simulación"
+            label="Tiempo de simulación"
             tooltip="Duración total del registro sísmico simulado en segundos."
             value={params.duration}
             min={5}
@@ -421,7 +419,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             );
           })()}
           <SliderRow
-            label="Resolución Espacial (dx)"
+            label="Resolución espacial (dx)"
             tooltip="Tamaño del paso de malla espacial en metros. Valores menores dan mayor precisión pero mayor costo computacional."
             value={params.dx}
             min={10}
@@ -436,7 +434,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           <div>
             <div className="flex items-center justify-between">
               <Tooltip content="Cada cuánto avanza la simulación en el tiempo. Se calcula solo para que no se 'desestabilice': la onda no puede saltar más de una celda por paso." showIcon>
-                <span className="text-xs font-medium text-stone-600">Paso Temporal (dt)</span>
+                <span className="text-xs font-medium text-stone-600">Paso temporal (dt)</span>
               </Tooltip>
               <span className="text-xs font-mono font-semibold text-[#1A1A2E]">{(params.dt * 1000).toFixed(2)} ms</span>
             </div>
@@ -474,7 +472,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         ) : (
           <>
             <Play size={16} />
-            Generar Pseudo-Sismograma
+            Generar pseudo-sismograma
           </>
         )}
       </button>
