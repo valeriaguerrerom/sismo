@@ -23,6 +23,7 @@ export const PARAM_RANGES: Record<string, [number, number]> = {
   dip: [0, 90],
   rake: [-180, 180],
   stationAzimuth: [0, 360],
+  epicentralDistanceKm: [1, 12],
   // Nariño y su entorno inmediato (incluye la red CM Colombia-Ecuador).
   epicenterLat: [-1.0, 3.0],
   epicenterLon: [-79.5, -75.5],

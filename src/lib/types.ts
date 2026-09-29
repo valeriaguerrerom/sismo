@@ -52,6 +52,12 @@ export interface SimulationParams {
    * horario). Orienta el corte y la rotación radial/transversal → Norte/Este.
    */
   stationAzimuth?: number;
+  /**
+   * Distancia epicentral fuente→estación en superficie (km). Controla la
+   * separación temporal entre P, S y el tren de ondas superficiales (a mayor
+   * distancia, más se separan). Acotada por el dominio y los rebotes de borde.
+   */
+  epicentralDistanceKm?: number;
 }
 
 /** Series temporales triaxiales registradas en el receptor virtual. */

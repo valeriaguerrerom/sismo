@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimulationParams } from '../../lib/types';
 import { computeLame, presetForSource } from '../../lib/simulation';
+import { SCENARIOS } from '../../lib/scenarios';
 import { formatBigInt } from '../../lib/format';
 import { validateParams } from '../../lib/paramLimits';
 import { Tooltip } from '../ui/Tooltip';
@@ -91,6 +92,11 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
   const toggle = (s: ParamSection) => setOpenSection(prev => (prev === s ? ('' as ParamSection) : s));
   // Mensajes de autoajuste por campo (por qué se corrigió un valor).
   const [limitMsgs, setLimitMsgs] = useState<Record<string, string>>({});
+  // Escenario seleccionado en el selector (para mostrar su descripción). Al
+  // editar cualquier parámetro se pasa a "personalizado" (id vacío).
+  const [scenarioId, setScenarioId] = useState<string>(SCENARIOS[0].id);
+  // Sección de mecanismo focal avanzado, plegada por defecto para no abrumar.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
@@ -123,7 +129,18 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
     // muestra y se envía al motor es siempre estable, sin depender del usuario.
     fixed.dt = cflDt(fixed.vp, fixed.dx);
     setLimitMsgs(messages);
+    // Al modificar un parámetro, el estado deja de coincidir con un escenario.
+    setScenarioId('');
     onChange(fixed);
+  };
+
+  /** Carga un escenario completo (llena todos los parámetros). */
+  const applyScenario = (id: string) => {
+    const sc = SCENARIOS.find(s => s.id === id);
+    if (!sc) return;
+    setScenarioId(id);
+    setLimitMsgs({});
+    onChange({ ...sc.params });
   };
 
   return (
@@ -185,6 +202,27 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
       <AccordionSection title="Fuente Sísmica" dataTour="params-fuente" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
         <div className="space-y-4">
+          {/* Selector de escenario: carga un preset completo respaldado por
+              fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
+          <div>
+            <span className="text-xs font-medium text-stone-600">Escenario</span>
+            <select
+              value={scenarioId}
+              onChange={e => applyScenario(e.target.value)}
+              className="w-full mt-1.5 text-xs border border-stone-200 rounded-lg px-2 py-2 text-stone-700 bg-stone-50 focus:outline-none focus:border-[#2D6A4F]"
+            >
+              {scenarioId === '' && <option value="">Personalizado</option>}
+              {SCENARIOS.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            {scenarioId !== '' && (
+              <p className="text-[10px] text-stone-500 mt-1.5 leading-snug">
+                {SCENARIOS.find(s => s.id === scenarioId)?.expectation}
+              </p>
+            )}
+          </div>
+
           <div>
             <span className="text-xs font-medium text-stone-600">Tipo de Fuente</span>
             <div className="grid grid-cols-2 gap-2 mt-1.5">
@@ -194,7 +232,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                   // Al cambiar de tipo se aplica el preset óptimo de esa fuente
                   // (evita avisos de malla/CFL y da arribos detectables). Si ya
                   // está seleccionado, no se toca para no borrar ajustes manuales.
-                  onClick={() => { if (params.sourceType !== t) onChange(presetForSource(t)); }}
+                  onClick={() => { if (params.sourceType !== t) { setScenarioId(''); setLimitMsgs({}); onChange(presetForSource(t)); } }}
                   className={`py-1.5 rounded-lg text-xs font-semibold transition-all border ${
                     params.sourceType === t
                       ? t === 'tectonic'
@@ -220,10 +258,10 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           />
           <SliderRow
             label="Profundidad Focal"
-            tooltip="Distancia vertical desde la superficie hasta el hipocentro (foco) del sismo. Sismos superficiales (<70 km) son generalmente más destructivos."
+            tooltip="Distancia vertical desde la superficie hasta el hipocentro (foco) del sismo. Fuentes someras (pocos km) excitan mejor el tren de ondas superficiales."
             value={params.depth}
             min={1}
-            max={300}
+            max={100}
             step={1}
             unit="km"
             onChange={v => update('depth', v)}
@@ -255,8 +293,20 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             </div>
           </div>
           <p className="text-[10px] text-stone-400 -mt-1">
-            En este modelo homogéneo 2D la ubicación del epicentro es solo una referencia geográfica: no cambia el cálculo. La distancia y el acimut de la estación sí afectan el registro.
+            Limitado a Nariño y su entorno (incluye la red CM Colombia-Ecuador). En este modelo homogéneo 2D la ubicación del epicentro es solo una referencia geográfica: no cambia el cálculo. La distancia y el acimut de la estación sí afectan el registro.
           </p>
+
+          {/* Distancia epicentral: separa P, S y el tren superficial. */}
+          <SliderRow
+            label="Distancia de la estación"
+            tooltip="Distancia horizontal de la estación virtual al epicentro (km). A mayor distancia, más se separan en el tiempo la P, la S y el tren de ondas superficiales."
+            value={params.epicentralDistanceKm ?? 2.5}
+            min={1}
+            max={12}
+            step={0.5}
+            unit="km"
+            onChange={v => update('epicentralDistanceKm', v)}
+          />
 
           {/* Dirección de la estación: orienta el corte y la rotación
               radial/transversal → Norte/Este. Aplica a ambas fuentes. */}
@@ -271,41 +321,56 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             onChange={v => update('stationAzimuth', v)}
           />
 
-          {/* Mecanismo focal (avanzado): solo para fuente tectónica (doble par).
-              Define el tensor de momento que excita P-SV y SH. */}
+          {/* Mecanismo focal (avanzado, plegado por defecto): solo para fuente
+              tectónica (doble par). Define el tensor de momento que excita P-SV
+              y SH. Se pliega para no abrumar a un estudiante. */}
           {params.sourceType === 'tectonic' && (
-            <div className="pt-2 border-t border-stone-200/60 space-y-3">
-              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide">Mecanismo focal (avanzado)</span>
-              <SliderRow
-                label="Rumbo (strike)"
-                tooltip="Orientación de la traza de la falla en superficie, medida desde el norte en sentido horario (0-360°). Por defecto ~30° (rumbo andino de Nariño)."
-                value={params.strike ?? 30}
-                min={0}
-                max={360}
-                step={5}
-                unit="°"
-                onChange={v => update('strike', v)}
-              />
-              <SliderRow
-                label="Buzamiento (dip)"
-                tooltip="Inclinación del plano de falla respecto a la horizontal (0-90°). 90° es una falla vertical."
-                value={params.dip ?? 45}
-                min={0}
-                max={90}
-                step={5}
-                unit="°"
-                onChange={v => update('dip', v)}
-              />
-              <SliderRow
-                label="Deslizamiento (rake)"
-                tooltip="Dirección del movimiento del bloque sobre el plano de falla (-180 a 180°). 90° = falla inversa, -90° = normal, 0° = desgarre. Por defecto 90° (inversa, régimen compresivo)."
-                value={params.rake ?? 90}
-                min={-180}
-                max={180}
-                step={5}
-                unit="°"
-                onChange={v => update('rake', v)}
-              />
+            <div className="pt-2 border-t border-stone-200/60">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(o => !o)}
+                className="w-full flex items-center justify-between text-[11px] font-semibold text-stone-500 uppercase tracking-wide py-1"
+              >
+                <span>Mecanismo focal (avanzado)</span>
+                <span className="text-stone-400">{advancedOpen ? '−' : '+'}</span>
+              </button>
+              {advancedOpen && (
+                <div className="space-y-3 pt-2">
+                  <p className="text-[10px] text-stone-400 leading-snug">
+                    El mecanismo describe la geometría de la falla y su movimiento. Define cómo se reparte la energía entre las componentes.
+                  </p>
+                  <SliderRow
+                    label="Rumbo (strike)"
+                    tooltip="Orientación de la traza de la falla en superficie, medida desde el norte en sentido horario (0-360°). Por defecto ~30° (rumbo andino de Nariño)."
+                    value={params.strike ?? 30}
+                    min={0}
+                    max={360}
+                    step={5}
+                    unit="°"
+                    onChange={v => update('strike', v)}
+                  />
+                  <SliderRow
+                    label="Buzamiento (dip)"
+                    tooltip="Inclinación del plano de falla respecto a la horizontal (0-90°). 90° es una falla vertical."
+                    value={params.dip ?? 45}
+                    min={0}
+                    max={90}
+                    step={5}
+                    unit="°"
+                    onChange={v => update('dip', v)}
+                  />
+                  <SliderRow
+                    label="Deslizamiento (rake)"
+                    tooltip="Dirección del movimiento del bloque sobre el plano de falla (-180 a 180°). 90° = falla inversa, -90° = normal, 0° = desgarre. Por defecto 90° (inversa, régimen compresivo)."
+                    value={params.rake ?? 90}
+                    min={-180}
+                    max={180}
+                    step={5}
+                    unit="°"
+                    onChange={v => update('rake', v)}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

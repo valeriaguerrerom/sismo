@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { downsampleWave } from '../lib/reportPdf';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
+import { defaultScenario } from '../lib/scenarios';
 import { epicentralDistanceKm, epicentralDistanceLabel, commonMaxAmplitude } from '../lib/format';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
@@ -28,8 +29,11 @@ interface Props {
 type ViewMode = '2d' | 'triaxial';
 
 export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUsed }: Props) {
+  // Al abrir, se carga el escenario más didáctico (P, S y tren superficial
+  // separados). Si llegan parámetros iniciales (p. ej. desde el Explorador),
+  // se aplican encima.
   const [params, setParams] = useState<SimulationParams>(() => ({
-    ...defaultParams(),
+    ...defaultScenario().params,
     ...(initialParams ?? {}),
   }));
 
