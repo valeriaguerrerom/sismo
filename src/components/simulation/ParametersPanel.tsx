@@ -392,9 +392,10 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             unit="seg"
             onChange={v => update('duration', v)}
           />
-          {/* Aviso de duración efectiva: el motor tiene un tope de pasos, así que
-              la duración realmente simulada puede ser menor que la pedida. */}
-          {(() => {
+          {/* Avisos de configuración: SOLO cuando el usuario ha personalizado
+              los parámetros (scenarioId === ''). En un escenario predeterminado
+              (óptimo y validado) no se muestran, para no alarmar sin motivo. */}
+          {scenarioId === '' && (() => {
             const MAX_STEPS = 8000;
             const eff = Math.min(params.duration, MAX_STEPS * params.dt);
             if (eff >= params.duration - 0.05) return null;
@@ -404,11 +405,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               </p>
             );
           })()}
-          {/* Aviso de rebote de borde: el backend calcula el tiempo del primer
-              rebote de la S con la geometría real de cada simulación y lo
-              devuelve. Si aún no hay resultado, se usa una estimación por tipo de
-              fuente. Si la duración lo supera, aparecen reflexiones artificiales. */}
-          {(() => {
+          {scenarioId === '' && (() => {
             const bounceS = (typeof firstBounceS === 'number' && firstBounceS > 0)
               ? firstBounceS
               : (params.sourceType === 'volcanic' ? 13.3 : 8.4);
