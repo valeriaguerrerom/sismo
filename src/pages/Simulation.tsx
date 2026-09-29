@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { downsampleWave } from '../lib/reportPdf';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
-import { epicentralDistanceKm, epicentralDistanceLabel } from '../lib/format';
+import { epicentralDistanceKm, epicentralDistanceLabel, commonMaxAmplitude } from '../lib/format';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
@@ -99,6 +99,14 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
+  // Datos reales del Galeras/CM cargados desde el Explorador (si los hay).
+  const [realData, setRealData] = useState<{ waveData: WaveData; label: string } | null>(null);
+  // Escala de amplitud de los sismogramas: 'common' normaliza las tres
+  // componentes contra el máximo de las tres (se ve la P dominante en vertical y
+  // la S en horizontales); 'component' normaliza cada traza contra su propio
+  // pico. Por defecto, común.
+  const [ampScale, setAmpScale] = useState<'common' | 'component'>('common');
+
   const handleSaveReport = useCallback(async () => {
     if (!supabase || !user || !result) return;
     setSaving(true);
@@ -134,6 +142,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
         waveData: downsampleWave(realData ? realData.waveData : result.waveData, 600),
         isRealRecord: Boolean(realData),
         realLabel: realData?.label,
+        ampScale,
       },
     });
     if (error) {
@@ -144,10 +153,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       setReportTitle('');
     }
     setSaving(false);
-  }, [user, result, reportTitle]);
-
-  // Real data from Galeras .mseed
-  const [realData, setRealData] = useState<{ waveData: WaveData; label: string } | null>(null);
+  }, [user, result, reportTitle, realData, ampScale]);
 
   // Ref a la última versión de runSimulation para poder llamarla desde el
   // efecto de datos reales sin meterla en sus dependencias (evita re-lanzar).
@@ -474,6 +480,17 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     </div>
                   </div>
 
+                  {/* Selector de escala de amplitud */}
+                  <div className="flex items-center justify-between gap-2 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100">
+                    <span className="text-[11px] text-stone-500">Escala de amplitud</span>
+                    <div className="flex gap-1">
+                      {([['common', 'Común'], ['component', 'Por componente']] as const).map(([mode, txt]) => (
+                        <button key={mode} onClick={() => setAmpScale(mode)}
+                          className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${ampScale === mode ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{txt}</button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
                     <div className="flex gap-4 text-xs text-stone-500 mb-1">
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Norte</span>
@@ -482,14 +499,18 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     </div>
                     <p className="text-[10px] text-stone-400 mb-3">
                       Estación virtual a {epicentralDistanceLabel(result.gridInfo)} del epicentro, en superficie.
+                      {' '}
+                      {ampScale === 'common'
+                        ? 'Escala común: las tres trazas se normalizan contra el máximo de las tres.'
+                        : 'Escala por componente: cada traza se normaliza contra su propio máximo.'}
                     </p>
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} />
+                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
                 </div>
               )}
@@ -572,7 +593,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
           <div data-tour="results-panel" className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
-            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} />
+            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} />
           </div>
         </div>
       </div>

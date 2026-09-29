@@ -30,6 +30,12 @@ export interface SavedResults {
   isRealRecord?: boolean;
   /** Etiqueta del registro real (p. ej. "CM 2025-04-25 M6.3 — Est. BBAC"). */
   realLabel?: string;
+  /**
+   * Escala de amplitud usada en los sismogramas: 'common' (las tres trazas
+   * contra el máximo de las tres) o 'component' (cada una contra su pico). El
+   * PDF la replica y la indica en la leyenda. Por defecto 'common'.
+   */
+  ampScale?: 'common' | 'component';
 }
 
 /** Datos de entrada para el reporte. */

@@ -20,6 +20,8 @@ interface Props {
   realRecord?: RealRecordInfo | null;
   /** Sección que el tour guiado quiere abrir (cambia por paso). */
   forceSection?: ResultSection | null;
+  /** Escala de amplitud elegida en el Simulador; el PDF la replica. */
+  ampScale?: 'common' | 'component';
 }
 
 function exportCSV(result: SimulationResult) {
@@ -51,7 +53,7 @@ function interpretResult(result: SimulationResult): string {
  * Exporta el reporte PDF (RF-19). Si hay un registro real cargado, el PDF
  * muestra esa señal (la misma que la pantalla), no el pseudo-sismograma FDM.
  */
-function exportPDF(result: SimulationResult, realRecord?: RealRecordInfo | null) {
+function exportPDF(result: SimulationResult, realRecord?: RealRecordInfo | null, ampScale: 'common' | 'component' = 'common') {
   const { params } = result;
   const title = realRecord
     ? `Registro real ${realRecord.label}`
@@ -72,11 +74,12 @@ function exportPDF(result: SimulationResult, realRecord?: RealRecordInfo | null)
       waveData: downsampleWave(realRecord ? realRecord.waveData : result.waveData, 1200),
       isRealRecord: Boolean(realRecord),
       realLabel: realRecord?.label,
+      ampScale,
     },
   }, 'sismograma_narino');
 }
 
-export function ResultsPanel({ result, realRecord, forceSection }: Props) {
+export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common' }: Props) {
   // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
   const [openSection, setOpenSection] = useState<ResultSection>('metricas');
   const toggle = (s: ResultSection) => setOpenSection(prev => (prev === s ? ('' as ResultSection) : s));
@@ -190,7 +193,7 @@ export function ResultsPanel({ result, realRecord, forceSection }: Props) {
         <button onClick={() => exportPNG()} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <Image size={14} /> PNG
         </button>
-        <button onClick={() => exportPDF(result, realRecord)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-[#C4553A]/30 bg-[#C4553A]/5 text-[#C4553A] font-semibold text-sm">
+        <button onClick={() => exportPDF(result, realRecord, ampScale)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-[#C4553A]/30 bg-[#C4553A]/5 text-[#C4553A] font-semibold text-sm">
           <FileDown size={14} /> PDF
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { WaveData } from '../../lib/types';
+import { niceTimeTicks } from '../../lib/format';
 
 interface WaveChartProps {
   data: WaveData;
@@ -16,9 +17,16 @@ interface WaveChartProps {
    * inicio aplaste toda la señal contra el cero (registro que se ve "plano").
    */
   robustScale?: boolean;
+  /**
+   * Amplitud de referencia EXTERNA para la normalización (escala común). Si se
+   * pasa, las tres componentes se dibujan contra el mismo máximo (el mayor de
+   * N/E/Z), así se ve que la P domina en la vertical y la S en las horizontales.
+   * Si es undefined, cada traza se normaliza contra su propio pico.
+   */
+  refAmpOverride?: number;
 }
 
-export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false }: WaveChartProps) {
+export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false, refAmpOverride }: WaveChartProps) {
   const svgData = useMemo(() => {
     if (!data.time.length) return null;
 
@@ -34,7 +42,10 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     // o percentil 99 con saturación suave (datos reales, para no aplastar la
     // señal cuando hay un pico dominante al inicio).
     let refAmp: number;
-    if (robustScale) {
+    if (refAmpOverride && refAmpOverride > 0) {
+      // Escala común: mismo máximo para las tres componentes.
+      refAmp = refAmpOverride;
+    } else if (robustScale) {
       const absSorted = values.map(Math.abs).sort((a, b) => a - b);
       const p99 = absSorted[Math.floor(absSorted.length * 0.99)] || absSorted[absSorted.length - 1] || 1e-10;
       refAmp = p99 < 1e-10 ? 1e-10 : p99;
@@ -67,10 +78,10 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     const cursorX = toX(data.time[lastIdx]);
     const cursorY = toY(values[lastIdx]);
 
-    const gridLines = Array.from({ length: 7 }, (_, i) => {
-      const t = minT + (i / 6) * (maxT - minT);
-      return { x: toX(t), label: t.toFixed(0) + 's' };
-    });
+    // Marcas del eje de tiempo en valores redondos (0, 2, 4, 6, 8, 10, 12…),
+    // no en fracciones arbitrarias del rango. Se elige un paso "bonito"
+    // (1, 2, 5, 10…) para tener ~6 marcas parejas dentro de [minT, maxT].
+    const gridLines = niceTimeTicks(minT, maxT).map(t => ({ x: toX(t), label: t.toFixed(0) + 's' }));
 
     // Amplitud NORMALIZADA: la señal FDM no está calibrada, así que el eje se
     // muestra en [-1, 0, +1] respecto al pico de referencia (sin µm/s).
@@ -85,7 +96,7 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     const sX = sArrival !== undefined && sArrival >= minT && sArrival <= maxT ? toX(sArrival) : null;
 
     return { path, gridLines, ampLabels, midY: toY(0), w, h, padLeft, padTop, padBottom, cursorX, cursorY, pX, sX };
-  }, [data, component, height, visibleRatio, pArrival, sArrival]);
+  }, [data, component, height, visibleRatio, pArrival, sArrival, robustScale, refAmpOverride]);
 
   if (!svgData) return null;
 

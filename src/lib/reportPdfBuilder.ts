@@ -66,6 +66,7 @@ function drawTrace(
   label: string,
   pArrival?: number,
   sArrival?: number,
+  refMax?: number,
 ) {
   // Marco
   doc.setDrawColor(...COLORS.line);
@@ -76,8 +77,10 @@ function drawTrace(
   doc.line(x, y + h / 2, x + w, y + h / 2);
 
   const tMax = time[time.length - 1] || 1;
-  let vMax = 0;
-  for (const v of values) vMax = Math.max(vMax, Math.abs(v));
+  // refMax = escala común (máximo de las tres componentes). Si no se pasa, se
+  // normaliza contra el máximo de esta traza (escala por componente).
+  let vMax = refMax && refMax > 0 ? refMax : 0;
+  if (vMax === 0) { for (const v of values) vMax = Math.max(vMax, Math.abs(v)); }
   if (vMax === 0) vMax = 1;
 
   const px = (t: number) => x + (t / tMax) * w;
@@ -253,6 +256,15 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const wd = results.waveData;
     const traceH = 24;
     const gap = 7;
+    // Escala común por defecto: máximo de las tres componentes (así se aprecia
+    // que la P domina en la vertical y la S en las horizontales). En 'component'
+    // cada traza se normaliza contra su propio pico (refMax = undefined).
+    const scaleCommon = results.ampScale !== 'component';
+    let commonMax = 0;
+    for (const arr of [wd.north, wd.east, wd.vertical]) {
+      for (const v of arr) commonMax = Math.max(commonMax, Math.abs(v));
+    }
+    const refMax = scaleCommon ? commonMax : undefined;
     // Colores de componente (global): Norte terracota, Este verde bosque,
     // Vertical ocre.
     const traces: [number[], [number, number, number], string][] = [
@@ -265,15 +277,19 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       // En registro real se omiten los marcadores P/S (undefined).
       drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label,
         real ? undefined : results.pArrival,
-        real ? undefined : results.sArrival);
+        real ? undefined : results.sArrival,
+        refMax);
       y += traceH + gap;
     }
+    const scaleNote = scaleCommon
+      ? 'Escala común: las tres trazas normalizadas contra el máximo de las tres (±1).'
+      : 'Escala por componente: cada traza normalizada contra su propio máximo (±1).';
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.muted);
     doc.text(
       real
-        ? 'Registro real de la red del SGC/OVSP, señal decimada. Amplitud normalizada por traza (±1).'
-        : 'Líneas grises: arribo P (punteada) y S (guiones). Amplitud normalizada por traza (±1); señal no calibrada.',
+        ? `Registro real de la red del SGC/OVSP, señal decimada. ${scaleNote}`
+        : `Líneas grises: arribo P (punteada) y S (guiones). ${scaleNote} Señal no calibrada.`,
       MARGIN, y);
     y += 7;
   }
