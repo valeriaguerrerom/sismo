@@ -335,3 +335,29 @@ efecto del mecanismo focal) esto es aceptable. Como **trabajo futuro** existe un
 tipo √(t) / transformada, que ajusta el decaimiento y la fase de la respuesta de
 fuente lineal a la de fuente puntual) que podría aplicarse a las trazas para
 aproximar mejor las amplitudes 3D.
+
+## 6. Diagnóstico de los frentes tardíos en el corte (escala global)
+
+Con la escala de color global (máximo de toda la simulación), los residuos
+tardíos ya no se amplifican y se ve la energía real. En el escenario didáctico
+(fuente a 2 km, dominio 16.4×14.0 km, sponge inferior a partir de ~13.1 km) los
+frentes que aparecen además de la P y la S directas son:
+
+- **Banda a ~9–10 km de profundidad, hacia los 6 s.** Es la **reflexión en la
+  superficie libre** (física, no artificial): parte de la energía sube desde la
+  fuente (2 km), rebota en z = 0 (la superficie libre es una frontera real del
+  modelo) y vuelve a bajar. El tiempo calculado para que esa fase reflejada en
+  S alcance los ~9–10 km de profundidad es ~6.2 s, que coincide con la banda
+  observada. Es un resultado físico correcto (equivale a las fases pP/sP de la
+  sismología).
+
+- **Arcos débiles cerca del borde inferior/derecho al final (~7 s).** Son
+  **reflexiones de borde residuales** (artificiales): la zona absorbente de
+  Cerjan atenúa ~99 % la energía que llega a los bordes, pero queda una fracción
+  mínima que se refleja. Con la escala global se ven **muy tenues** (dos órdenes
+  por debajo de la S directa), como debe ser; antes, con la escala por
+  fotograma, se amplificaban hasta parecer señal fuerte (la "maraña" reportada).
+
+En resumen: la banda horizontal intermedia es física (superficie libre) y los
+arcos tenues del borde al final son el residuo artificial esperable del sponge,
+ahora correctamente atenuado en la visualización.
