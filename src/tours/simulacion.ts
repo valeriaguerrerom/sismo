@@ -12,8 +12,10 @@ import type { TourStep } from './useTour';
  * v2: añade escenarios, mecanismo avanzado, dirección/distancia de la estación,
  * escala de sismogramas, mapa de calor del subsuelo y diálogo del PDF.
  * v3: añade la pestaña "Movimiento de partícula" (hodograma 3D).
+ * v4: empieza por "Variables elásticas" (sección abierta por defecto), luego
+ * la fuente; el primer paso ya coincide sin abrir otra sección.
  */
-export const SIMULACION_TOUR_VERSION = 3;
+export const SIMULACION_TOUR_VERSION = 4;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -32,11 +34,23 @@ interface SimTourControls {
 export function buildSimulacionSteps({ openParam, openResult, hasResult = false }: SimTourControls): TourStep[] {
   const steps: TourStep[] = [
     {
+      // Se empieza por "Variables elásticas", que es la sección abierta por
+      // defecto: así el primer paso ya coincide sin tener que abrir otra.
+      element: '[data-tour="params-elasticas"]',
+      onHighlightStarted: () => openParam('elasticas'),
+      popover: {
+        title: 'Propiedades del subsuelo',
+        description: 'Empieza aquí: cambia las velocidades de onda y la densidad de la roca. Cada término tiene un ícono de información.',
+        side: 'right',
+        align: 'start',
+      },
+    },
+    {
       element: '[data-tour="params-fuente"]',
       onHighlightStarted: () => openParam('fuente'),
       popover: {
         title: 'Elige un escenario',
-        description: 'Empieza con un escenario listo (andino, Galeras…). Carga todos los valores; luego los puedes cambiar.',
+        description: 'O parte de un escenario listo (andino, Galeras…): carga todos los valores; luego los puedes cambiar.',
         side: 'right',
         align: 'start',
       },
@@ -47,16 +61,6 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       popover: {
         title: 'Estación y mecanismo',
         description: 'Ajusta la distancia y la dirección de la estación. En "Avanzado" defines el mecanismo de la falla (rumbo, buzamiento, deslizamiento).',
-        side: 'right',
-        align: 'start',
-      },
-    },
-    {
-      element: '[data-tour="params-elasticas"]',
-      onHighlightStarted: () => openParam('elasticas'),
-      popover: {
-        title: 'Propiedades del subsuelo',
-        description: 'Cambia las velocidades y la densidad de la roca. Cada término tiene un ícono de información.',
         side: 'right',
         align: 'start',
       },
