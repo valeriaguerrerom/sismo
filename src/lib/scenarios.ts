@@ -84,7 +84,7 @@ export const SCENARIOS: Scenario[] = [
       magnitude: 3.5, depth: 3, epicenterLat: 1.2216, epicenterLon: -77.3742,
       duration: 28, dx: 20, dt: 0.005,
       strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 4,
-      sourceCycles: 1, codaLevel: 0.9,
+      sourceCycles: 1, codaLevel: 1,
     }),
   },
 ];
