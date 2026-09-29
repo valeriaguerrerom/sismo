@@ -269,8 +269,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     setReportTitle('');
   }, [result]);
 
-  // 2D waveform playback animation
+  // 2D waveform playback animation. Solo corre en la pestaña de sismogramas;
+  // en el corte del subsuelo el reproductor del propio componente avanza el
+  // mismo tiempo compartido (wave2dRatio), evitando un doble avance.
   useEffect(() => {
+    if (viewMode !== '2d') return;
     if (!wave2dPlaying || (!result && !realData)) return;
     // Playback takes ~15s at 1x speed regardless of simulation duration
     const baseSpeed = (1 / (15 * 60)) * wave2dSpeed; // 15 seconds * 60fps
@@ -287,7 +290,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     };
     wave2dRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(wave2dRef.current);
-  }, [wave2dPlaying, result, realData, wave2dSpeed]);
+  }, [wave2dPlaying, result, realData, wave2dSpeed, viewMode]);
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
@@ -334,7 +337,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   <h2 className="font-bold text-[#1A1A2E]">Visualización</h2>
                   <p className="text-xs text-stone-400 mt-0.5">
                     {viewMode === '2d' && 'Sismogramas triaxiales · Componentes N · E · Z'}
-                    {viewMode === 'triaxial' && 'Mapa de calor · Propagación del campo de onda · Ux · Uz · |u|'}
+                    {viewMode === 'triaxial' && 'Propagación del campo de ondas en un corte vertical'}
                   </p>
                 </div>
                 {/* View toggle */}
@@ -353,7 +356,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Grid3X3 size={13} /> Mapa de calor
+                    <Grid3X3 size={13} /> Corte del subsuelo
                   </button>
                 </div>
               </div>
@@ -393,7 +396,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                         {realData.label.startsWith('CM')
                           ? 'Sismograma triaxial real de la Red Sismológica Nacional (SGC).'
                           : 'Sismograma triaxial real del Volcán Galeras (OVSP).'}
-                        {' '}El mapa de calor de la propagación con parámetros equivalentes se genera automáticamente; véalo en la pestaña "Mapa de calor".
+                        {' '}El corte del subsuelo con la propagación (parámetros equivalentes) se genera automáticamente; véalo en la pestaña "Corte del subsuelo".
                       </p>
                     </div>
                     <button onClick={() => setRealData(null)} className="text-[10px] text-stone-400 px-2 py-1 rounded bg-white border border-stone-200">
@@ -518,12 +521,20 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 </div>
               )}
 
-              {/* Triaxial plane view */}
+              {/* Corte del subsuelo */}
               {!loading && result && viewMode === 'triaxial' && (
                 <TriaxialPlane
                   snapshots={result.snapshots}
                   gridInfo={heatmapGrid ?? result.gridInfo}
-                  maxAmplitude={result.maxAmplitude}
+                  fullGrid={result.gridInfo}
+                  vp={result.params.vp}
+                  vs={result.params.vs}
+                  pArrival={result.pArrival}
+                  sArrival={result.sArrival}
+                  currentTime={wave2dRatio * result.duration}
+                  onTimeChange={(t) => setWave2dRatio(result.duration > 0 ? Math.max(0, Math.min(1, t / result.duration)) : 0)}
+                  playing={wave2dPlaying}
+                  onPlayingChange={setWave2dPlaying}
                 />
               )}
 
@@ -596,7 +607,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
           <div data-tour="results-panel" className="h-[calc(100dvh-154px)] lg:sticky lg:top-16">
-            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} />
+            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
           </div>
         </div>
       </div>

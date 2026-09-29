@@ -1,221 +1,263 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { WavefieldSnapshot, GridInfo } from '../../lib/types';
 import { Play, Pause, SkipBack, RotateCcw, Eye } from '../../lib/icons';
 
 interface Props {
+  /** Fotogramas del campo submuestreado (Ux, Uz, |u| concatenados). */
   snapshots: WavefieldSnapshot[];
+  /** Grid submuestreado del heatmap (nx, nz y posiciones fuente/receptor). */
   gridInfo: GridInfo;
-  maxAmplitude: number;
+  /** Grid completo (para la escala física en km: dx real y nº de nodos). */
+  fullGrid: GridInfo;
+  /** Vp y Vs para los frentes teóricos P y S (m/s). */
+  vp: number;
+  vs: number;
+  /** Grosor de la zona absorbente en nodos del grid COMPLETO. */
+  absThick?: number;
+  /** Arribos P y S a la estación (s), para el indicador de llegada. */
+  pArrival: number;
+  sArrival: number;
+  /** Tiempo actual (s) compartido con los sismogramas para sincronizar. */
+  currentTime: number;
+  /** Notifica el nuevo tiempo cuando el usuario mueve el control del corte. */
+  onTimeChange: (t: number) => void;
+  playing: boolean;
+  onPlayingChange: (p: boolean) => void;
 }
 
 /**
- * Capas del campo de onda. `mul` es el desplazamiento dentro del Float32Array
- * del snapshot (Ux, Uz y |u| se guardan concatenados).
+ * Capas del campo. `mul` es el desplazamiento dentro del Float32Array del
+ * snapshot (Ux, Uz y |u| se guardan concatenados).
  */
 const LAYERS = [
-  { key: 'ux', label: 'Ux', full: 'Horizontal', color: '#2D6A4F', mul: 0 },
-  { key: 'uz', label: 'Uz', full: 'Vertical', color: '#C4553A', mul: 1 },
-  { key: 'mag', label: '|u|', full: 'Magnitud', color: '#D4A853', mul: 2 },
+  { key: 'ux', label: 'Radial', full: 'Ux (horizontal en el plano)', mul: 0, diverging: true },
+  { key: 'uz', label: 'Vertical', full: 'Uz', mul: 1, diverging: true },
+  { key: 'mag', label: 'Magnitud', full: '|u|', mul: 2, diverging: false },
 ] as const;
 
 type LayerKey = (typeof LAYERS)[number]['key'];
 
+// Paleta del sitio.
+const TERRACOTA: [number, number, number] = [196, 85, 58];   // #C4553A
+const CREMA: [number, number, number] = [250, 246, 240];      // ~crema
+const VERDE: [number, number, number] = [45, 106, 79];        // #2D6A4F
+const TERRACOTA_OSC: [number, number, number] = [122, 42, 28]; // terracota oscuro
+
+function lerp(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+}
+
 /**
- * Mapa de calor 2D de la propagación de ondas (corte del subsuelo).
+ * Corte del subsuelo: propagación del campo de ondas en un corte vertical.
  *
- * Reemplaza la antigua vista 3D (Three.js) por un heatmap dibujado con Canvas
- * 2D: eje X = distancia horizontal, eje Z = profundidad (hacia abajo), color =
- * amplitud del campo. Es más claro para interpretar la propagación, más estable
- * (sin WebGL) y mucho más liviano. Conserva las tres capas seleccionables y los
- * controles de reproducción.
+ * Dibuja el dominio físico como un rectángulo con ejes en km (distancia
+ * horizontal abajo, profundidad a la izquierda con 0 arriba). Marca la
+ * superficie libre, sombrea la zona absorbente (no es parte del modelo),
+ * ubica la fuente y la estación en sus posiciones reales, superpone los
+ * frentes teóricos P y S, y usa la paleta del sitio sobre fondo claro. El
+ * reproductor comparte el tiempo con los sismogramas.
  */
-export function TriaxialPlane({ snapshots, gridInfo }: Props) {
+export function TriaxialPlane({
+  snapshots, gridInfo, fullGrid, vp, vs, absThick = 44,
+  pArrival, sArrival, currentTime, onTimeChange, playing, onPlayingChange,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { nx, nz } = gridInfo;
   const size = nx * nz;
-
-  const [playing, setPlaying] = useState(false);
-  const [frameIdx, setFrameIdx] = useState(0);
   const [speed, setSpeed] = useState(1);
-  // Una sola capa activa a la vez para un heatmap legible.
   const [layer, setLayer] = useState<LayerKey>('mag');
+  const rafRef = useRef<number>(0);
 
-  // Silueta del departamento de Nariño (para recortar el heatmap con su forma
-  // en vez de un rectángulo). Se guarda como polígonos normalizados en [0..1]
-  // sobre el bounding box del contorno, listos para escalar al canvas.
-  const [silhouette, setSilhouette] = useState<[number, number][][] | null>(null);
+  // ── Escala física ──
+  // Ancho y alto del dominio en km, a partir del grid COMPLETO (dx real).
+  const domainWkm = (fullGrid.nx * fullGrid.dx) / 1000;
+  const domainHkm = (fullGrid.nz * fullGrid.dx) / 1000;
+  // Zona absorbente en fracción del dominio (grosor en nodos / nº de nodos).
+  const absFracX = absThick / fullGrid.nx;
+  const absFracZ = absThick / fullGrid.nz;
+  // Posiciones fuente/receptor en fracción [0..1] del dominio (grid submuestreado).
+  const srcFx = gridInfo.sourceX / (nx - 1);
+  const srcFz = gridInfo.sourceZ / (nz - 1);
+  const recFx = gridInfo.receiverX / (nx - 1);
+  const recFz = gridInfo.receiverZ / (nz - 1);
+  // Profundidad y distancia reales para etiquetas.
+  const srcDepthKm = srcFz * domainHkm;
+  const epicDistKm = Math.abs(recFx - srcFx) * domainWkm;
 
-  useEffect(() => {
-    let alive = true;
-    fetch('/terrain/narino_border.json')
-      .then(r => (r.ok ? r.json() : null))
-      .then((segs: number[][][] | null) => {
-        if (!alive || !segs || !segs.length) return;
-        // segs es un array de tramos [[lon,lat],...]. Calculamos el bounding box
-        // global y normalizamos cada punto a [0..1] (x = lon, y = lat invertida
-        // porque en pantalla el norte va arriba).
-        let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
-        for (const seg of segs) for (const [lon, lat] of seg) {
-          if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
-          if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
-        }
-        const dLon = maxLon - minLon || 1, dLat = maxLat - minLat || 1;
-        const norm = segs.map(seg => seg.map(([lon, lat]) => [
-          (lon - minLon) / dLon,
-          1 - (lat - minLat) / dLat,
-        ] as [number, number]));
-        setSilhouette(norm);
-      })
-      .catch(() => { /* sin silueta: se usa el rectángulo completo */ });
-    return () => { alive = false; };
-  }, []);
+  // Índice del fotograma más cercano al tiempo actual (sincronización).
+  const frameIdx = useMemo(() => {
+    if (!snapshots.length) return 0;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < snapshots.length; i++) {
+      const d = Math.abs(snapshots[i].time - currentTime);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }, [snapshots, currentTime]);
 
-  // Rampa de color por capa. Devuelve [r,g,b] en 0..255.
+  const lastTime = snapshots.length ? snapshots[snapshots.length - 1].time : 0;
+
+  // Rampa de color por capa (fondo claro).
   const colorFor = useCallback((val: number, peak: number, key: LayerKey): [number, number, number] => {
-    if (key === 'mag') {
-      // Magnitud: rampa cálida tipo "inferno" pero con piso brillante (el alpha
-      // ya oculta las zonas nulas, así que no necesitamos empezar en negro).
-      // púrpura profundo → magenta → terracota → dorado → blanco.
-      const t = Math.pow(Math.min(Math.abs(val) / (peak + 1e-30), 1), 0.4);
-      if (t < 0.25) { const u = t / 0.25; return [Math.round(90 + u * 90), Math.round(30 + u * 20), Math.round(90 + u * 10)]; }
-      if (t < 0.55) { const u = (t - 0.25) / 0.3; return [Math.round(180 + u * 16), Math.round(50 + u * 35), Math.round(100 - u * 55)]; }
-      if (t < 0.8) { const u = (t - 0.55) / 0.25; return [Math.round(196 + u * 56), Math.round(85 + u * 83), Math.round(45 + u * 10)]; }
-      const u = (t - 0.8) / 0.2; return [255, Math.round(168 + u * 87), Math.round(55 + u * 200)];
-    }
-    // Ux / Uz: divergente sobre fondo oscuro. Negativo = frío, positivo = cálido.
-    // Colores plenos y luminosos (el alpha ya atenúa las zonas de campo débil).
     const n = Math.max(-1, Math.min(1, val / (peak + 1e-30)));
-    const t = Math.pow(Math.abs(n), 0.45);
-    if (key === 'ux') {
-      // cian brillante (−) ↔ verde bosque brillante (+)
-      return n < 0
-        ? [Math.round(70 + (1 - t) * 120), Math.round(200 + t * 30), Math.round(190 + t * 30)]
-        : [Math.round(90 + (1 - t) * 100), Math.round(200 + t * 20), Math.round(120 + (1 - t) * 60)];
+    if (key === 'mag') {
+      // Secuencial: crema (0) → terracota oscuro (alto).
+      const t = Math.pow(Math.min(Math.abs(n), 1), 0.6);
+      return t < 0.5 ? lerp(CREMA, TERRACOTA, t / 0.5) : lerp(TERRACOTA, TERRACOTA_OSC, (t - 0.5) / 0.5);
     }
-    // uz: azul cielo (−) ↔ terracota/naranja (+)
-    return n < 0
-      ? [Math.round(90 + (1 - t) * 110), Math.round(170 + t * 40), Math.round(240)]
-      : [Math.round(240), Math.round(120 + (1 - t) * 60), Math.round(70 + (1 - t) * 80)];
+    // Divergente: terracota (negativo) → crema (cero) → verde bosque (positivo).
+    const t = Math.sign(n) * Math.pow(Math.abs(n), 0.6);
+    return t < 0 ? lerp(CREMA, TERRACOTA, -t) : lerp(CREMA, VERDE, t);
   }, []);
 
-  // Dibuja el frame indicado en el canvas.
+  // Dibuja el corte para el fotograma indicado.
   const draw = useCallback((fi: number) => {
     const canvas = canvasRef.current;
     const snap = snapshots[fi];
-    if (!canvas || !snap) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     const W = canvas.width, H = canvas.height;
-    const layerDef = LAYERS.find(l => l.key === layer)!;
-    const off = layerDef.mul * size;
-
-    // Pico por frame para buen contraste (normalización agresiva).
-    let framePeak = 1e-30;
-    for (let k = 0; k < size; k++) {
-      const a = Math.abs(snap.field[off + k]);
-      if (a > framePeak) framePeak = a;
-    }
-    const peak = framePeak * 0.35 + 1e-30;
-
-    // El campo está en orden [i*nz + j] con i en X (0..nx) y j en Z (0..nz).
-    // Pintamos a resolución nativa nx×nz en un ImageData pequeño y luego lo
-    // escalamos al canvas con imageSmoothing para un heatmap suave.
-    const img = ctx.createImageData(nx, nz);
-    for (let i = 0; i < nx; i++) {
-      for (let j = 0; j < nz; j++) {
-        const v = snap.field[off + i * nz + j];
-        const [r, g, b] = colorFor(v, peak, layer);
-        // Alpha proporcional a la intensidad: donde el campo es ~0 el heatmap es
-        // transparente y deja ver el relleno del territorio (clave para t=0 y
-        // para que la onda se lea como un frente que "ilumina" el mapa).
-        const intensity = Math.min(Math.abs(v) / (peak + 1e-30), 1);
-        const alpha = Math.round(Math.pow(intensity, 0.6) * 255);
-        // Pixel destino: x = i, y = j (profundidad hacia abajo).
-        const p = (j * nx + i) * 4;
-        img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = alpha;
-      }
-    }
-
-    // Buffer temporal a resolución nativa, luego escalado al canvas visible.
-    const tmp = document.createElement('canvas');
-    tmp.width = nx; tmp.height = nz;
-    tmp.getContext('2d')!.putImageData(img, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, W, H);
-
-    // Área de dibujo: la silueta de Nariño (si cargó) o todo el canvas. La
-    // silueta se escala a un cuadro con margen, manteniendo su proporción.
-    const pad = Math.min(W, H) * 0.04;
-    let silPath: Path2D | null = null;
-    let box = { x: 0, y: 0, w: W, h: H };
-    if (silhouette && silhouette.length) {
-      // La silueta está normalizada en [0..1]; conservamos su relación de
-      // aspecto real (Nariño es más ancho que alto) centrada en el canvas.
-      const aspect = 0.95; // alto/ancho aproximado del contorno normalizado
-      const availW = W - pad * 2, availH = H - pad * 2;
-      let boxW = availW, boxH = availW * aspect;
-      if (boxH > availH) { boxH = availH; boxW = availH / aspect; }
-      box = { x: (W - boxW) / 2, y: (H - boxH) / 2, w: boxW, h: boxH };
-      silPath = new Path2D();
-      for (const seg of silhouette) {
-        seg.forEach(([nxp, nyp], k) => {
-          const px = box.x + nxp * box.w;
-          const py = box.y + nyp * box.h;
-          if (k === 0) silPath!.moveTo(px, py); else silPath!.lineTo(px, py);
-        });
-      }
-    }
-
-    // Fondo del recuadro completo (azul noche muy oscuro, mejor que negro puro).
-    ctx.fillStyle = '#0f1424';
+    ctx.fillStyle = '#FAFAF8';
     ctx.fillRect(0, 0, W, H);
 
-    // Relleno tenue de la silueta de Nariño: así en t=0 (campo casi nulo) se ve
-    // el "lienzo" con la forma del departamento, no una pantalla negra. Se pinta
-    // ANTES del heatmap para que la propagación quede por encima.
-    if (silPath) {
-      ctx.fillStyle = '#1c2438'; // territorio en reposo (gris azulado)
-      ctx.fill(silPath);
+    // Márgenes para los ejes (en px del canvas, escalados por dpr vía W/H).
+    const scale = W / 1000; // referencia de diseño a 1000 px de ancho
+    const mL = 62 * scale, mR = 16 * scale, mT = 26 * scale, mB = 40 * scale;
+    const plotW = W - mL - mR, plotH = H - mT - mB;
+
+    // Campo del fotograma → ImageData a resolución nativa, escalado al plot.
+    if (snap) {
+      const layerDef = LAYERS.find(l => l.key === layer)!;
+      const off = layerDef.mul * size;
+      let framePeak = 1e-30;
+      for (let k = 0; k < size; k++) { const a = Math.abs(snap.field[off + k]); if (a > framePeak) framePeak = a; }
+      const peak = framePeak * 0.5 + 1e-30;
+      const img = ctx.createImageData(nx, nz);
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < nz; j++) {
+          const v = snap.field[off + i * nz + j];
+          const [r, g, b] = colorFor(v, peak, layer);
+          const p = (j * nx + i) * 4;
+          img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = 255;
+        }
+      }
+      const tmp = document.createElement('canvas');
+      tmp.width = nx; tmp.height = nz;
+      tmp.getContext('2d')!.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(tmp, 0, 0, nx, nz, mL, mT, plotW, plotH);
     }
 
-    // Heatmap recortado a la silueta (o al canvas si no hay silueta).
-    ctx.save();
-    if (silPath) ctx.clip(silPath);
-    ctx.drawImage(tmp, 0, 0, nx, nz, box.x, box.y, box.w, box.h);
-    ctx.restore();
+    // Zona absorbente sombreada (laterales + inferior): no es parte del modelo.
+    ctx.fillStyle = 'rgba(120,113,108,0.30)';
+    const aw = absFracX * plotW, ah = absFracZ * plotH;
+    ctx.fillRect(mL, mT, aw, plotH);                    // izquierda
+    ctx.fillRect(mL + plotW - aw, mT, aw, plotH);       // derecha
+    ctx.fillRect(mL, mT + plotH - ah, plotW, ah);       // inferior
+    // Línea del borde interno de la zona absorbente (discontinua).
+    ctx.strokeStyle = 'rgba(120,113,108,0.55)';
+    ctx.setLineDash([4 * scale, 3 * scale]); ctx.lineWidth = 1;
+    ctx.strokeRect(mL + aw, mT, plotW - 2 * aw, plotH - ah);
+    ctx.setLineDash([]);
 
-    // Contorno de la silueta encima, para que se lea la forma de Nariño.
-    if (silPath) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke(silPath);
-    }
+    // Marco del dominio.
+    ctx.strokeStyle = '#D6D3D1'; ctx.lineWidth = 1;
+    ctx.strokeRect(mL, mT, plotW, plotH);
 
-    // Marcas de fuente (epicentro) y receptor, posicionadas dentro del cuadro
-    // de la silueta (o del canvas si no hay silueta).
-    const sx = box.x + (gridInfo.sourceX / nx) * box.w;
-    const sz = box.y + (gridInfo.sourceZ / nz) * box.h;
-    const rx = box.x + (gridInfo.receiverX / nx) * box.w;
-    const rz = box.y + (gridInfo.receiverZ / nz) * box.h;
+    // Superficie libre (borde superior) resaltada.
+    ctx.strokeStyle = '#1A1A2E'; ctx.lineWidth = 2.5 * scale;
+    ctx.beginPath(); ctx.moveTo(mL, mT); ctx.lineTo(mL + plotW, mT); ctx.stroke();
 
-    // Epicentro (círculo terracota con halo).
-    ctx.beginPath(); ctx.arc(sx, sz, 9, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(196,85,58,0.25)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(sx, sz, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#C4553A'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+    // Posiciones en px.
+    const sx = mL + srcFx * plotW, sz = mT + srcFz * plotH;
+    const rx = mL + recFx * plotW, rz = mT + recFz * plotH;
 
-    // Receptor (triángulo dorado).
+    // Frentes teóricos P (Vp·t) y S (Vs·t) desde la fuente, en gris punteado.
+    const t = snap ? snap.time : currentTime;
+    const kmPerPxX = domainWkm / plotW, kmPerPxZ = domainHkm / plotH;
+    const drawFront = (radiusKm: number, letter: string) => {
+      if (radiusKm <= 0) return;
+      // El dominio no es isótropo en px (dx igual en X y Z, así que kmPerPx es
+      // igual), pero por seguridad dibujamos una elipse con ambos radios.
+      const rXpx = radiusKm / kmPerPxX, rZpx = radiusKm / kmPerPxZ;
+      ctx.strokeStyle = 'rgba(87,83,78,0.75)';
+      ctx.setLineDash([3 * scale, 3 * scale]); ctx.lineWidth = 1.3 * scale;
+      ctx.beginPath(); ctx.ellipse(sx, sz, rXpx, rZpx, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      // Etiqueta sobre el frente, hacia arriba-derecha de la fuente.
+      const lx = sx + rXpx * 0.7, ly = sz - rZpx * 0.7;
+      if (lx > mL && lx < mL + plotW && ly > mT && ly < mT + plotH) {
+        ctx.fillStyle = '#57534E'; ctx.font = `bold ${11 * scale}px sans-serif`;
+        ctx.fillText(letter, lx, ly);
+      }
+    };
+    drawFront(vs * t / 1000, 'S');   // S primero (más lento, radio menor) para que P quede encima
+    drawFront(vp * t / 1000, 'P');
+
+    // Fuente: estrella terracota en su profundidad real.
+    const star = (cx: number, cy: number, R: number, col: string) => {
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+        const rr = i % 2 === 0 ? R : R * 0.45;
+        const px = cx + Math.cos(ang) * rr, py = cy + Math.sin(ang) * rr;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = col; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * scale; ctx.fill(); ctx.stroke();
+    };
+    star(sx, sz, 8 * scale, '#C4553A');
+
+    // Estación: triángulo en la superficie.
     ctx.beginPath();
-    ctx.moveTo(rx, rz - 7); ctx.lineTo(rx - 6, rz + 5); ctx.lineTo(rx + 6, rz + 5); ctx.closePath();
-    ctx.fillStyle = '#D4A853'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
-  }, [snapshots, layer, nx, nz, size, gridInfo.sourceX, gridInfo.sourceZ, gridInfo.receiverX, gridInfo.receiverZ, colorFor, silhouette]);
+    ctx.moveTo(rx, rz - 8 * scale); ctx.lineTo(rx - 7 * scale, rz + 5 * scale); ctx.lineTo(rx + 7 * scale, rz + 5 * scale); ctx.closePath();
+    ctx.fillStyle = '#2D6A4F'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * scale; ctx.fill(); ctx.stroke();
 
-  // Redibujar cuando cambia el frame o la capa.
+    // Etiquetas de fuente y estación.
+    ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${10 * scale}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Fuente', sx, sz + 20 * scale);
+    ctx.fillText('Estación', rx, rz - 12 * scale);
+    ctx.textAlign = 'start';
+
+    // ── Ejes en km ──
+    ctx.fillStyle = '#78716C'; ctx.font = `${9 * scale}px sans-serif`;
+    // Eje X (distancia horizontal, abajo).
+    const xticks = niceTicks(0, domainWkm, 6);
+    ctx.textAlign = 'center';
+    for (const tk of xticks) {
+      const px = mL + (tk / domainWkm) * plotW;
+      ctx.strokeStyle = '#E7E5E4'; ctx.beginPath(); ctx.moveTo(px, mT); ctx.lineTo(px, mT + plotH); ctx.stroke();
+      ctx.fillText(`${tk}`, px, mT + plotH + 14 * scale);
+    }
+    ctx.fillText('Distancia horizontal (km)', mL + plotW / 2, mT + plotH + 30 * scale);
+    // Eje Z (profundidad, izquierda, 0 arriba).
+    const zticks = niceTicks(0, domainHkm, 5);
+    ctx.textAlign = 'right';
+    for (const tk of zticks) {
+      const py = mT + (tk / domainHkm) * plotH;
+      ctx.strokeStyle = '#E7E5E4'; ctx.beginPath(); ctx.moveTo(mL, py); ctx.lineTo(mL + plotW, py); ctx.stroke();
+      ctx.fillText(`${tk}`, mL - 6 * scale, py + 3 * scale);
+    }
+    // Etiqueta del eje de profundidad (vertical).
+    ctx.save();
+    ctx.translate(14 * scale, mT + plotH / 2); ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#78716C'; ctx.font = `${9 * scale}px sans-serif`;
+    ctx.fillText('Profundidad (km)', 0, 0);
+    ctx.restore();
+    ctx.textAlign = 'start';
+
+    // Etiqueta "Superficie libre".
+    ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${8.5 * scale}px sans-serif`;
+    ctx.fillText('Superficie libre', mL + 4 * scale, mT - 8 * scale);
+  }, [snapshots, layer, nx, nz, size, colorFor, srcFx, srcFz, recFx, recFz, absFracX, absFracZ, domainWkm, domainHkm, vp, vs, currentTime]);
+
   useEffect(() => { draw(frameIdx); }, [frameIdx, draw]);
 
-  // Ajustar la resolución interna del canvas a su tamaño en pantalla.
+  // Ajuste de resolución del canvas.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -232,97 +274,117 @@ export function TriaxialPlane({ snapshots, gridInfo }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draw]);
 
-  // Reproducción: ~15 s a 1x recorriendo todos los snapshots.
+  // Reproducción: avanza el TIEMPO compartido (~15 s a 1x sobre toda la ventana).
   useEffect(() => {
-    if (!playing || !snapshots.length) return;
-    const msPerFrame = Math.max(16, Math.round((15000 / snapshots.length) / speed));
-    const iv = setInterval(() => {
-      setFrameIdx(p => { if (p + 1 >= snapshots.length) { setPlaying(false); return p; } return p + 1; });
-    }, msPerFrame);
-    return () => clearInterval(iv);
-  }, [playing, speed, snapshots.length]);
+    if (!playing || !lastTime) return;
+    let prev = performance.now();
+    const tick = (now: number) => {
+      const dt = (now - prev) / 1000; prev = now;
+      const advance = (lastTime / 15) * speed * dt; // recorre la ventana en ~15 s
+      let nt = currentTimeRef.current + advance;
+      if (nt >= lastTime) { nt = lastTime; onPlayingChange(false); }
+      onTimeChange(nt);
+      if (nt < lastTime) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, speed, lastTime]);
 
-  const t = snapshots[frameIdx]?.time ?? 0;
-  const pct = snapshots.length > 1 ? Math.round((frameIdx / (snapshots.length - 1)) * 100) : 0;
+  // Ref del tiempo actual para el loop de rAF (evita recrearlo en cada frame).
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
   const activeLayer = LAYERS.find(l => l.key === layer)!;
+  const pReached = currentTime >= pArrival && pArrival > 0;
+  const sReached = currentTime >= sArrival && sArrival > 0;
 
   return (
     <div className="space-y-3">
-      {/* Heatmap */}
       <div className="relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-[clamp(260px,44vh,440px)] rounded-xl overflow-hidden border border-stone-200/60 shadow-lg bg-[#0f1424]"
+          className="w-full h-[clamp(280px,46vh,460px)] rounded-xl border border-stone-200/60 shadow-sm bg-[#FAFAF8]"
         />
-        {/* Etiqueta de contexto geográfico */}
-        {silhouette && (
-          <div className="absolute top-2 left-3 text-[10px] font-bold text-white/80 bg-black/30 px-2 py-0.5 rounded backdrop-blur-sm">
-            Departamento de Nariño
-          </div>
-        )}
-        {/* Etiqueta explícita: es un resultado físico real de la simulación */}
-        <div className="absolute bottom-3 left-3 text-[9px] font-medium text-white/70 bg-black/40 px-2 py-1 rounded backdrop-blur-sm border border-white/10 max-w-[60%] leading-tight">
-          Campo de onda simulado (Ux, Uz, |u|) · motor de diferencias finitas
-        </div>
         {/* Capa activa */}
         <div className="absolute top-2 right-3">
-          <span className="text-[9px] font-bold px-2 py-1 rounded-md text-white backdrop-blur-sm border border-white/10" style={{ backgroundColor: activeLayer.color + 'dd' }}>
+          <span className="text-[9px] font-bold px-2 py-1 rounded-md bg-white/90 text-[#1A1A2E] border border-stone-200 shadow-sm">
             {activeLayer.label} · {activeLayer.full}
           </span>
         </div>
-        {/* Tiempo */}
-        <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white font-mono text-xs px-3 py-1.5 rounded-lg border border-white/10">
-          t = {t.toFixed(3)} s
+        {/* Tiempo + indicador de llegada P/S */}
+        <div className="absolute bottom-3 right-3 flex items-center gap-2">
+          {pReached && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#57534E] text-white">P en estación</span>}
+          {sReached && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#1A1A2E] text-white">S en estación</span>}
+          <span className="bg-white/90 border border-stone-200 shadow-sm text-[#1A1A2E] font-mono text-xs px-3 py-1.5 rounded-lg">
+            t = {currentTime.toFixed(3)} s
+          </span>
         </div>
       </div>
 
-      {/* Selector de capa (una a la vez) */}
+      {/* Selector de capa */}
       <div className="flex items-center gap-2 flex-wrap">
         <Eye size={13} className="text-stone-400" />
         {LAYERS.map(l => {
           const on = l.key === layer;
           return (
             <button key={l.key} onClick={() => setLayer(l.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
-                on ? 'text-white border-transparent shadow-md' : 'text-stone-400 border-stone-200 bg-white'
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                on ? 'bg-[#C4553A] text-white border-transparent shadow-md' : 'text-stone-400 border-stone-200 bg-white'
               }`}
-              style={on ? { backgroundColor: l.color, boxShadow: `0 2px 8px ${l.color}40` } : {}}
             >
-              <span className={`w-2.5 h-2.5 rounded-sm ${on ? 'bg-white/30 border border-white/50' : 'border border-stone-300'}`} />
-              {l.label} · {l.full}
+              {l.label}
             </button>
           );
         })}
       </div>
 
-      {/* Reproducción */}
+      {/* Reproducción (comparte el tiempo con los sismogramas) */}
       <div className="flex items-center gap-2 bg-stone-50 rounded-xl p-2 border border-stone-100">
-        <button onClick={() => { setFrameIdx(0); setPlaying(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><SkipBack size={12} /></button>
-        <button onClick={() => { if (frameIdx >= snapshots.length - 1) setFrameIdx(0); setPlaying(!playing); }} className="p-2 rounded-lg bg-[#C4553A] text-white shadow-sm">{playing ? <Pause size={13} /> : <Play size={13} />}</button>
-        <button onClick={() => { setFrameIdx(0); setPlaying(true); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><RotateCcw size={12} /></button>
-        <input type="range" min={0} max={Math.max(0, snapshots.length - 1)} value={frameIdx} onChange={e => { setFrameIdx(Number(e.target.value)); setPlaying(false); }} className="flex-1" />
-        <span className="text-[9px] font-mono text-stone-400 w-12 text-right">{pct}%</span>
+        <button onClick={() => { onTimeChange(0); onPlayingChange(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><SkipBack size={12} /></button>
+        <button onClick={() => { if (currentTime >= lastTime) onTimeChange(0); onPlayingChange(!playing); }} className="p-2 rounded-lg bg-[#C4553A] text-white shadow-sm">{playing ? <Pause size={13} /> : <Play size={13} />}</button>
+        <button onClick={() => { onTimeChange(0); onPlayingChange(true); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><RotateCcw size={12} /></button>
+        <input type="range" min={0} max={lastTime} step={lastTime / 200 || 0.01} value={Math.min(currentTime, lastTime)} onChange={e => { onTimeChange(Number(e.target.value)); onPlayingChange(false); }} className="flex-1" />
+        <span className="text-[9px] font-mono text-stone-400 w-16 text-right">{currentTime.toFixed(1)}/{lastTime.toFixed(0)}s</span>
         <div className="flex gap-0.5">
           {[0.5, 1, 2].map(s => (<button key={s} onClick={() => setSpeed(s)} className={`text-[9px] px-2 py-1 rounded font-bold ${speed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>))}
         </div>
       </div>
 
-      {/* Escala de color + leyenda */}
-      <div className="flex items-center justify-between text-[9px] text-stone-400 px-1 gap-3">
+      {/* Leyenda de escala + marcas */}
+      <div className="flex items-center justify-between text-[9px] text-stone-500 px-1 gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#C4553A] shadow-sm shadow-[#C4553A]/40" /> Epicentro (fuente)</span>
-          <span className="flex items-center gap-1"><span className="w-0 h-0 border-l-[5px] border-r-[5px] border-b-[8px] border-l-transparent border-r-transparent border-b-[#D4A853]" /> Sismógrafo (receptor)</span>
+          <span className="flex items-center gap-1"><span className="text-[#C4553A]">★</span> Fuente (profundidad {srcDepthKm.toFixed(1)} km)</span>
+          <span className="flex items-center gap-1"><span className="w-0 h-0 border-l-[5px] border-r-[5px] border-b-[8px] border-l-transparent border-r-transparent border-b-[#2D6A4F]" /> Estación ({epicDistKm.toFixed(1)} km)</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-4 border-t border-dashed border-[#57534E]" /> Frentes P y S</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span>Baja</span>
-          <span className="inline-block w-24 h-2.5 rounded-full" style={{ background: layer === 'mag'
-            ? 'linear-gradient(90deg,#5a1e5a,#b43255,#c4553a,#ffa832,#ffffff)'
-            : layer === 'ux'
-              ? 'linear-gradient(90deg,#46c8be,#1c2438,#5ac878)'
-              : 'linear-gradient(90deg,#5aaaf0,#1c2438,#f0783c)' }} />
-          <span>Alta</span>
+          <span>{layer === 'mag' ? '0' : '−'}</span>
+          <span className="inline-block w-24 h-2.5 rounded-full border border-stone-200" style={{ background: layer === 'mag'
+            ? 'linear-gradient(90deg,#faf6f0,#c4553a,#7a2a1c)'
+            : 'linear-gradient(90deg,#c4553a,#faf6f0,#2d6a4f)' }} />
+          <span>{layer === 'mag' ? 'máx' : '+'}</span>
         </div>
       </div>
+
+      <p className="text-[10px] text-stone-400 leading-snug">
+        El corte muestra el movimiento en el plano vertical (radial y vertical). La componente transversal (SH) no aparece en el corte; se ve en los sismogramas. La zona gris de los bordes es la capa absorbente y no forma parte del modelo.
+      </p>
     </div>
   );
+}
+
+/** Marcas de eje en valores redondos (0, 2, 4, …) dentro de [min, max]. */
+function niceTicks(min: number, max: number, target: number): number[] {
+  const span = max - min;
+  if (!(span > 0)) return [min];
+  const raw = span / target;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / pow;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * pow;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step) {
+    ticks.push(Math.round(v * 10) / 10);
+  }
+  return ticks;
 }

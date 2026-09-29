@@ -66,7 +66,7 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       element: '[data-tour="viz-area"]',
       popover: {
         title: 'Visualización',
-        description: 'Mira las tres componentes del movimiento o el mapa de calor.',
+        description: 'Mira las tres componentes del movimiento o el corte del subsuelo.',
         side: 'left',
         align: 'start',
       },

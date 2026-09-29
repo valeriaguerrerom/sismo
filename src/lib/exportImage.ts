@@ -2,8 +2,8 @@
  * Exportación de la visualización a PNG (HU017 / RF-17).
  *
  * Estrategia en dos niveles:
- *  1. Si hay un canvas WebGL válido (la vista 3D / mapa de calor), se exporta
- *     directamente con `toDataURL` (rápido y fiel).
+ *  1. Si hay un canvas válido (la vista del corte del subsuelo), se exporta
+ *     directamente con `toDataURL` (rápido y fiel, incluye ejes y leyenda).
  *  2. Si no, se usa html2canvas sobre el área de visualización (`[data-viz-area]`)
  *     para capturar los sismogramas (SVG/HTML).
  *
