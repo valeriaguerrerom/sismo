@@ -189,11 +189,18 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   y += 8;
 
   // ── Parámetros ──
-  const section = (label: string) => {
+  // Dibuja un título de sección en mayúscula/minúscula (sentence case), no en
+  // mayúsculas. Acepta `keepWith`: alto (mm) del primer bloque que debe caber
+  // junto al título; si no cabe, salta de página ANTES de dibujar el título
+  // para no dejar títulos huérfanos al pie de la página (A3).
+  const section = (label: string, keepWith = 0) => {
+    // Alto aproximado del título + subrayado + separación (≈ 11.5 mm).
+    const titleH = 11.5;
+    if (y + titleH + keepWith > 285) { doc.addPage(); y = MARGIN; }
     doc.setFont(FONT, 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...COLORS.green);
-    doc.text(label.toUpperCase(), MARGIN, y);
+    doc.text(label, MARGIN, y);
     y += 1.5;
     doc.setDrawColor(...COLORS.green);
     doc.setLineWidth(0.4);
@@ -288,7 +295,9 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const real = results.isRealRecord === true;
     // Con registro real, el reporte muestra la MISMA señal que la pantalla y no
     // las llegadas P/S teóricas del FDM (el registro real no las trae).
-    section(real ? 'Sismograma triaxial (registro real)' : 'Sismogramas triaxiales');
+    // El título se queda junto a la primera traza (24 mm) para no quedar
+    // huérfano al pie de página (A3).
+    section(real ? 'Sismograma triaxial (registro real)' : 'Sismogramas triaxiales', 24 + 7);
     if (real && results.realLabel) {
       doc.setFontSize(8);
       doc.setTextColor(...COLORS.muted);
@@ -354,34 +363,40 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const cs = results.crossSection;
     // Los tres fotogramas caben mejor juntos: se dibujan a media anchura de
     // contenido para que entren dos por fila o uno por bloque segun el alto.
-    // Aqui usamos ancho completo apilados en orden (P, S, despues).
-    if (y > 250) { doc.addPage(); y = MARGIN; }
-    section('Mapa de calor del subsuelo');
+    // Los tres fotogramas se dibujan en UNA fila (P, S, después) para leer la
+    // secuencia de un vistazo; si no caben tres, se reparten y centran.
+    const frames = cs.frames;
+    // Ancho de imagen: tres columnas en una fila (A4). Gap fijo entre marcos.
+    const gapX = 4;
+    const cols = Math.min(3, Math.max(1, frames.length));
+    const imgW = (CONTENT_W - gapX * (cols - 1)) / cols;
+    // Alto de la primera imagen (todos los fotogramas comparten proporción).
+    const firstProps = doc.getImageProperties(frames[0].dataUrl);
+    const firstH = imgW * (firstProps.height / firstProps.width);
+    // El título debe quedarse junto a: línea "Componente:" (5) + rótulos (5) +
+    // la fila de imágenes (firstH). Así no queda huérfano (A3).
+    section('Mapa de calor del subsuelo', 5 + 5 + firstH + 4);
     // Componente mostrada.
     doc.setFont(FONT, 'normal'); doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
     doc.text(`Componente: ${cs.component}`, MARGIN, y);
     y += 5;
-    const frames = cs.frames;
-    // Ancho de imagen: dos columnas si caben (más compacto), si no una.
-    const imgW = (CONTENT_W - 6) / 2;
-    let col = 0;
-    let rowY = y;
+    // Fila de fotogramas centrada. Si el nº de columnas < 3 (pocos frames),
+    // se centra el bloque para evitar un hueco grande a la derecha (A4).
+    const rowW = cols * imgW + (cols - 1) * gapX;
+    const rowX0 = MARGIN + (CONTENT_W - rowW) / 2;
+    const rowY = y;
     let rowH = 0;
-    for (const fr of frames) {
+    frames.forEach((fr, i) => {
       const props = doc.getImageProperties(fr.dataUrl);
       const imgH = imgW * (props.height / props.width);
-      // Salto de fila cada 2 columnas.
-      if (col === 2) { col = 0; y = rowY + rowH + 8; rowY = y; rowH = 0; }
-      if (y + imgH + 12 > 285) { doc.addPage(); y = MARGIN; rowY = y; col = 0; rowH = 0; }
-      const cx = MARGIN + col * (imgW + 6);
-      doc.setFont(FONT, 'bold'); doc.setFontSize(8); doc.setTextColor(...COLORS.text);
+      const cx = rowX0 + i * (imgW + gapX);
+      doc.setFont(FONT, 'bold'); doc.setFontSize(7.5); doc.setTextColor(...COLORS.text);
       doc.text(`${fr.label}`, cx, rowY);
       doc.setFont(FONT, 'normal'); doc.setTextColor(...COLORS.muted);
-      doc.text(`t = ${fr.time.toFixed(2)} s`, cx, rowY + 3.5);
-      doc.addImage(fr.dataUrl, 'PNG', cx, rowY + 5, imgW, imgH);
-      rowH = Math.max(rowH, imgH + 5);
-      col += 1;
-    }
+      doc.text(`t = ${fr.time.toFixed(2)} s`, cx, rowY + 3.3);
+      doc.addImage(fr.dataUrl, 'PNG', cx, rowY + 4.5, imgW, imgH);
+      rowH = Math.max(rowH, imgH + 4.5);
+    });
     y = rowY + rowH + 6;
     // Leyenda única de escala (barra de color) + nota de escala global.
     if (y + 16 > 290) { doc.addPage(); y = MARGIN; }
@@ -410,30 +425,40 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   // ── Movimiento de partícula (hodograma 3D) ──
   if (sec.particleMotion && results.particleMotion && results.particleMotion.dataUrl) {
     const pm = results.particleMotion;
-    if (y > 210) { doc.addPage(); y = MARGIN; }
-    section('Movimiento de partícula');
     // Imagen cuadrada centrada, a media anchura de contenido.
     const props = doc.getImageProperties(pm.dataUrl);
     const imgW = Math.min(CONTENT_W, 96);
     const imgH = imgW * (props.height / props.width);
-    if (y + imgH + 10 > 285) { doc.addPage(); y = MARGIN; }
+    // El título se queda junto a la imagen + la leyenda (A3).
+    section('Movimiento de partícula', imgH + 4 + 4);
     const cx = MARGIN + (CONTENT_W - imgW) / 2;
     doc.addImage(pm.dataUrl, 'PNG', cx, y, imgW, imgH);
     y += imgH + 4;
-    // Leyenda de tramos (P terracota, S verde, reposo gris).
+    // Leyenda de tramos (P terracota, S verde, reposo gris). Separadores con
+    // comas y punto y coma (A4), no middots.
     doc.setFont(FONT, 'normal'); doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
-    doc.text('Tramos: gris = reposo · terracota = onda P · verde = onda S', MARGIN, y);
+    doc.text('Tramos: gris, reposo; terracota, onda P; verde, onda S', MARGIN, y);
     y += 4;
+    // Si el arribo S no se detectó automáticamente (se usó el valor teórico),
+    // el tramo verde marca la ventana esperada, no un pico medido (A4).
+    if (results.sArrivalDetected === false) {
+      doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
+      const tn = doc.splitTextToSize(
+        'El arribo S es teórico (no se detectó un pico claro); el tramo verde marca la ventana S esperada.',
+        CONTENT_W) as string[];
+      doc.text(tn, MARGIN, y);
+      y += tn.length * 3.2 + 1;
+    }
     const capLines = doc.splitTextToSize(pm.caption, CONTENT_W) as string[];
-    doc.setTextColor(...COLORS.text);
+    doc.setFont(FONT, 'normal'); doc.setFontSize(7); doc.setTextColor(...COLORS.text);
     doc.text(capLines, MARGIN, y);
     y += capLines.length * 3.5 + 4;
   }
 
   // ── Interpretación ──
   if (sec.interpretation) {
-  if (y > 230) { doc.addPage(); y = MARGIN; }
-  section('Interpretación educativa');
+  // El título se queda con al menos ~4 líneas del texto (A3).
+  section('Interpretación educativa', 4 * 4.5);
   doc.setFontSize(9);
   doc.setTextColor(...COLORS.text);
   const interp = interpretSimulation({
@@ -450,8 +475,8 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   }
 
   if (notes && notes.trim()) {
-    if (y > 250) { doc.addPage(); y = MARGIN; }
-    section('Notas del usuario');
+    // El título se queda con al menos ~3 líneas de la nota (A3).
+    section('Notas del usuario', 3 * 4.5);
     doc.setFontSize(9);
     const noteLines = doc.splitTextToSize(notes.trim(), CONTENT_W) as string[];
     doc.text(noteLines, MARGIN, y);
