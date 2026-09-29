@@ -205,7 +205,9 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           {/* Selector de escenario: carga un preset completo respaldado por
               fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
           <div>
-            <span className="text-xs font-medium text-stone-600">Escenario</span>
+            <Tooltip content="Casos de ejemplo ya listos (sismo andino, volcánico del Galeras, etc.). Al elegir uno se cargan todos sus parámetros; luego puedes cambiarlos." showIcon>
+              <span className="text-xs font-medium text-stone-600">Escenario</span>
+            </Tooltip>
             <select
               value={scenarioId}
               onChange={e => applyScenario(e.target.value)}
@@ -224,7 +226,9 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           </div>
 
           <div>
-            <span className="text-xs font-medium text-stone-600">Tipo de Fuente</span>
+            <Tooltip content="Tectónica: una falla que se desliza (genera onda S fuerte). Volcánica: una explosión que empuja en todas direcciones por igual (onda P fuerte, casi sin transversal)." showIcon>
+              <span className="text-xs font-medium text-stone-600">Tipo de Fuente</span>
+            </Tooltip>
             <div className="grid grid-cols-2 gap-2 mt-1.5">
               {(['tectonic', 'volcanic'] as const).map(t => (
                 <button
@@ -300,7 +304,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               depende de dx (lo que cabe en la malla sin acercarse a los bordes). */}
           <SliderRow
             label="Distancia de la estación"
-            tooltip="Distancia horizontal de la estación virtual al epicentro (km). A mayor distancia, más se separan en el tiempo la llegada de la P y la de la S. El máximo depende del tamaño de malla (dx)."
+            tooltip="A qué distancia (en km) está el sismógrafo del epicentro. Cuanto más lejos, más separadas en el tiempo llegan la onda P y la S. El máximo depende del tamaño de malla."
             value={params.epicentralDistanceKm ?? 2.5}
             min={1}
             max={maxEpicentralDistanceKm(params.dx)}
@@ -313,7 +317,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               radial/transversal → Norte/Este. Aplica a ambas fuentes. */}
           <SliderRow
             label="Dirección de la estación"
-            tooltip="Acimut de la estación virtual respecto a la fuente, medido desde el norte en sentido horario (0-360°). Orienta el corte del subsuelo y cómo se reparten las componentes Norte y Este."
+            tooltip="Hacia qué rumbo está el sismógrafo respecto a la fuente (acimut: 0°=Norte, 90°=Este, en sentido de las agujas del reloj). Cambia cómo se reparte el movimiento entre las componentes Norte y Este."
             value={params.stationAzimuth ?? 45}
             min={0}
             max={360}
@@ -342,7 +346,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                   </p>
                   <SliderRow
                     label="Rumbo (strike)"
-                    tooltip="Orientación de la traza de la falla en superficie, medida desde el norte en sentido horario (0-360°). Por defecto ~30° (rumbo andino de Nariño)."
+                    tooltip="Hacia dónde apunta la falla vista desde arriba, medido desde el Norte (0-360°). En Nariño las fallas siguen la cordillera (~30°)."
                     value={params.strike ?? 30}
                     min={0}
                     max={360}
@@ -352,7 +356,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                   />
                   <SliderRow
                     label="Buzamiento (dip)"
-                    tooltip="Inclinación del plano de falla respecto a la horizontal (0-90°). 90° es una falla vertical."
+                    tooltip="Qué tan inclinada está la falla: 0° es horizontal (acostada) y 90° es vertical (parada)."
                     value={params.dip ?? 45}
                     min={0}
                     max={90}
@@ -362,7 +366,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                   />
                   <SliderRow
                     label="Deslizamiento (rake)"
-                    tooltip="Dirección del movimiento del bloque sobre el plano de falla (-180 a 180°). 90° = falla inversa, -90° = normal, 0° = desgarre. Por defecto 90° (inversa, régimen compresivo)."
+                    tooltip="Hacia dónde se mueve un bloque sobre la falla: 90° = inversa (se comprime y sube), -90° = normal (se estira y baja), 0° = de lado (desgarre)."
                     value={params.rake ?? 90}
                     min={-180}
                     max={180}
@@ -431,12 +435,15 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               el rango de Vp y dx; se muestra solo como información. */}
           <div>
             <div className="flex items-center justify-between">
-              <Tooltip content="Se calcula automáticamente para cumplir la condición de estabilidad CFL: dt = 0.9·dx/(Vp·√2). Así la simulación es siempre estable." showIcon>
+              <Tooltip content="Cada cuánto avanza la simulación en el tiempo. Se calcula solo para que no se 'desestabilice': la onda no puede saltar más de una celda por paso." showIcon>
                 <span className="text-xs font-medium text-stone-600">Paso Temporal (dt)</span>
               </Tooltip>
               <span className="text-xs font-mono font-semibold text-[#1A1A2E]">{(params.dt * 1000).toFixed(2)} ms</span>
             </div>
-            <p className="text-[10px] text-stone-400 mt-1">Automático (estabilidad CFL). Courant ≈ {(params.dt * params.vp * Math.SQRT2 / params.dx).toFixed(2)}.</p>
+            <p className="text-[10px] text-stone-400 mt-1">
+              Automático (estabilidad CFL).{' '}
+              <Tooltip content="Número de Courant: qué fracción de una celda avanza la onda en cada paso. Debe ser menor que 1 para que la simulación sea estable.">Courant</Tooltip> ≈ {(params.dt * params.vp * Math.SQRT2 / params.dx).toFixed(2)}.
+            </p>
           </div>
         </div>
       </AccordionSection>

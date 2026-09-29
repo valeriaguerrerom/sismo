@@ -21,6 +21,9 @@ const TIP_WIDTH = 224; // 14rem
  */
 export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
   const [visible, setVisible] = useState(false);
+  // En táctil no hay hover: el tooltip se fija con un toque y se cierra tocando
+  // fuera o tocando de nuevo. `pinned` distingue ese modo del hover de escritorio.
+  const [pinned, setPinned] = useState(false);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; arrow: number } | null>(null);
 
@@ -49,12 +52,27 @@ export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
     };
   }, [visible, content, measure]);
 
+  // Al fijar por toque, cerrar cuando se toca/clica fuera del disparador.
+  useLayoutEffect(() => {
+    if (!pinned) return;
+    const onDocDown = (e: Event) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+        setPinned(false); setVisible(false);
+      }
+    };
+    document.addEventListener('pointerdown', onDocDown, true);
+    return () => document.removeEventListener('pointerdown', onDocDown, true);
+  }, [pinned]);
+
   return (
     <span
       ref={triggerRef}
       className="relative inline-flex items-center gap-1"
       onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
+      onMouseLeave={() => { if (!pinned) setVisible(false); }}
+      // Toque/clic: alterna el tooltip fijado (clave para pantallas táctiles,
+      // donde no hay hover). Evita que el gesto dispare acciones del contenedor.
+      onClick={(e) => { e.stopPropagation(); setPinned(p => { const np = !p; setVisible(np); return np; }); }}
     >
       {children}
       {showIcon && <Info size={13} className="text-stone-400 cursor-help" />}
