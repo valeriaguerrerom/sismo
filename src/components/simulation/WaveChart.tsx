@@ -30,9 +30,17 @@ interface WaveChartProps {
    * modelo. Lo que hay después no debe interpretarse como señal real.
    */
   reflectionsAfter?: number;
+  /**
+   * Ventana temporal visible (s). Si se pasan, el eje X se recorta a
+   * [windowStart, windowEnd] (modo "Ajustar al evento", B1) en vez de mostrar
+   * toda la duración. La amplitud se sigue midiendo con la señal completa para
+   * no exagerar la escala. El cursor de reproducción se mapea a esta ventana.
+   */
+  windowStart?: number;
+  windowEnd?: number;
 }
 
-export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false, refAmpOverride, reflectionsAfter }: WaveChartProps) {
+export function WaveChart({ data, label, component, color, height = 120, visibleRatio = 1, pArrival, sArrival, robustScale = false, refAmpOverride, reflectionsAfter, windowStart, windowEnd }: WaveChartProps) {
   const svgData = useMemo(() => {
     if (!data.time.length) return null;
 
@@ -41,8 +49,11 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     const plotW = w - padLeft - padRight;
     const plotH = h - padTop - padBottom;
     const values = data[component];
-    const minT = data.time[0];
-    const maxT = data.time[data.time.length - 1];
+    const dataMinT = data.time[0];
+    const dataMaxT = data.time[data.time.length - 1];
+    // Ventana visible: recorte al evento si se pasa, si no toda la señal.
+    const minT = windowStart !== undefined ? Math.max(dataMinT, windowStart) : dataMinT;
+    const maxT = windowEnd !== undefined ? Math.min(dataMaxT, windowEnd) : dataMaxT;
 
     // Referencia de amplitud: pico absoluto (simulación FDM, ya bien escalada)
     // o percentil 99 con saturación suave (datos reales, para no aplastar la
@@ -70,19 +81,27 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     };
 
     const step = Math.max(1, Math.floor(data.time.length / 600));
-    const totalVisible = Math.max(1, Math.floor((data.time.length / step) * visibleRatio));
+    // El cursor de reproducción avanza sobre la DURACIÓN COMPLETA (visibleRatio
+    // es fracción de toda la señal), aunque el eje esté recortado a la ventana.
+    const playT = dataMinT + (dataMaxT - dataMinT) * visibleRatio;
 
     const points: string[] = [];
-    for (let i = 0; i < totalVisible; i++) {
-      const srcIdx = i * step;
-      if (srcIdx >= data.time.length) break;
-      points.push(`${toX(data.time[srcIdx])},${toY(values[srcIdx])}`);
+    for (let i = 0; i < data.time.length; i += step) {
+      const t = data.time[i];
+      // Solo dibujamos dentro de la ventana visible y hasta el tiempo de
+      // reproducción (para que la traza "crezca" al reproducir).
+      if (t < minT) continue;
+      if (t > maxT || t > playT) break;
+      points.push(`${toX(t)},${toY(values[i])}`);
     }
     const path = points.length > 1 ? `M ${points.join(' L ')}` : '';
 
-    const lastIdx = Math.min((totalVisible - 1) * step, data.time.length - 1);
-    const cursorX = toX(data.time[lastIdx]);
-    const cursorY = toY(values[lastIdx]);
+    // Posición del cursor: recortada a la ventana visible.
+    const cursorT = Math.max(minT, Math.min(maxT, playT));
+    let cursorIdx = 0;
+    for (let i = 0; i < data.time.length; i++) { if (data.time[i] >= cursorT) { cursorIdx = i; break; } cursorIdx = i; }
+    const cursorX = toX(cursorT);
+    const cursorY = toY(values[cursorIdx]);
 
     // Marcas del eje de tiempo en valores redondos (0, 2, 4, 6, 8, 10, 12…),
     // no en fracciones arbitrarias del rango. Se elige un paso "bonito"
@@ -104,7 +123,7 @@ export function WaveChart({ data, label, component, color, height = 120, visible
     const refX = reflectionsAfter !== undefined && reflectionsAfter > minT && reflectionsAfter <= maxT ? toX(reflectionsAfter) : null;
 
     return { path, gridLines, ampLabels, midY: toY(0), w, h, padLeft, padTop, padBottom, cursorX, cursorY, pX, sX, refX };
-  }, [data, component, height, visibleRatio, pArrival, sArrival, robustScale, refAmpOverride, reflectionsAfter]);
+  }, [data, component, height, visibleRatio, pArrival, sArrival, robustScale, refAmpOverride, reflectionsAfter, windowStart, windowEnd]);
 
   if (!svgData) return null;
 

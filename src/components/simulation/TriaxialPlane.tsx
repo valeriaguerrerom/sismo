@@ -39,7 +39,7 @@ export function TriaxialPlane({
   pArrival, sArrival, currentTime, onTimeChange, playing, onPlayingChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(2);
   const [layer, setLayer] = useState<CrossLayer>('mag');
   const [scaleMode, setScaleMode] = useState<CrossScaleMode>('global');
   const rafRef = useRef<number>(0);
@@ -177,7 +177,7 @@ export function TriaxialPlane({
         <input type="range" min={0} max={lastTime || 0.01} step={(lastTime / 200) || 0.01} value={Math.min(currentTime, lastTime)} onChange={e => { onTimeChange(Number(e.target.value)); onPlayingChange(false); }} className="flex-1 min-w-[140px]" />
         <span className="text-[9px] font-mono text-stone-400 w-16 text-right">{currentTime.toFixed(1)}/{lastTime.toFixed(0)}s</span>
         <div className="flex gap-0.5">
-          {[0.5, 1, 2].map(s => (<button key={s} onClick={() => setSpeed(s)} className={`text-[9px] px-2 py-1 rounded font-bold ${speed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>))}
+          {[0.5, 1, 2, 4].map(s => (<button key={s} onClick={() => setSpeed(s)} className={`text-[9px] px-2 py-1 rounded font-bold ${speed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>))}
         </div>
       </div>
 

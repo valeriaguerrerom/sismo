@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
 import { defaultScenario } from '../lib/scenarios';
 import { commonMaxAmplitude } from '../lib/format';
+import { computeEventWindow } from '../lib/waveWindow';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
@@ -193,7 +194,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // 2D waveform playback
   const [wave2dPlaying, setWave2dPlaying] = useState(false);
   const [wave2dRatio, setWave2dRatio] = useState(1);
-  const [wave2dSpeed, setWave2dSpeed] = useState(1);
+  // Velocidad de reproducción por defecto 2x (B2); opciones 0.5–4x.
+  const [wave2dSpeed, setWave2dSpeed] = useState(2);
+  // Encuadre de los sismogramas (B1): "Ajustar al evento" por defecto (recorta
+  // al pulso) con opción de ver toda la duración.
+  const [fitToEvent, setFitToEvent] = useState(true);
   const wave2dRef = useRef<number>(0);
 
   // Ejecuta el FDM. Acepta params explícitos (para el auto-run de datos reales,
@@ -287,6 +292,31 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     wave2dRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(wave2dRef.current);
   }, [wave2dPlaying, result, realData, wave2dSpeed, viewMode]);
+
+  // Ventana "del evento" (B1) para recortar los sismogramas al pulso. Se calcula
+  // una para el resultado simulado y otra para el registro real. Cuando el
+  // usuario desactiva "Ajustar al evento", se pasa undefined (duración completa).
+  const simWindow = useMemo(
+    () => (result ? computeEventWindow(result.waveData, { pArrival: result.pArrival, sArrival: result.sArrival }) : null),
+    [result],
+  );
+  const realWindow = useMemo(
+    () => (realData ? computeEventWindow(realData.waveData) : null),
+    [realData],
+  );
+  const simWin = fitToEvent ? simWindow : null;
+  const realWin = fitToEvent ? realWindow : null;
+
+  // Botón compacto para alternar el encuadre de los sismogramas (B1).
+  const FitToggle = () => (
+    <button
+      onClick={() => setFitToEvent(v => !v)}
+      className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold border ${fitToEvent ? 'bg-[#2D6A4F] text-white border-[#2D6A4F]' : 'bg-white border-stone-200 text-stone-500'}`}
+      title={fitToEvent ? 'Mostrando solo el tramo del evento. Clic para ver toda la duración.' : 'Mostrando toda la duración. Clic para ajustar al evento.'}
+    >
+      {fitToEvent ? 'Ajustar al evento' : 'Duración completa'}
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
@@ -459,11 +489,12 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       {(wave2dRatio * (realData.waveData.time[realData.waveData.time.length - 1] ?? 0)).toFixed(1)}s / {(realData.waveData.time[realData.waveData.time.length - 1] ?? 0).toFixed(0)}s
                     </span>
                     <div className="flex gap-1">
-                      {[0.5, 1, 2].map(s => (
+                      {[0.5, 1, 2, 4].map(s => (
                         <button key={s} onClick={() => setWave2dSpeed(s)}
                           className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${wave2dSpeed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>
                       ))}
                     </div>
+                    <FitToggle />
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
@@ -472,13 +503,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
                     </div>
-                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
                   </div>
                 </div>
               )}
@@ -511,11 +542,12 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       {(wave2dRatio * (result.waveData.time[result.waveData.time.length - 1] ?? 0)).toFixed(1)}s / {(result.waveData.time[result.waveData.time.length - 1] ?? 0).toFixed(0)}s
                     </span>
                     <div className="flex gap-1">
-                      {[0.5, 1, 2].map(s => (
+                      {[0.5, 1, 2, 4].map(s => (
                         <button key={s} onClick={() => setWave2dSpeed(s)}
                           className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${wave2dSpeed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>
                       ))}
                     </div>
+                    <FitToggle />
                   </div>
 
                   {/* Aviso de reflexiones de borde: solo si la ventana supera el
@@ -542,13 +574,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} />
+                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                 </div>
               )}
@@ -599,7 +631,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                         {(wave2dRatio * pmLastT).toFixed(1)}s / {pmLastT.toFixed(0)}s
                       </span>
                       <div className="flex gap-1">
-                        {[0.5, 1, 2].map(sp => (
+                        {[0.5, 1, 2, 4].map(sp => (
                           <button key={sp} onClick={() => setWave2dSpeed(sp)}
                             className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${wave2dSpeed === sp ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{sp}x</button>
                         ))}

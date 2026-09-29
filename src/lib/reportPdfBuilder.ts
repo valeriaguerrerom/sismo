@@ -7,6 +7,7 @@
  */
 import { jsPDF } from 'jspdf';
 import { interpretSimulation } from './interpretation';
+import { computeEventWindow } from './waveWindow';
 import { LOGO_MARK_DATA_URL } from './logoDataUrl';
 import { PLEX_REGULAR_B64, PLEX_BOLD_B64 } from './pdfFont';
 import type { ReportInput } from './reportPdf';
@@ -79,6 +80,8 @@ function drawTrace(
   sArrival?: number,
   refMax?: number,
   reflectionsAfter?: number,
+  winStart?: number,
+  winEnd?: number,
 ) {
   // Marco
   doc.setDrawColor(...COLORS.line);
@@ -88,20 +91,23 @@ function drawTrace(
   doc.setDrawColor(230, 228, 225);
   doc.line(x, y + h / 2, x + w, y + h / 2);
 
-  const tMax = time[time.length - 1] || 1;
+  // Ventana temporal visible (B1): recorte al evento si se pasa.
+  const tMin = winStart !== undefined ? Math.max(time[0] ?? 0, winStart) : (time[0] ?? 0);
+  const tMax = winEnd !== undefined ? Math.min(time[time.length - 1] || 1, winEnd) : (time[time.length - 1] || 1);
+  const tSpan = tMax - tMin || 1;
   // refMax = escala común (máximo de las tres componentes). Si no se pasa, se
   // normaliza contra el máximo de esta traza (escala por componente).
   let vMax = refMax && refMax > 0 ? refMax : 0;
   if (vMax === 0) { for (const v of values) vMax = Math.max(vMax, Math.abs(v)); }
   if (vMax === 0) vMax = 1;
 
-  const px = (t: number) => x + (t / tMax) * w;
+  const px = (t: number) => x + ((t - tMin) / tSpan) * w;
   const py = (v: number) => y + h / 2 - (v / vMax) * (h / 2) * 0.9;
 
   // Marcadores de arribo: ambos en GRIS, diferenciados por el patrón de línea
   // (P punteada fina, S guiones largos) y su etiqueta, no por color.
   const marker = (t: number | undefined, dash: number[], letter: string) => {
-    if (t === undefined || t <= 0 || t > tMax) return;
+    if (t === undefined || t < tMin || t > tMax) return;
     doc.setDrawColor(...COLORS.muted);
     doc.setLineWidth(0.3);
     doc.setLineDashPattern(dash, 0);
@@ -117,7 +123,7 @@ function drawTrace(
   marker(sArrival, [1.6, 0.8], 'S');
   // Marca de reflexiones de borde (terracota tenue): lo que hay a la derecha
   // es artificial (rebotes de los límites de la malla), no señal real.
-  if (reflectionsAfter !== undefined && reflectionsAfter > 0 && reflectionsAfter <= tMax) {
+  if (reflectionsAfter !== undefined && reflectionsAfter > tMin && reflectionsAfter <= tMax) {
     doc.setDrawColor(196, 85, 58);
     doc.setLineWidth(0.3);
     doc.setLineDashPattern([0.5, 0.8], 0);
@@ -125,11 +131,14 @@ function drawTrace(
     doc.setLineDashPattern([], 0);
   }
 
-  // Traza
+  // Traza (solo los puntos dentro de la ventana visible).
   doc.setDrawColor(...color);
   doc.setLineWidth(0.3);
   const pts: [number, number][] = [];
-  for (let i = 0; i < time.length; i++) pts.push([px(time[i]), py(values[i])]);
+  for (let i = 0; i < time.length; i++) {
+    if (time[i] < tMin || time[i] > tMax) continue;
+    pts.push([px(time[i]), py(values[i])]);
+  }
   for (let i = 1; i < pts.length; i++) {
     doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
   }
@@ -142,7 +151,7 @@ function drawTrace(
   doc.setFont(FONT, 'normal');
   doc.setTextColor(...COLORS.muted);
   doc.setFontSize(6.5);
-  doc.text('0 s', x, y + h + 3);
+  doc.text(`${tMin.toFixed(0)} s`, x, y + h + 3);
   doc.text(`${tMax.toFixed(0)} s`, x + w, y + h + 3, { align: 'right' });
 }
 
@@ -321,6 +330,9 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const bounceS = results.gridInfo?.firstBounceS;
     const reflAfter = (!real && typeof bounceS === 'number' && bounceS > 0 && results.duration > bounceS + 0.05)
       ? bounceS : undefined;
+    // Encuadre "del evento" (B1): el PDF muestra el tramo del pulso, no toda la
+    // duración, para que el sismograma se lea. Mismo criterio que la pantalla.
+    const win = computeEventWindow(wd, real ? {} : { pArrival: results.pArrival, sArrival: results.sArrival });
     if (reflAfter !== undefined) {
       doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
       const note = `Después de ${reflAfter.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (línea punteada terracota).`;
@@ -342,7 +354,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label,
         real ? undefined : results.pArrival,
         real ? undefined : results.sArrival,
-        refMax, reflAfter);
+        refMax, reflAfter, win.start, win.end);
       y += traceH + gap;
     }
     const scaleNote = scaleCommon
@@ -350,10 +362,13 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       : 'Escala por componente: cada traza normalizada contra su propio máximo (±1).';
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.muted);
+    const winNote = (win.start > (wd.time[0] ?? 0) + 0.1 || win.end < (wd.time[wd.time.length - 1] ?? 0) - 0.1)
+      ? ` Ventana ajustada al evento (${win.start.toFixed(0)}–${win.end.toFixed(0)} s).`
+      : '';
     doc.text(
       real
-        ? `Registro real de la red del SGC/OVSP, señal decimada. ${scaleNote}`
-        : `Líneas grises: arribo P (punteada) y S (guiones). ${scaleNote} Señal no calibrada.`,
+        ? `Registro real de la red del SGC/OVSP, señal decimada. ${scaleNote}${winNote}`
+        : `Líneas grises: arribo P (punteada) y S (guiones). ${scaleNote} Señal no calibrada.${winNote}`,
       MARGIN, y);
     y += 7;
   }
