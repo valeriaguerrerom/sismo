@@ -31,16 +31,27 @@ interface AccordionSectionProps {
 /**
  * Tarjeta con encabezado clicable que muestra u oculta su contenido.
  * El estado de apertura lo controla el panel padre (acordeón exclusivo).
+ *
+ * Dentro de una columna flex (`flex flex-col`): las secciones CERRADAS no se
+ * encogen (`shrink-0`), así su encabezado siempre se ve completo con su espacio
+ * normal; la sección ABIERTA ocupa el espacio restante (`flex-1 min-h-0`) y solo
+ * SU CONTENIDO tiene scroll interno cuando no cabe. El encabezado nunca scrollea
+ * (queda fijo arriba de la sección).
  */
 export function AccordionSection({ title, icon, open, onToggle, dataTour, headerDataTour, children }: AccordionSectionProps) {
   return (
-    <div data-tour={dataTour} className="bg-white rounded-xl border border-stone-200/60 overflow-hidden">
+    <div
+      data-tour={dataTour}
+      className={`bg-white rounded-xl border border-stone-200/60 overflow-hidden flex flex-col ${
+        open ? 'flex-1 min-h-0' : 'shrink-0'
+      }`}
+    >
       <button
         type="button"
         data-tour={headerDataTour}
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors"
+        className="shrink-0 w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors"
       >
         <span className="flex items-center gap-1.5 text-sm font-bold text-[#1A1A2E]">
           {icon}
@@ -52,7 +63,9 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
           style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
         />
       </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
+      {/* Solo el CONTENIDO de la sección abierta scrollea; pb-1 deja un pequeño
+          margen para que el último campo no quede pegado ni cortado. */}
+      {open && <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 pb-4 pt-1">{children}</div>}
     </div>
   );
 }

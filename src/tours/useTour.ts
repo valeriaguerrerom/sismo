@@ -20,11 +20,24 @@ export interface StartTourOptions {
 }
 
 /**
+ * Instancia de Driver.js actualmente activa. Solo puede haber UNA a la vez: si
+ * se pide un tour nuevo (p. ej. el auto-tour y luego el botón de ayuda), se
+ * destruye la anterior antes de crear la nueva. Así nunca quedan dos popovers
+ * superpuestos ("pegados").
+ */
+let activeDriver: ReturnType<typeof driver> | null = null;
+
+/**
  * Lanza un tour con los pasos dados. Aplica el tema de la app, los botones en
  * español y un indicador de progreso "N de M". `onDone` se dispara tanto al
  * terminar como al omitir/cerrar, para persistir que ya se vio.
  */
 export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void {
+  // Nunca dos tours a la vez: destruye el anterior si seguía activo.
+  if (activeDriver) {
+    try { activeDriver.destroy(); } catch { /* ya destruido */ }
+    activeDriver = null;
+  }
   let done = false;
   const markDone = () => { if (!done) { done = true; opts.onDone?.(); } };
 
@@ -49,7 +62,7 @@ export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void 
     allowClose: true,
     steps,
     // Al terminar (botón Terminar en el último paso) o al destruir el tour.
-    onDestroyed: () => { markDone(); },
+    onDestroyed: () => { markDone(); if (activeDriver === d) activeDriver = null; },
     // Botón "Omitir" (enlace discreto) inyectado en el pie del popover.
     onPopoverRender: (popover, { config: cfg, state }) => {
       const total = (cfg.steps?.length ?? 0);
@@ -66,5 +79,6 @@ export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void 
   };
 
   const d = driver(config);
+  activeDriver = d;
   d.drive();
 }
