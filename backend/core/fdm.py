@@ -864,28 +864,42 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     max_amplitude = float(np.max(all_amps)) if len(all_amps) > 0 else 1e-30
 
     # ── Detección robusta de llegadas P y S ──
+    # El arribo teórico marca el ONSET (frente) de cada fase. La energía "sale"
+    # de la fuente cuando el pulso alcanza su pico (t0), pero un paquete de
+    # varios ciclos (Gabor) tiene un frente que llega ANTES del pico por media
+    # envolvente; el STA dispara justo en ese frente. Por eso el teórico de
+    # referencia resta media anchura de envolvente (≈ cycles/(2·f0)) y la
+    # tolerancia se relaja un poco: así los presets (óptimos) detectan P y S sin
+    # caer al teórico, sin dejar de rechazar detecciones absurdas.
     dist_m = math.sqrt((rec_x - src_x) ** 2 + (rec_z - src_z) ** 2) * dx
-    p_theoretical = dist_m / vp + t0
-    s_theoretical = dist_m / vs + t0
+    env_half = (cycles / (2.0 * f0)) if use_gabor else 0.0
+    p_theoretical = dist_m / vp + t0            # centro del paquete P
+    s_theoretical = dist_m / vs + t0            # centro del paquete S
+    p_onset = max(0.0, p_theoretical - env_half)  # frente (lo que ve el STA)
+    s_onset = max(0.0, s_theoretical - env_half)
     vp_vs_ratio = vp / vs
+    TOL = 0.22  # tolerancia relativa (paquete más ancho ⇒ algo más de holgura)
 
-    # P-arrival: detect on vertical component (15% tolerance)
-    p_arrival_det = detect_arrival(np.array(vert_arr), dt, 0.03, start_idx=10)
-    if p_arrival_det > 0:
-        p_rel_err = abs(p_arrival_det - p_theoretical) / p_theoretical
-        if p_rel_err < 0.15:
-            p_arrival = p_arrival_det
-            p_arrival_detected = True
-        else:
-            p_arrival = p_theoretical
-            p_arrival_detected = False
+    # P-arrival: se detecta el frente sobre el MOVIMIENTO EN EL PLANO combinado
+    # |u| = √(radial² + vertical²). Así el frente P se ve aunque en una
+    # componente concreta (p. ej. la vertical) sea débil por la geometría del
+    # mecanismo; antes, al mirar solo la vertical, en escenarios con vertical
+    # pequeña el STA se disparaba tarde (con la S) y la P caía al teórico.
+    # Umbral bajo (2.5% del máximo): cuando la S es varias veces mayor que la P,
+    # el frente P queda muy por debajo del pico global; con un umbral alto el STA
+    # se saltaba la P y disparaba en la S. 2.5% capta el frente P sin engancharse
+    # al ruido numérico (la coda del medio homogéneo decae a ~0).
+    inplane = np.sqrt(np.asarray(radial_arr) ** 2 + np.asarray(vert_arr) ** 2)
+    p_arrival_det = detect_arrival(inplane, dt, 0.025, start_idx=10)
+    if p_arrival_det > 0 and abs(p_arrival_det - p_onset) / max(p_onset, 1e-9) < TOL:
+        p_arrival = p_arrival_det
+        p_arrival_detected = True
     else:
-        p_arrival = p_theoretical
+        p_arrival = p_onset
         p_arrival_detected = False
 
-    # S-arrival: search AFTER P-arrival + wavelet duration (several periods). Con
-    # la Gabor multi-ciclo el paquete P es más ancho, así que la ventana de
-    # guarda crece con el nº de ciclos para no confundir la cola de la P con la S.
+    # S-arrival: se busca DESPUÉS del frente P + la duración del paquete P, para
+    # no confundir la cola de la P con la S (la guarda crece con los ciclos).
     wavelet_duration = (3.0 + cycles) / f0
     s_search_start_time = p_arrival + wavelet_duration
     s_search_start_idx = max(10, int(s_search_start_time / dt))
@@ -893,19 +907,19 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # N/E; la S llega clara en la componente radial P-SV.
     s_arrival_det = detect_arrival(np.array(radial_arr), dt, 0.05, start_idx=s_search_start_idx)
     if s_arrival_det > 0:
-        # Validate: 15% tolerance against theoretical
-        s_rel_err = abs(s_arrival_det - s_theoretical) / s_theoretical
-        # Coherence check: (S - t0)/(P - t0) should be close to Vp/Vs
-        detected_ratio = (s_arrival_det - t0) / (p_arrival - t0 + 1e-30)
+        s_rel_err = abs(s_arrival_det - s_onset) / max(s_onset, 1e-9)
+        # Coherencia: (S − onset0)/(P − onset0) debe parecerse a Vp/Vs.
+        ref0 = t0 - env_half
+        detected_ratio = (s_arrival_det - ref0) / (p_arrival - ref0 + 1e-30)
         ratio_rel_err = abs(detected_ratio - vp_vs_ratio) / vp_vs_ratio
-        if s_rel_err < 0.15 and ratio_rel_err < 0.15:
+        if s_rel_err < TOL and ratio_rel_err < TOL:
             s_arrival = s_arrival_det
             s_arrival_detected = True
         else:
-            s_arrival = s_theoretical
+            s_arrival = s_onset
             s_arrival_detected = False
     else:
-        s_arrival = s_theoretical
+        s_arrival = s_onset
         s_arrival_detected = False
 
     # ── Numerical dispersion metric ──

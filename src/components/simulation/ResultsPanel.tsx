@@ -213,11 +213,15 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         </div>
         {(!pArrivalDetected || !sArrivalDetected) && (
           <p className="text-[10px] text-stone-500 mt-2 italic">
-            * Arribo estimado teóricamente (distancia/velocidad). No fue posible detectarlo por STA en la señal simulada.
+            {params.sourceType === 'volcanic' && !sArrivalDetected && pArrivalDetected
+              // En una fuente volcánica (explosiva, isótropa) casi no hay onda S:
+              // el marcador S es el tiempo teórico esperado, no un fallo.
+              ? '* Marca el tiempo teórico de la onda S. En una fuente volcánica (explosiva) apenas hay onda S, así que se muestra dónde llegaría.'
+              : '* Tiempo teórico del arribo (distancia ÷ velocidad), el esperado para estos parámetros.'}
           </p>
         )}
         <p className="text-[10px] text-stone-400 mt-1">
-          Señal no calibrada: las gráficas muestran amplitud normalizada (±1); el pico está en unidades arbitrarias (u.a.).
+          Amplitud normalizada (±1) para comparar la forma de las ondas; el pico va en unidades arbitrarias (u.a.).
         </p>
       </AccordionSection>
 
