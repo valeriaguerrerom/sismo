@@ -14,8 +14,10 @@ import type { TourStep } from './useTour';
  * v3: añade la pestaña "Movimiento de partícula" (hodograma 3D).
  * v4: empieza por "Variables elásticas" (sección abierta por defecto), luego
  * la fuente; el primer paso ya coincide sin abrir otra sección.
+ * v5: los pasos de parámetros apuntan al encabezado de cada sección (altura
+ * fija), para que el popover no se desborde cuando la sección abierta es alta.
  */
-export const SIMULACION_TOUR_VERSION = 4;
+export const SIMULACION_TOUR_VERSION = 5;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -32,11 +34,15 @@ interface SimTourControls {
 
 /** Construye los pasos del tour del Simulador con los controles dados. */
 export function buildSimulacionSteps({ openParam, openResult, hasResult = false }: SimTourControls): TourStep[] {
+  // Los pasos de parámetros apuntan al ENCABEZADO de cada sección (elemento de
+  // altura fija ~44px), no a la tarjeta completa (que crece al abrirse y puede
+  // superar el alto de la ventana). Así el popover siempre cabe al lado y nunca
+  // se desborda. La sección se abre igual con openParam para mostrar su contenido.
   const steps: TourStep[] = [
     {
       // Se empieza por "Variables elásticas", que es la sección abierta por
       // defecto: así el primer paso ya coincide sin tener que abrir otra.
-      element: '[data-tour="params-elasticas"]',
+      element: '[data-tour="params-elasticas-h"]',
       onHighlightStarted: () => openParam('elasticas'),
       popover: {
         title: 'Propiedades del subsuelo',
@@ -46,21 +52,21 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
       },
     },
     {
-      element: '[data-tour="params-fuente"]',
+      element: '[data-tour="params-fuente-h"]',
       onHighlightStarted: () => openParam('fuente'),
       popover: {
-        title: 'Elige un escenario',
-        description: 'O parte de un escenario listo (andino, Galeras…): carga todos los valores; luego los puedes cambiar.',
+        title: 'Elige la fuente',
+        description: 'Parte de un escenario listo (andino, Galeras…) o ajusta el tipo, la magnitud y la profundidad del sismo.',
         side: 'right',
         align: 'start',
       },
     },
     {
-      element: '[data-tour="params-fuente"]',
-      onHighlightStarted: () => openParam('fuente'),
+      element: '[data-tour="params-config-h"]',
+      onHighlightStarted: () => openParam('config'),
       popover: {
-        title: 'Estación y mecanismo',
-        description: 'Ajusta la distancia y la dirección de la estación. En "Avanzado" defines el mecanismo de la falla (rumbo, buzamiento, deslizamiento).',
+        title: 'Estación y malla',
+        description: 'Aquí defines la distancia y dirección de la estación, la duración y la resolución de la simulación.',
         side: 'right',
         align: 'start',
       },

@@ -125,6 +125,10 @@ class SimulationParams(BaseModel):
     # visualmente más llamativo). Se mantiene la frecuencia dominante f0, así
     # que la dispersión numérica (nodos/λ) y la CFL no cambian.
     sourceCycles: float = Field(default=1.0, ge=1.0, le=6.0, description="Ciclos del pulso de la fuente (1=Ricker, 3-4=tren de ondas llamativo)")
+    # Frecuencia dominante de la fuente (Hz). Si es 0 se usa el valor por defecto
+    # según el tipo (2 volcánica / 3.5 tectónica). Subirla hace oscilaciones más
+    # rápidas y densas (registro más "vivo"); requiere dx pequeño para no dispersar.
+    sourceFreq: float = Field(default=0.0, ge=0.0, le=12.0, description="Frecuencia dominante de la fuente (Hz); 0 = automática por tipo")
 
     @model_validator(mode="after")
     def _check_physics(self):
@@ -650,7 +654,8 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # Ricker de un solo lóbulo: cada arribo P/S se ve como un paquete oscilante,
     # más parecido a un sismo real. t0 (centro del pulso) se agranda con los
     # ciclos para no truncar la envolvente.
-    f0 = 2.0 if source_type == "volcanic" else 3.5
+    _f0_override = float(getattr(params, "sourceFreq", 0.0) or 0.0)
+    f0 = _f0_override if _f0_override > 0 else (2.0 if source_type == "volcanic" else 3.5)
     cycles = max(1.0, float(getattr(params, "sourceCycles", 1.0)))
     use_gabor = cycles > 1.0
     t0 = (1.5 / f0) if not use_gabor else (cycles / f0 + 0.5 / f0)

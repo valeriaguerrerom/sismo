@@ -28,7 +28,7 @@ export function tectonicParams(): SimulationParams {
   // Mecanismo por defecto para Nariño: falla inversa de rumbo andino
   // (strike 30° ≈ NNE-SSO, dip 45°, rake 90° inversa pura), coherente con el
   // régimen compresivo de la subducción de Nazca. Estación al NE (acimut 45°).
-  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 9, dx: 22, dt: 0.004, strike: 30, dip: 45, rake: 90, stationAzimuth: 45, sourceCycles: 4 };
+  return { vp, vs, density, lambda, mu, sourceType: 'tectonic', magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811, duration: 8, dx: 18, dt: 0.0038, strike: 30, dip: 45, rake: 90, stationAzimuth: 45, sourceCycles: 2.5, sourceFreq: 4.5 };
 }
 
 /**
@@ -46,7 +46,7 @@ export function volcanicParams(): SimulationParams {
   const vp = 3000, vs = 1700, density = 2500;
   const mu = density * vs * vs;
   const lambda = density * vp * vp - 2 * mu;
-  return { vp, vs, density, lambda, mu, sourceType: 'volcanic', magnitude: 4.5, depth: 6, epicenterLat: 1.2216, epicenterLon: -77.3742, duration: 8, dx: 30, dt: 0.006, sourceCycles: 3.5 };
+  return { vp, vs, density, lambda, mu, sourceType: 'volcanic', magnitude: 4.5, depth: 6, epicenterLat: 1.2216, epicenterLon: -77.3742, duration: 7, dx: 18, dt: 0.004, sourceCycles: 2.5, sourceFreq: 4.0 };
 }
 
 /** Preset óptimo según el tipo de fuente elegido. */

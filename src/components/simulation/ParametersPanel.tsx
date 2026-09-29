@@ -150,8 +150,8 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           scrollea suavemente; con el acordeón exclusivo el contenido suele caber
           y no aparece scroll. El botón Generar va justo debajo de las secciones. */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
-      <AccordionSection title="Variables elásticas" dataTour="params-elasticas" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
-        <div className="space-y-4">
+      <AccordionSection title="Variables elásticas" dataTour="params-elasticas" headerDataTour="params-elasticas-h" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
+        <div className="space-y-3">
           <SliderRow
             label="Velocidad de onda P (Vp)"
             tooltip="Velocidad de propagación de ondas de compresión (primarias) a través del medio. Depende del módulo volumétrico y la densidad del material."
@@ -203,8 +203,8 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Fuente sísmica" dataTour="params-fuente" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
-        <div className="space-y-4">
+      <AccordionSection title="Fuente sísmica" dataTour="params-fuente" headerDataTour="params-fuente-h" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
+        <div className="space-y-3">
           {/* Selector de escenario: carga un preset completo respaldado por
               fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
           <div>
@@ -221,11 +221,6 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
-            {scenarioId !== '' && (
-              <p className="text-[10px] text-stone-500 mt-1.5 leading-snug">
-                {SCENARIOS.find(s => s.id === scenarioId)?.expectation}
-              </p>
-            )}
           </div>
 
           <div>
@@ -380,8 +375,8 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Configuración" dataTour="params-config" open={openSection === 'config'} onToggle={() => toggle('config')}>
-        <div className="space-y-4">
+      <AccordionSection title="Configuración" dataTour="params-config" headerDataTour="params-config-h" open={openSection === 'config'} onToggle={() => toggle('config')}>
+        <div className="space-y-3">
           <SliderRow
             label="Tiempo de simulación"
             tooltip="Duración total del registro sísmico simulado en segundos."

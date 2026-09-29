@@ -59,6 +59,12 @@ export interface SimulationParams {
    */
   sourceCycles?: number;
   /**
+   * Frecuencia dominante de la fuente (Hz). Si se omite/0, el backend usa el
+   * valor por tipo (2 volcánica / 3.5 tectónica). Subirla hace oscilaciones más
+   * rápidas y densas; requiere dx pequeño para no dispersar.
+   */
+  sourceFreq?: number;
+  /**
    * Distancia epicentral fuente→estación en superficie (km). Controla la
    * separación temporal entre la P y la S (a mayor distancia, más se separan).
    * Acotada por el dominio y los rebotes de borde.

@@ -43,9 +43,9 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 3200, vs: 1850, density: 2500, sourceType: 'tectonic',
       magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 9, dx: 20, dt: 0.0045,
+      duration: 7, dx: 16, dt: 0.0035,
       strike: 20, dip: 35, rake: 90, stationAzimuth: 30, epicentralDistanceKm: 6,
-      sourceCycles: 4,
+      sourceCycles: 2.5, sourceFreq: 4.5,
     }),
   },
   {
@@ -56,9 +56,9 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
       magnitude: 5.0, depth: 4, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 8, dx: 22, dt: 0.004,
+      duration: 7, dx: 20, dt: 0.004,
       strike: 30, dip: 50, rake: 60, stationAzimuth: 60, epicentralDistanceKm: 6,
-      sourceCycles: 4,
+      sourceCycles: 2.5, sourceFreq: 4.5,
     }),
   },
   {
@@ -69,9 +69,9 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 3600, vs: 2050, density: 2700, sourceType: 'tectonic',
       magnitude: 5.5, depth: 8, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 8, dx: 24, dt: 0.004,
+      duration: 8, dx: 18, dt: 0.0035,
       strike: 30, dip: 45, rake: 80, stationAzimuth: 45, epicentralDistanceKm: 7,
-      sourceCycles: 4,
+      sourceCycles: 2.5, sourceFreq: 4.5,
     }),
   },
   {
@@ -82,9 +82,9 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 3000, vs: 1700, density: 2500, sourceType: 'volcanic',
       magnitude: 3.5, depth: 3, epicenterLat: 1.2216, epicenterLon: -77.3742,
-      duration: 8, dx: 26, dt: 0.005,
+      duration: 7, dx: 16, dt: 0.0035,
       strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 5,
-      sourceCycles: 3.5,
+      sourceCycles: 2.5, sourceFreq: 4.0,
     }),
   },
 ];
