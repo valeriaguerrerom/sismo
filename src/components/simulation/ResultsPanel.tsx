@@ -157,9 +157,14 @@ async function exportPDF(
 }
 
 export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid }: Props) {
-  // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
-  const [openSection, setOpenSection] = useState<ResultSection>('metricas');
-  const toggle = (s: ResultSection) => setOpenSection(prev => (prev === s ? ('' as ResultSection) : s));
+  // Acordeón INDEPENDIENTE: cada sección abre/cierra por su cuenta. Al inicio
+  // solo "Métricas" está abierta.
+  const [openSections, setOpenSections] = useState<Set<ResultSection>>(new Set(['metricas']));
+  const toggle = (s: ResultSection) => setOpenSections(prev => {
+    const next = new Set(prev);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    return next;
+  });
 
   // Diálogo de opciones del PDF: qué secciones incluir (todas por defecto).
   const [pdfDialog, setPdfDialog] = useState(false);
@@ -174,7 +179,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
-    if (forceSection) setOpenSection(forceSection);
+    if (forceSection) setOpenSections(prev => new Set(prev).add(forceSection));
   }, [forceSection]);
 
   if (!result) {
@@ -211,7 +216,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
           escritorio solo se hace notorio al interactuar. */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       {/* Metrics */}
-      <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSection === 'metricas'} onToggle={() => toggle('metricas')}>
+      <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSections.has('metricas')} onToggle={() => toggle('metricas')}>
         <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'Amplitud máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1).' },
@@ -246,7 +251,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       </AccordionSection>
 
       {/* Grid info */}
-      <AccordionSection title="Malla FDM" icon={<Grid3X3 size={12} />} dataTour="sim-malla" open={openSection === 'malla'} onToggle={() => toggle('malla')}>
+      <AccordionSection title="Malla FDM" icon={<Grid3X3 size={12} />} dataTour="sim-malla" open={openSections.has('malla')} onToggle={() => toggle('malla')}>
         <div className="space-y-2">
           {[
             { label: 'Tamaño malla', value: `${gridInfo.nx} × ${gridInfo.nz}`, tip: 'Número de nodos de la malla (horizontal × profundidad) donde se resuelve la ecuación de onda.' },
@@ -267,13 +272,14 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       </AccordionSection>
 
       {/* Interpretation */}
-      <AccordionSection title="Interpretación" icon={<FileText size={12} />} dataTour="sim-interpretacion" open={openSection === 'interpretacion'} onToggle={() => toggle('interpretacion')}>
+      <AccordionSection title="Interpretación" icon={<FileText size={12} />} dataTour="sim-interpretacion" open={openSections.has('interpretacion')} onToggle={() => toggle('interpretacion')}>
         <p className="text-xs text-stone-600 leading-relaxed">{interpretResult(result)}</p>
       </AccordionSection>
+      </div>
 
-      {/* Botones de exportación: debajo de los acordeones (no dentro de uno),
-          dentro del área scrolleable para que acompañen a los resultados. */}
-      <div data-tour="sim-export" className="flex gap-2 pt-1">
+      {/* Botones de exportación: FIJOS debajo de los acordeones (fuera del área
+          scrolleable), siempre visibles. */}
+      <div data-tour="sim-export" className="flex gap-2 pt-1 shrink-0">
         <button onClick={() => exportCSV(result)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <Download size={14} /> CSV
         </button>
@@ -283,7 +289,6 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         <button onClick={() => setPdfDialog(true)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm">
           <FileDown size={14} /> PDF
         </button>
-      </div>
       </div>
 
       {/* Diálogo de opciones del PDF */}

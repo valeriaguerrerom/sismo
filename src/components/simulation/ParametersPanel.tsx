@@ -87,9 +87,14 @@ function SliderRow({
 }
 
 export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS }: Props) {
-  // Acordeón exclusivo: solo una sección abierta a la vez en esta columna.
-  const [openSection, setOpenSection] = useState<ParamSection>('elasticas');
-  const toggle = (s: ParamSection) => setOpenSection(prev => (prev === s ? ('' as ParamSection) : s));
+  // Acordeón INDEPENDIENTE: cada sección abre/cierra por su cuenta (abrir una
+  // no cierra las demás). Al inicio solo "Variables elásticas" está abierta.
+  const [openSections, setOpenSections] = useState<Set<ParamSection>>(new Set(['elasticas']));
+  const toggle = (s: ParamSection) => setOpenSections(prev => {
+    const next = new Set(prev);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    return next;
+  });
   // Mensajes de autoajuste por campo (por qué se corrigió un valor).
   const [limitMsgs, setLimitMsgs] = useState<Record<string, string>>({});
   // Escenario seleccionado en el selector (para mostrar su descripción). Al
@@ -100,7 +105,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
   // El tour guiado puede forzar la apertura de una sección durante un paso.
   useEffect(() => {
-    if (forceSection) setOpenSection(forceSection);
+    if (forceSection) setOpenSections(prev => new Set(prev).add(forceSection));
   }, [forceSection]);
 
   const update = (key: keyof SimulationParams, val: number | string) => {
@@ -150,7 +155,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           scrollea suavemente; con el acordeón exclusivo el contenido suele caber
           y no aparece scroll. El botón Generar va justo debajo de las secciones. */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
-      <AccordionSection title="Variables elásticas" dataTour="params-elasticas" headerDataTour="params-elasticas-h" open={openSection === 'elasticas'} onToggle={() => toggle('elasticas')}>
+      <AccordionSection title="Variables elásticas" dataTour="params-elasticas" headerDataTour="params-elasticas-h" open={openSections.has('elasticas')} onToggle={() => toggle('elasticas')}>
         <div className="space-y-3">
           <SliderRow
             label="Velocidad de onda P (Vp)"
@@ -203,7 +208,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Fuente sísmica" dataTour="params-fuente" headerDataTour="params-fuente-h" open={openSection === 'fuente'} onToggle={() => toggle('fuente')}>
+      <AccordionSection title="Fuente sísmica" dataTour="params-fuente" headerDataTour="params-fuente-h" open={openSections.has('fuente')} onToggle={() => toggle('fuente')}>
         <div className="space-y-3">
           {/* Selector de escenario: carga un preset completo respaldado por
               fuentes. Al editar cualquier parámetro pasa a "Personalizado". */}
@@ -297,7 +302,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       </AccordionSection>
 
-      <AccordionSection title="Estación y malla" dataTour="params-config" headerDataTour="params-config-h" open={openSection === 'config'} onToggle={() => toggle('config')}>
+      <AccordionSection title="Estación y malla" dataTour="params-config" headerDataTour="params-config-h" open={openSections.has('config')} onToggle={() => toggle('config')}>
         <div className="space-y-3">
           {/* Distancia epicentral: separa en el tiempo la P y la S. El máximo
               depende de dx (lo que cabe en la malla sin acercarse a los bordes). */}
@@ -438,6 +443,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           </div>
         </div>
       </AccordionSection>
+      </div>
 
       {/* Avisos de autoajuste: por qué se corrigió algún valor al validar. */}
       {Object.keys(limitMsgs).length > 0 && (
@@ -469,7 +475,6 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           </>
         )}
       </button>
-      </div>
     </div>
   );
 }
