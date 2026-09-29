@@ -187,10 +187,17 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   ctx.beginPath(); ctx.moveTo(rx, rz - 9 * scale); ctx.lineTo(rx - 8 * scale, rz + 5 * scale); ctx.lineTo(rx + 8 * scale, rz + 5 * scale); ctx.closePath();
   ctx.fillStyle = '#2D6A4F'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * scale; ctx.fill(); ctx.stroke();
 
-  // Etiquetas de fuente y estación (texto ≥13px).
-  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
-  ctx.fillText('Fuente', sx, sz + 22 * scale);
-  ctx.fillText('Estación', rx, rz - 14 * scale);
+  // Etiquetas de fuente y estación (texto ≥13px). Se dibujan con un halo blanco
+  // para leerse sobre el mapa de calor. "Estación" va DEBAJO del triángulo (la
+  // estación está en la superficie, arriba) para no chocar con "Superficie libre".
+  ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
+  const labelHalo = (text: string, lx: number, ly: number) => {
+    ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.strokeText(text, lx, ly);
+    ctx.fillStyle = '#1A1A2E'; ctx.fillText(text, lx, ly);
+  };
+  labelHalo('Fuente', sx, sz + 22 * scale);
+  labelHalo('Estación', rx, rz + 20 * scale);
   ctx.textAlign = 'start';
 
   // Ejes en km (texto ≥13px).
@@ -214,8 +221,10 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   ctx.fillText('Profundidad (km)', 0, 0);
   ctx.restore();
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#1A1A2E'; ctx.font = `bold ${fs(13)}px sans-serif`;
-  ctx.fillText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
+  ctx.font = `bold ${fs(13)}px sans-serif`;
+  ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
+  ctx.fillStyle = '#1A1A2E'; ctx.fillText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
 }
 
 /**

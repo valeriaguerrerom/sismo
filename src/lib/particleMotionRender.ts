@@ -49,23 +49,24 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#FAFAF8');
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(2.4, 1.8, 2.4);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  // Cámara un poco más alta y cercana para llenar el encuadre y dar relieve.
+  camera.position.set(2.15, 1.75, 2.15);
   camera.lookAt(0, 0, 0);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.95));
 
   const AXIS = 1.15;
   const addAxis = (dir: THREE.Vector3) => {
     const geo = new THREE.BufferGeometry().setFromPoints([
       dir.clone().multiplyScalar(-AXIS), dir.clone().multiplyScalar(AXIS),
     ]);
-    scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xd6d3d1 })));
+    scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xcfcbc6 })));
   };
   addAxis(new THREE.Vector3(1, 0, 0));
   addAxis(new THREE.Vector3(0, 1, 0));
   addAxis(new THREE.Vector3(0, 0, 1));
-  const grid = new THREE.GridHelper(2 * AXIS, 8, 0xe7e5e4, 0xefedeb);
+  const grid = new THREE.GridHelper(2 * AXIS, 8, 0xe0ddd9, 0xeeece9);
   scene.add(grid);
 
   // Escala común (máximo absoluto de las tres componentes).
@@ -85,16 +86,67 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   const lineGeo = new LineGeometry();
   lineGeo.setPositions(positions);
   lineGeo.setColors(colors);
-  const lineMat = new LineMaterial({ vertexColors: true, linewidth: 3.5, worldUnits: false });
+  // Línea más gruesa para el PDF (se ve como una cinta clara, no un hilo).
+  const lineMat = new LineMaterial({ vertexColors: true, linewidth: 5, worldUnits: false });
   lineMat.resolution.set(sizePx, sizePx);
   const line = new Line2(lineGeo, lineMat);
   scene.add(line);
+
+  // Origen (posición de reposo) marcado con un punto oscuro.
+  const origin = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x1a1a2e }),
+  );
+  scene.add(origin);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(sizePx, sizePx);
   renderer.setPixelRatio(1);
   renderer.render(scene, camera);
-  const dataUrl = renderer.domElement.toDataURL('image/png');
+
+  // ── Composición 2D: sobre el render 3D dibujamos las etiquetas de los ejes
+  //    (N/E/Z), proyectando la punta de cada eje a coordenadas de pantalla, y
+  //    un marco sutil. Así el PDF no depende de CSS2DRenderer (que no existe
+  //    offscreen) y se ve rotulado y ordenado. ──
+  const out = document.createElement('canvas');
+  out.width = sizePx; out.height = sizePx;
+  const ctx = out.getContext('2d')!;
+  ctx.drawImage(renderer.domElement, 0, 0);
+
+  const project = (v: THREE.Vector3): { x: number; y: number } => {
+    const p = v.clone().project(camera);
+    return { x: (p.x * 0.5 + 0.5) * sizePx, y: (-p.y * 0.5 + 0.5) * sizePx };
+  };
+  const labelAt = (v: THREE.Vector3, text: string) => {
+    const { x, y } = project(v);
+    ctx.font = `600 ${Math.round(sizePx * 0.03)}px Inter, system-ui, sans-serif`;
+    const w = ctx.measureText(text).width;
+    const padX = sizePx * 0.012, padY = sizePx * 0.009;
+    const bx = x - w / 2 - padX, by = y - Math.round(sizePx * 0.03) / 2 - padY;
+    const bw = w + padX * 2, bh = Math.round(sizePx * 0.03) + padY * 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.strokeStyle = '#e7e5e4';
+    ctx.lineWidth = 1;
+    // rectángulo redondeado
+    const r = sizePx * 0.008;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+    ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+    ctx.arcTo(bx, by + bh, bx, by, r);
+    ctx.arcTo(bx, by, bx + bw, by, r);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#57534e';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+  };
+  const AX = AXIS + 0.14;
+  labelAt(new THREE.Vector3(AX, 0, 0), 'Este (E)');
+  labelAt(new THREE.Vector3(0, AX, 0), 'Vertical (Z)');
+  labelAt(new THREE.Vector3(0, 0, AX), 'Norte (N)');
+
+  const dataUrl = out.toDataURL('image/png');
 
   // Limpieza del contexto WebGL efímero.
   lineGeo.dispose();

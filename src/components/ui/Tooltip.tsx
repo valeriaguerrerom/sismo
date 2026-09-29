@@ -108,7 +108,7 @@ export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
             position: 'fixed', left: pos.left, top: pos.top,
             width: Math.min(TIP_WIDTH, window.innerWidth - 16),
           }}
-          className="z-[100] normal-case font-normal tracking-normal bg-[#1A1A2E] text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-relaxed pointer-events-none"
+          className="z-[300] normal-case font-normal tracking-normal bg-[#1A1A2E] text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-relaxed pointer-events-none"
         >
           {content}
           <span
