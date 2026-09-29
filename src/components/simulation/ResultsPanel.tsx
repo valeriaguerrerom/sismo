@@ -91,11 +91,15 @@ function buildCrossSectionFrames(
   const frames = picks.map((p, i) => {
     const idx = nearest(p.t);
     const imgMm = layoutMm[i] ?? TOP_MM;
+    const twoLayer = result.params.subsurfaceModel === 'twoLayer';
     const dataUrl = renderCrossSectionPng({
       snapshot: snaps[idx], gridInfo: heatmapGrid, fullGrid: result.gridInfo,
       vp: result.params.vp, vs: result.params.vs, layer: 'mag', scaleMode: 'global', globalPeak,
       sourceDelay: result.gridInfo.sourceDelay ?? heatmapGrid.sourceDelay ?? 0,
       fontScale: fontScaleForPdf(imgMm, 7),
+      interfaceZ: twoLayer ? (heatmapGrid.interfaceZ ?? 0) : 0,
+      layerTopName: twoLayer ? 'Capa superficial (depósitos)' : undefined,
+      layerBottomName: twoLayer ? 'Semiespacio (roca)' : undefined,
     });
     return { time: snaps[idx].time, label: p.label, dataUrl };
   });

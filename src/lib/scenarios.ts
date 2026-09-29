@@ -87,6 +87,23 @@ export const SCENARIOS: Scenario[] = [
       sourceCycles: 1,
     }),
   },
+  {
+    id: 'pasto-deposito-volcanico',
+    name: 'Pasto sobre depósitos volcánicos (dos capas)',
+    expectation:
+      'Capa blanda de depósitos volcánicos sobre roca: aparece la reflexión en la interfaz y la sacudida en superficie dura más y se amplifica (reverberación en la capa blanda). Compárala con un modelo homogéneo.',
+    params: build({
+      vp: 4000, vs: 2300, density: 2600, sourceType: 'tectonic',
+      magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
+      duration: 7.5, dx: 20, dt: 0.0035,
+      strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 4,
+      sourceCycles: 1,
+      // Capa superficial blanda (valores REPRESENTATIVOS con fines educativos,
+      // no un estudio de sitio calibrado; ver docs/modelo-capas.md).
+      subsurfaceModel: 'twoLayer',
+      layerThickness: 0.5, layerVp: 1800, layerVs: 600, layerDensity: 1900,
+    }),
+  },
 ];
 
 /** Escenario por defecto al abrir el Simulador (el más didáctico). */

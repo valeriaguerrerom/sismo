@@ -129,6 +129,16 @@ class SimulationParams(BaseModel):
     # según el tipo (2 volcánica / 3.5 tectónica). Subirla hace oscilaciones más
     # rápidas y densas (registro más "vivo"); requiere dx pequeño para no dispersar.
     sourceFreq: float = Field(default=0.0, ge=0.0, le=12.0, description="Frecuencia dominante de la fuente (Hz); 0 = automática por tipo")
+    # ── Modelo de subsuelo (versión mínima de capas) ──
+    # 'homogeneous' (por defecto): un solo medio con vp/vs/density.
+    # 'twoLayer': una CAPA SUPERFICIAL blanda de espesor `layerThickness` km con
+    # sus propias velocidades/densidad (layerVp/layerVs/layerDensity), sobre un
+    # SEMIESPACIO de roca que usa vp/vs/density. La interfaz es horizontal.
+    subsurfaceModel: str = Field(default="homogeneous", description="Modelo de subsuelo: homogeneous | twoLayer")
+    layerThickness: float = Field(default=0.5, ge=0.05, le=5.0, description="Espesor de la capa superficial (km), solo twoLayer")
+    layerVp: float = Field(default=1800, ge=1500, le=8000, description="Vp de la capa superficial (m/s), solo twoLayer")
+    layerVs: float = Field(default=600, ge=300, le=4500, description="Vs de la capa superficial (m/s), solo twoLayer")
+    layerDensity: float = Field(default=1900, ge=1200, le=3500, description="Densidad de la capa superficial (kg/m³), solo twoLayer")
 
     @model_validator(mode="after")
     def _check_physics(self):
@@ -137,7 +147,8 @@ class SimulationParams(BaseModel):
         En un sólido elástico real λ = ρ(Vp² − 2·Vs²) debe ser positivo. Si el
         usuario (o un cliente que no validó) envía Vs demasiado cerca de Vp, se
         rechaza con un mensaje claro en español. Los rangos por campo ya los
-        cubren los límites ge/le.
+        cubren los límites ge/le. En el modelo de dos capas se valida también la
+        capa superficial.
         """
         vs_max = self.vp / math.sqrt(2.0) * VS_VP_SAFETY
         if self.vs > vs_max:
@@ -146,6 +157,13 @@ class SimulationParams(BaseModel):
                 f"debe ser menor que {vs_max:.0f} m/s para que el parámetro de Lamé λ "
                 f"no sea negativo (roca físicamente imposible)."
             )
+        if self.subsurfaceModel == "twoLayer":
+            layer_vs_max = self.layerVp / math.sqrt(2.0) * VS_VP_SAFETY
+            if self.layerVs > layer_vs_max:
+                raise ValueError(
+                    f"Vs de la capa superficial = {self.layerVs:.0f} m/s es demasiado alta "
+                    f"para Vp = {self.layerVp:.0f} m/s: debe ser menor que {layer_vs_max:.0f} m/s."
+                )
         return self
 
     class Config:
@@ -184,6 +202,11 @@ class GridInfo(BaseModel):
     firstBounceP: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda P (s)")
     firstBounceS: float = Field(default=0.0, description="Tiempo del primer rebote de borde para la onda S (s)")
     sourceDelay: float = Field(default=0.0, description="Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes teóricos parten en t0.")
+    # ── Modelo de dos capas (opcional) ──
+    subsurfaceModel: str = Field(default="homogeneous", description="Modelo de subsuelo usado: homogeneous | twoLayer")
+    interfaceZ: int = Field(default=0, description="Índice Z de la interfaz entre capas (solo twoLayer); 0 si no aplica")
+    interfaceDepthKm: float = Field(default=0.0, description="Profundidad de la interfaz entre capas (km); 0 si no aplica")
+    interfaceReflP: float = Field(default=0.0, description="Tiempo teórico de la reflexión P en la interfaz al receptor (s); 0 si no aplica")
 
 
 class WaveData(BaseModel):
@@ -363,14 +386,17 @@ def _fdm_step(ux_p, ux_c, ux_n, uz_p, uz_c, uz_n, abs_coeff,
     Actualiza el campo interior con el stencil de 3 puntos + derivada cruzada de
     4 puntos, aplica superficie libre en z=0 y multiplica el coeficiente sponge
     de Cerjan a los niveles ``next`` y ``curr`` (curr pasa a ser prev tras el
-    swap, así el término -u_prev del leapfrog también queda amortiguado). Es
-    idéntico bit a bit al kernel vectorizado con NumPy salvo el orden de las
-    operaciones en punto flotante (diferencia relativa < 1e-6).
+    swap, así el término -u_prev del leapfrog también queda amortiguado).
 
     Los bucles externos usan ``prange``: cada índice ``i`` escribe una columna
     distinta y solo lee vecinos (i±1), así que no hay condición de carrera. En
     mallas grandes esto acelera ~7× frente al kernel serial en máquinas multinúcleo
     (y degrada a secuencial si Numba corre con un solo hilo).
+
+    Los coeficientes elásticos ``c1, c2, c3`` son ARRAYS (nx, nz): así el mismo
+    kernel sirve para el medio homogéneo (arrays constantes) y para el modelo de
+    dos capas (cada nodo con las propiedades de su capa). En medio homogéneo el
+    resultado es idéntico al de los coeficientes escalares.
 
     Args:
         ux_p, ux_c, ux_n: Campos Ux en t-dt, t, t+dt (se escriben in place).
@@ -378,7 +404,7 @@ def _fdm_step(ux_p, ux_c, ux_n, uz_p, uz_c, uz_n, abs_coeff,
         abs_coeff: Matriz sponge (nx, nz) en [0, 1].
         nx, nz: Dimensiones de la malla.
         dx2, dt2: dx² y dt².
-        c1, c2, c3: Constantes elásticas (λ+2μ)/ρ, μ/ρ, (λ+μ)/ρ.
+        c1, c2, c3: Arrays (nx, nz) de (λ+2μ)/ρ, μ/ρ, (λ+μ)/ρ por nodo.
     """
     for i in prange(2, nx - 2):
         for j in range(1, nz - 2):
@@ -388,10 +414,11 @@ def _fdm_step(ux_p, ux_c, ux_n, uz_p, uz_c, uz_n, abs_coeff,
             d2uz_dz2 = (uz_c[i, j+1] - 2.0*uz_c[i, j] + uz_c[i, j-1]) / dx2
             d2uz_dxdz = (uz_c[i+1, j+1] - uz_c[i+1, j-1] - uz_c[i-1, j+1] + uz_c[i-1, j-1]) / (4.0*dx2)
             d2ux_dxdz = (ux_c[i+1, j+1] - ux_c[i+1, j-1] - ux_c[i-1, j+1] + ux_c[i-1, j-1]) / (4.0*dx2)
+            a1 = c1[i, j]; a2 = c2[i, j]; a3 = c3[i, j]
             ux_n[i, j] = (2.0*ux_c[i, j] - ux_p[i, j]
-                          + dt2 * (c1*d2ux_dx2 + c2*d2ux_dz2 + c3*d2uz_dxdz))
+                          + dt2 * (a1*d2ux_dx2 + a2*d2ux_dz2 + a3*d2uz_dxdz))
             uz_n[i, j] = (2.0*uz_c[i, j] - uz_p[i, j]
-                          + dt2 * (c2*d2uz_dx2 + c1*d2uz_dz2 + c3*d2ux_dxdz))
+                          + dt2 * (a2*d2uz_dx2 + a1*d2uz_dz2 + a3*d2ux_dxdz))
     # Superficie libre (stress-free) en z=0 por espejo antisimétrico.
     for i in prange(1, nx - 1):
         uz_n[i, 0] = -uz_n[i, 1]
@@ -421,13 +448,13 @@ def _sh_step(v_p, v_c, v_n, abs_coeff, nx, nz, dx2, dt2, cs2):
         abs_coeff: Matriz sponge (nx, nz).
         nx, nz: Dimensiones de malla.
         dx2, dt2: dx² y dt².
-        cs2: Vs² = μ/ρ.
+        cs2: Array (nx, nz) de Vs² = μ/ρ por nodo (dos capas o constante).
     """
     for i in prange(2, nx - 2):
         for j in range(1, nz - 2):
             lap = (v_c[i+1, j] - 2.0*v_c[i, j] + v_c[i-1, j]
                    + v_c[i, j+1] - 2.0*v_c[i, j] + v_c[i, j-1]) / dx2
-            v_n[i, j] = 2.0*v_c[i, j] - v_p[i, j] + dt2 * cs2 * lap
+            v_n[i, j] = 2.0*v_c[i, j] - v_p[i, j] + dt2 * cs2[i, j] * lap
     # Superficie libre SH (Neumann): ∂v/∂z = 0 → espejo simétrico.
     for i in prange(1, nx - 1):
         v_n[i, 0] = v_n[i, 1]
@@ -518,9 +545,10 @@ def _warmup_numba():
     n = 8
     z = np.zeros((n, n), dtype=np.float32)
     ones = np.ones((n, n), dtype=np.float32)
+    # c1, c2, c3 y cs2 son arrays por nodo (mismo layout que en producción).
     _fdm_step(z.copy(), z.copy(), z.copy(), z.copy(), z.copy(), z.copy(),
-              ones, n, n, 1.0, 1.0, 1.0, 1.0, 1.0)
-    _sh_step(z.copy(), z.copy(), z.copy(), ones, n, n, 1.0, 1.0, 1.0)
+              ones, n, n, 1.0, 1.0, ones.copy(), ones.copy(), ones.copy())
+    _sh_step(z.copy(), z.copy(), z.copy(), ones, n, n, 1.0, 1.0, ones.copy())
     _NUMBA_WARMED = True
 
 
@@ -573,12 +601,30 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     source_type, duration = params.sourceType, params.duration
     dx, dt = params.dx, params.dt
 
-    # Calcular o usar parámetros de Lamé
+    # ── Modelo de subsuelo ──
+    # 'homogeneous': un medio (vp/vs/density) en todo el dominio.
+    # 'twoLayer': capa superficial blanda (layerVp/layerVs/layerDensity) sobre un
+    # semiespacio de roca (vp/vs/density), con interfaz horizontal.
+    two_layer = params.subsurfaceModel == "twoLayer"
+
+    # Calcular o usar parámetros de Lamé del SEMIESPACIO (roca).
     lam, mu = compute_lame(vp, vs, density)
     if params.lambda_ != 0:
         lam = params.lambda_
     if params.mu != 0:
         mu = params.mu
+
+    # Velocidades relevantes para malla/estabilidad. Con dos capas, la CFL la
+    # fija la Vp MÁXIMA (medio más rápido ⇒ dt más pequeño) y la dispersión la
+    # fija la Vs MÍNIMA (medio más lento ⇒ λ más corta ⇒ dx más fino).
+    if two_layer:
+        vp_max = max(vp, params.layerVp)
+        vs_min = min(vs, params.layerVs)
+        lam_layer, mu_layer = compute_lame(params.layerVp, params.layerVs, params.layerDensity)
+    else:
+        vp_max = vp
+        vs_min = vs
+        lam_layer, mu_layer = lam, mu
 
     # ── Grid sizing: nz adapts to requested depth ──
     # Zona absorbente ancha (Cerjan) + dominio más grande para que la fuente y
@@ -622,8 +668,9 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         # Recompute nx with new dx
         nx = min(NX_MAX, max(80, int(34000 / dx)))
 
-    # Verificación de estabilidad CFL (re-check after possible dx change)
-    cfl_limit = dx / (vp * math.sqrt(2))
+    # Verificación de estabilidad CFL (re-check after possible dx change). Con
+    # dos capas, la Vp MÁXIMA es la que restringe dt.
+    cfl_limit = dx / (vp_max * math.sqrt(2))
     dt_adjusted = False
     if dt > cfl_limit:
         dt = cfl_limit * 0.9
@@ -661,6 +708,15 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # ciclos para no truncar la envolvente.
     _f0_override = float(getattr(params, "sourceFreq", 0.0) or 0.0)
     f0 = _f0_override if _f0_override > 0 else (2.0 if source_type == "volcanic" else 3.5)
+    # Guarda de dispersión para el modelo de dos capas: la capa lenta (Vs mínima)
+    # exige ≥10 nodos por longitud de onda mínima (λ_min = Vs_min/f_max, con
+    # f_max ≈ 2.5·f0). Si el f0 elegido daría menos, se BAJA f0 automáticamente
+    # (mantiene la geometría/dominio; solo el pulso es algo más largo). No se
+    # aplica al medio homogéneo para no alterar los presets existentes.
+    if two_layer and _f0_override <= 0:
+        f0_disp_max = vs_min / (2.5 * 10.0 * dx)
+        if f0 > f0_disp_max:
+            f0 = max(0.5, f0_disp_max)
     cycles = max(1.0, float(getattr(params, "sourceCycles", 1.0)))
     use_gabor = cycles > 1.0
     t0 = (1.5 / f0) if not use_gabor else (cycles / f0 + 0.5 / f0)
@@ -705,13 +761,51 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # absorción canónica fuerte (Cerjan 0.02) para atenuar los rebotes de borde.
     abs_coeff = _build_sponge_2d(nx, nz, abs_thick=abs_thick)
 
-    # Constantes del esquema FDM
+    # ── Campos de propiedades por nodo (c1, c2, c3, cs2) ──
+    # c1 = (λ+2μ)/ρ, c2 = μ/ρ, c3 = (λ+μ)/ρ, cs2 = μ/ρ. En medio homogéneo son
+    # arrays constantes (resultado idéntico al de coeficientes escalares). Con
+    # dos capas, cada nodo toma las propiedades de su capa; en la fila de la
+    # interfaz se PROMEDIAN los módulos (media aritmética de λ, μ y ρ de ambas
+    # capas) para suavizar el contacto y evitar artefactos de escalón.
     dx2 = dx * dx
     dt2 = dt * dt
-    c1 = (lam + 2 * mu) / density
-    c2 = mu / density
-    c3 = (lam + mu) / density
-    cs2 = mu / density  # Vs² para el kernel SH
+
+    def _coeffs(lam_v, mu_v, rho_v):
+        return ((lam_v + 2 * mu_v) / rho_v, mu_v / rho_v, (lam_v + mu_v) / rho_v, mu_v / rho_v)
+
+    interface_z = 0
+    interface_depth_km = 0.0
+    interface_refl_p = 0.0
+    if two_layer:
+        # Profundidad de la interfaz en nodos (acotada dentro del dominio útil).
+        interface_z = int(round(params.layerThickness * 1000 / dx))
+        interface_z = max(2, min(interface_z, nz - abs_thick - 5))
+        interface_depth_km = interface_z * dx / 1000.0
+
+    c1 = np.empty((nx, nz), dtype=np.float32)
+    c2 = np.empty((nx, nz), dtype=np.float32)
+    c3 = np.empty((nx, nz), dtype=np.float32)
+    cs2 = np.empty((nx, nz), dtype=np.float32)
+
+    if two_layer:
+        # Capa superficial (z < interface_z) y semiespacio (z > interface_z).
+        c1_top, c2_top, c3_top, cs2_top = _coeffs(lam_layer, mu_layer, params.layerDensity)
+        c1_bot, c2_bot, c3_bot, cs2_bot = _coeffs(lam, mu, density)
+        # Módulos promediados en la fila de la interfaz (contacto suave).
+        lam_i = 0.5 * (lam_layer + lam)
+        mu_i = 0.5 * (mu_layer + mu)
+        rho_i = 0.5 * (params.layerDensity + density)
+        c1_i, c2_i, c3_i, cs2_i = _coeffs(lam_i, mu_i, rho_i)
+        for j in range(nz):
+            if j < interface_z:
+                c1[:, j] = c1_top; c2[:, j] = c2_top; c3[:, j] = c3_top; cs2[:, j] = cs2_top
+            elif j == interface_z:
+                c1[:, j] = c1_i; c2[:, j] = c2_i; c3[:, j] = c3_i; cs2[:, j] = cs2_i
+            else:
+                c1[:, j] = c1_bot; c2[:, j] = c2_bot; c3[:, j] = c3_bot; cs2[:, j] = cs2_bot
+    else:
+        c1_h, c2_h, c3_h, cs2_h = _coeffs(lam, mu, density)
+        c1.fill(c1_h); c2.fill(c2_h); c3.fill(c3_h); cs2.fill(cs2_h)
 
     _warmup_numba()
 
@@ -776,6 +870,8 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             "nx": sub_nx, "nz": sub_nz,
             "sourceX": _rescale(src_x, nx, sub_nx), "sourceZ": _rescale(src_z, nz, sub_nz),
             "receiverX": _rescale(rec_x, nx, sub_nx), "receiverZ": _rescale(rec_z, nz, sub_nz),
+            # Interfaz de capas reescalada al grid submuestreado (0 si homogéneo).
+            "interfaceZ": _rescale(interface_z, nz, sub_nz) if interface_z > 0 else 0,
             "frames": snap_frames,
         })
 
@@ -934,9 +1030,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         s_arrival_detected = False
 
     # ── Numerical dispersion metric ──
-    # Minimum wavelength: Vs / f_max, where f_max ≈ 2.5 * f0 for Ricker wavelet
+    # Minimum wavelength: Vs_min / f_max, where f_max ≈ 2.5 * f0 for Ricker. Con
+    # dos capas manda la capa lenta (Vs mínima ⇒ λ más corta ⇒ menos nodos/λ).
     f_max = 2.5 * f0
-    lambda_min = vs / f_max
+    lambda_min = vs_min / f_max
     points_per_wavelength = lambda_min / dx
 
     # ── Tiempo del primer rebote de borde al receptor (geometría real) ──
@@ -956,8 +1053,24 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     )
     _bounce_dists = [math.hypot((ix - rec_x) * dx, (iz - rec_z) * dx) for ix, iz in _edges]
     _min_bounce = min(_bounce_dists) if _bounce_dists else 0.0
+    # El rebote de borde usa la velocidad del semiespacio (medio de roca), que
+    # es donde viaja el frente directo lejos de la capa superficial.
     first_bounce_p = _min_bounce / vp + t0
     first_bounce_s = _min_bounce / vs + t0
+
+    # ── Reflexión P en la interfaz de capas (solo twoLayer) ──
+    # Método de la imagen especular EN EL SEMIESPACIO (roca): la reflexión de la
+    # onda P que baja/sube y rebota en la interfaz horizontal (z = interface_z)
+    # equivale a una fuente imagen reflejada al otro lado de la interfaz. Con la
+    # fuente a zs y el receptor a zr, la imagen del receptor es zr_img =
+    # 2·interface_z − zr; la distancia fuente→imagen dividida por Vp del medio de
+    # roca da el tiempo de reflexión (+ t0 por el retardo del pulso). Esto es lo
+    # que verificamos a mano. (En la capa blanda el modo dominante observable es
+    # la reverberación vertical 2·h/Vp_capa, que también reportamos en docs.)
+    if two_layer and interface_z > 0:
+        zr_img = 2 * interface_z - rec_z
+        refl_dist = math.hypot((rec_x - src_x) * dx, (zr_img - src_z) * dx)
+        interface_refl_p = refl_dist / vp + t0
 
     # Submuestreo para limitar tamaño de respuesta
     max_points = 3000
@@ -990,6 +1103,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             sourceX=src_x, sourceZ=src_z, pointsPerWavelength=points_per_wavelength,
             firstBounceP=first_bounce_p, firstBounceS=first_bounce_s,
             sourceDelay=t0,
+            subsurfaceModel=params.subsurfaceModel,
+            interfaceZ=interface_z,
+            interfaceDepthKm=round(interface_depth_km, 4),
+            interfaceReflP=round(interface_refl_p, 4),
         ),
         pArrival=p_arrival,
         sArrival=s_arrival,
@@ -1035,6 +1152,8 @@ class SnapshotGrid(BaseModel):
     sourceZ: int
     receiverX: int
     receiverZ: int
+    # Índice Z de la interfaz de capas en el grid submuestreado (0 si homogéneo).
+    interfaceZ: int = 0
 
 
 class SimulationFullResult(BaseModel):
@@ -1117,6 +1236,7 @@ def run_fdm_full(params: SimulationParams, on_progress=None) -> SimulationFullRe
         sourceZ=sink.get("sourceZ", base.gridInfo.sourceZ),
         receiverX=sink.get("receiverX", base.gridInfo.receiverX),
         receiverZ=sink.get("receiverZ", base.gridInfo.receiverZ),
+        interfaceZ=sink.get("interfaceZ", 0),
     )
 
     return SimulationFullResult(

@@ -70,6 +70,20 @@ export interface SimulationParams {
    * Acotada por el dominio y los rebotes de borde.
    */
   epicentralDistanceKm?: number;
+  /**
+   * Modelo de subsuelo. 'homogeneous' (por defecto): un solo medio con
+   * vp/vs/density. 'twoLayer': una capa superficial blanda (layer*) sobre un
+   * semiespacio de roca (vp/vs/density), con interfaz horizontal.
+   */
+  subsurfaceModel?: 'homogeneous' | 'twoLayer';
+  /** Espesor de la capa superficial (km), solo twoLayer. */
+  layerThickness?: number;
+  /** Vp de la capa superficial (m/s), solo twoLayer. */
+  layerVp?: number;
+  /** Vs de la capa superficial (m/s), solo twoLayer. */
+  layerVs?: number;
+  /** Densidad de la capa superficial (kg/m³), solo twoLayer. */
+  layerDensity?: number;
 }
 
 /** Series temporales triaxiales registradas en el receptor virtual. */
@@ -107,6 +121,14 @@ export interface GridInfo {
   firstBounceS?: number;
   /** Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes teóricos parten en t0. */
   sourceDelay?: number;
+  /** Modelo de subsuelo usado: 'homogeneous' | 'twoLayer'. */
+  subsurfaceModel?: 'homogeneous' | 'twoLayer';
+  /** Índice Z de la interfaz entre capas (solo twoLayer); 0 si homogéneo. */
+  interfaceZ?: number;
+  /** Profundidad de la interfaz entre capas (km); 0 si homogéneo. */
+  interfaceDepthKm?: number;
+  /** Tiempo teórico de la reflexión P en la interfaz al receptor (s); 0 si homogéneo. */
+  interfaceReflP?: number;
 }
 
 /** Resultado completo de una simulación FDM con sismogramas y métricas. */

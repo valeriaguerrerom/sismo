@@ -153,6 +153,8 @@ interface SnapshotFrameDTO { time: number; ux: string; uz: string; scale: number
 interface SnapshotGridDTO {
   nx: number; nz: number;
   sourceX: number; sourceZ: number; receiverX: number; receiverZ: number;
+  /** Índice Z de la interfaz de capas en el grid submuestreado (0 si homogéneo). */
+  interfaceZ?: number;
 }
 
 /** Respuesta del endpoint /api/simulate/full. */
@@ -277,6 +279,8 @@ export async function fetchSimulationFull(
     sourceZ: sg.sourceZ,
     receiverX: sg.receiverX,
     receiverZ: sg.receiverZ,
+    // Interfaz de capas en el grid del heatmap (para dibujar la línea + rótulos).
+    interfaceZ: sg.interfaceZ ?? 0,
   };
 
   return { result, heatmapGrid };

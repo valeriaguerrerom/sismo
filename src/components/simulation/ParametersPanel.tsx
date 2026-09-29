@@ -204,6 +204,82 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               </div>
             </div>
           </div>
+
+          {/* ── Modelo de subsuelo: homogéneo o dos capas ── */}
+          <div className="pt-2 border-t border-stone-200/60" data-tour="params-subsuelo">
+            <Tooltip content="Homogéneo: un solo material en todo el subsuelo. Dos capas: una capa superficial blanda sobre un semiespacio de roca, con una interfaz entre ambos. Con dos capas aparecen la reflexión en la interfaz y la amplificación en la capa blanda." showIcon>
+              <span className="text-xs font-medium text-stone-600">Subsuelo</span>
+            </Tooltip>
+            <div className="grid grid-cols-2 gap-2 mt-1.5">
+              {([['homogeneous', 'Homogéneo'], ['twoLayer', 'Dos capas']] as const).map(([m, txt]) => (
+                <button
+                  key={m}
+                  onClick={() => { if ((params.subsurfaceModel ?? 'homogeneous') !== m) { setScenarioId(''); onChange({ ...params, subsurfaceModel: m }); } }}
+                  className={`py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                    (params.subsurfaceModel ?? 'homogeneous') === m
+                      ? 'bg-[#2D6A4F] text-white border-[#2D6A4F]'
+                      : 'bg-stone-50 text-stone-500 border-stone-200'
+                  }`}
+                >
+                  {txt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Controles de la capa superficial (solo en modo dos capas). Las
+              variables elásticas de arriba (Vp/Vs/ρ) describen el SEMIESPACIO. */}
+          {params.subsurfaceModel === 'twoLayer' && (
+            <div className="space-y-3 mt-1 rounded-lg bg-stone-50/70 border border-stone-200/60 p-2.5">
+              <p className="text-[10px] text-stone-500 leading-snug">
+                <Tooltip content="La capa más superficial del subsuelo. Aquí suele ser blanda (velocidades bajas): atrapa y amplifica el movimiento, y hace que la sacudida dure más." showIcon><span className="font-semibold text-stone-600">Capa superficial</span></Tooltip>. Las variables elásticas de arriba describen el{' '}
+                <Tooltip content="El medio de roca que hay bajo la capa superficial, que se extiende hacia abajo sin otra interfaz (por eso 'semi-espacio').">semiespacio</Tooltip> de roca.
+              </p>
+              <SliderRow
+                label="Espesor de la capa"
+                tooltip="Grosor de la capa superficial en kilómetros. Marca la profundidad de la interfaz con la roca."
+                value={params.layerThickness ?? 0.5}
+                min={0.05}
+                max={5}
+                step={0.05}
+                unit="km"
+                onChange={v => onChange({ ...params, layerThickness: v })}
+              />
+              <SliderRow
+                label="Vp de la capa"
+                tooltip="Velocidad de onda P de la capa superficial (blanda ⇒ baja)."
+                value={params.layerVp ?? 1800}
+                min={1500}
+                max={5000}
+                step={50}
+                unit="m/s"
+                onChange={v => onChange({ ...params, layerVp: v })}
+              />
+              <SliderRow
+                label="Vs de la capa"
+                tooltip="Velocidad de onda S de la capa superficial. En depósitos blandos es baja (contraste fuerte con la roca)."
+                value={params.layerVs ?? 600}
+                min={300}
+                max={2500}
+                step={25}
+                unit="m/s"
+                onChange={v => onChange({ ...params, layerVs: v })}
+              />
+              <SliderRow
+                label="Densidad de la capa"
+                tooltip="Densidad de la capa superficial. En depósitos volcánicos blandos es menor que la de la roca."
+                value={params.layerDensity ?? 1900}
+                min={1200}
+                max={3000}
+                step={50}
+                unit="kg/m³"
+                onChange={v => onChange({ ...params, layerDensity: v })}
+              />
+              <p className="text-[10px] text-[#C4553A] leading-snug">
+                Con dos capas, en el mapa de calor verás la interfaz y una reflexión que vuelve a la estación; en superficie la sacudida dura más y se amplifica.
+              </p>
+            </div>
+          )}
         </div>
       </AccordionSection>
 

@@ -74,6 +74,16 @@ export interface CrossSectionDrawOpts {
    * sale de la fuente cuando el pulso alcanza su máximo. Radio = V·(t − t0).
    */
   sourceDelay?: number;
+  /**
+   * Índice Z de la interfaz de capas en el grid del corte (0 = homogéneo). Si
+   * es > 0 se dibuja una línea horizontal en esa profundidad con los nombres
+   * de las capas (modelo de dos capas).
+   */
+  interfaceZ?: number;
+  /** Nombre de la capa superficial (p. ej. "Depósitos"). */
+  layerTopName?: string;
+  /** Nombre del semiespacio (p. ej. "Roca"). */
+  layerBottomName?: string;
 }
 
 /**
@@ -147,6 +157,32 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   // Marco del dominio.
   ctx.strokeStyle = '#D6D3D1'; ctx.lineWidth = 1;
   ctx.strokeRect(x0, y0, plotW, plotH);
+
+  // ── Interfaz entre capas (modelo de dos capas) ──
+  // Línea horizontal punteada a la profundidad de la interfaz, con los nombres
+  // de las capas a cada lado. Se dibuja antes de fuente/estación y frentes.
+  const ifaceZ = opts.interfaceZ ?? 0;
+  if (ifaceZ > 0 && ifaceZ < nz - 1) {
+    const iy = y0 + (ifaceZ / (nz - 1)) * plotH;
+    ctx.save();
+    ctx.strokeStyle = '#1A1A2E'; ctx.lineWidth = 1.6 * scale;
+    ctx.setLineDash([7 * scale, 4 * scale]);
+    ctx.beginPath(); ctx.moveTo(x0, iy); ctx.lineTo(x0 + plotW, iy); ctx.stroke();
+    ctx.setLineDash([]);
+    // Nombres de las capas (con halo blanco para leerse sobre el mapa).
+    const topName = opts.layerTopName ?? 'Capa superficial';
+    const botName = opts.layerBottomName ?? 'Semiespacio (roca)';
+    ctx.font = `bold ${fs(12)}px sans-serif`; ctx.textAlign = 'left';
+    const drawHalo = (text: string, lx: number, ly: number) => {
+      ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+      ctx.strokeText(text, lx, ly);
+      ctx.fillStyle = '#1A1A2E'; ctx.fillText(text, lx, ly);
+    };
+    // "Capa superficial" arriba de la línea (si hay hueco) y "roca" debajo.
+    drawHalo(topName, x0 + plotW - 4 * scale - ctx.measureText(topName).width, iy - 4 * scale);
+    drawHalo(botName, x0 + plotW - 4 * scale - ctx.measureText(botName).width, iy + fs(12) + 2 * scale);
+    ctx.restore();
+  }
 
   const srcFx = gridInfo.sourceX / (nx - 1), srcFz = gridInfo.sourceZ / (nz - 1);
   const recFx = gridInfo.receiverX / (nx - 1), recFz = gridInfo.receiverZ / (nz - 1);
@@ -260,6 +296,12 @@ export interface CrossSectionRenderOpts {
    * constructor del PDF la calcula a partir del ancho impreso del fotograma.
    */
   fontScale?: number;
+  /** Índice Z de la interfaz de capas (0 = homogéneo). */
+  interfaceZ?: number;
+  /** Nombre de la capa superficial. */
+  layerTopName?: string;
+  /** Nombre del semiespacio. */
+  layerBottomName?: string;
 }
 
 /**
@@ -281,6 +323,9 @@ export function renderCrossSectionPng(opts: CrossSectionRenderOpts): string {
     layer: opts.layer ?? 'mag', scaleMode: opts.scaleMode ?? 'global',
     globalPeak, absThick, sourceDelay: opts.sourceDelay ?? 0,
     fontScale: opts.fontScale ?? 1,
+    interfaceZ: opts.interfaceZ ?? 0,
+    layerTopName: opts.layerTopName,
+    layerBottomName: opts.layerBottomName,
   });
   return canvas.toDataURL('image/png');
 }

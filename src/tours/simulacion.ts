@@ -21,7 +21,7 @@ import type { TourStep } from './useTour';
  * v7: cada paso de resultados resalta su pestaña (Sismogramas/Mapa/Partícula) y
  * cambia a ella; el tour de resultados se dispara tras la primera simulación.
  */
-export const SIMULACION_TOUR_VERSION = 7;
+export const SIMULACION_TOUR_VERSION = 8;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -59,6 +59,16 @@ export function buildSimulacionSteps({ openParam, openResult, showView, hasResul
       popover: {
         title: 'Propiedades del subsuelo',
         description: 'Empieza aquí: cambia las velocidades de onda y la densidad de la roca. Cada término tiene un ícono de información.',
+        side: 'right',
+        align: 'start',
+      },
+    },
+    {
+      element: '[data-tour="params-subsuelo"]',
+      onHighlightStarted: () => openParam('elasticas'),
+      popover: {
+        title: 'Subsuelo: homogéneo o dos capas',
+        description: 'Elige "Dos capas" para poner una capa superficial blanda sobre la roca. Aparecen la reflexión en la interfaz y una sacudida más larga y amplificada en superficie. El escenario "Pasto sobre depósitos volcánicos" ya viene así.',
         side: 'right',
         align: 'start',
       },

@@ -73,10 +73,14 @@ export function TriaxialPlane({
     if (!canvas || !snap) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const twoLayer = fullGrid.subsurfaceModel === 'twoLayer';
     drawCrossSection({
       ctx, width: canvas.width, height: canvas.height,
       snapshot: snap, gridInfo, fullGrid, vp, vs, layer, scaleMode, globalPeak, absThick,
       sourceDelay: fullGrid.sourceDelay ?? gridInfo.sourceDelay ?? 0,
+      interfaceZ: twoLayer ? (gridInfo.interfaceZ ?? 0) : 0,
+      layerTopName: twoLayer ? 'Capa superficial (depósitos)' : undefined,
+      layerBottomName: twoLayer ? 'Semiespacio (roca)' : undefined,
     });
   }, [snapshots, gridInfo, fullGrid, vp, vs, layer, scaleMode, globalPeak, absThick]);
 
