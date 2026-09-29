@@ -216,19 +216,19 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       {/* Metrics */}
       <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSections.has('metricas')} onToggle={() => toggle('metricas')}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Amplitud máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1).' },
+            { label: 'Amplitud máx.', value: formatAmplitude(maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las gráficas muestran la amplitud normalizada a este pico (±1) para comparar la forma de las ondas.' },
             { label: 'Duración', value: `${duration.toFixed(0)} s`, tip: 'Tiempo total del registro sísmico simulado.' },
             { label: 'Frecuencia dominante', value: `${dominantFrequency.toFixed(1)} Hz`, tip: 'Frecuencia principal de la fuente (ondícula de Ricker). Más alta = ondas más cortas y detalladas.' },
             { label: 'Vp/Vs', value: `${(params.vp / params.vs).toFixed(2)}`, tip: 'Relación entre la velocidad de la onda P y la S. Valores típicos rondan 1.7 en la corteza.' },
             { label: 'Arribo de la onda P', value: `${pArrival.toFixed(2)} s${pArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda P (la más rápida). Un * indica que se estimó teóricamente, no se detectó en la señal.' },
-            { label: 'Arribo de la onda S', value: `${sArrival.toFixed(2)} s${sArrivalDetected ? '' : ' *'}`, tip: 'Instante en que llega la onda S (más lenta que la P). La diferencia S−P crece con la distancia al foco.' },
+            { label: 'Arribo de la onda S', value: `${sArrival.toFixed(2)} s${sArrivalDetected ? '' : ' *'}`, tip: params.sourceType === 'volcanic' ? 'Instante en que llega la onda S. Un * indica valor teórico: en una fuente volcánica (explosiva) apenas hay onda S, así que se muestra dónde llegaría.' : 'Instante en que llega la onda S (más lenta que la P). Un * indica que se estimó teóricamente. La diferencia S−P crece con la distancia al foco.' },
             { label: 'Impedancia', value: `${(impedance / 1e6).toFixed(2)} MRayl`, tip: 'Producto de la densidad por Vp (ρ·Vp). Los contrastes de impedancia generan reflexiones de las ondas.' },
             { label: 'Fotogramas', value: `${result.snapshots.length}`, tip: 'Número de fotogramas del campo de ondas guardados para animar el corte del subsuelo.' },
           ].map(m => (
-            <div key={m.label} className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-              <div className="text-[10px] text-stone-500 mb-1">
+            <div key={m.label} className="bg-stone-50 rounded-lg p-2 border border-stone-100">
+              <div className="text-[10px] text-stone-500 mb-0.5 leading-tight">
                 <Tooltip content={m.tip} showIcon>{m.label}</Tooltip>
               </div>
               <div className="text-sm font-bold text-[#1A1A2E]">{m.value}</div>
@@ -236,17 +236,8 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
           ))}
         </div>
         {(!pArrivalDetected || !sArrivalDetected) && (
-          <p className="text-[10px] text-stone-500 mt-2 italic">
-            {params.sourceType === 'volcanic' && !sArrivalDetected && pArrivalDetected
-              // En una fuente volcánica (explosiva, isótropa) casi no hay onda S:
-              // el marcador S es el tiempo teórico esperado, no un fallo.
-              ? '* Marca el tiempo teórico de la onda S. En una fuente volcánica (explosiva) apenas hay onda S, así que se muestra dónde llegaría.'
-              : '* Tiempo teórico del arribo (distancia ÷ velocidad), el esperado para estos parámetros.'}
-          </p>
+          <p className="text-[10px] text-stone-500 mt-1.5 italic">* Tiempo teórico (distancia ÷ velocidad); ver detalle en el ícono de la métrica.</p>
         )}
-        <p className="text-[10px] text-stone-400 mt-1">
-          Amplitud normalizada (±1) para comparar la forma de las ondas; el pico va en unidades arbitrarias (u.a.).
-        </p>
       </AccordionSection>
 
       {/* Grid info */}
