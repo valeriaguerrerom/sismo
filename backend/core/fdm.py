@@ -64,6 +64,7 @@ PARAM_RANGES = {
     "dip": (0.0, 90.0),
     "rake": (-180.0, 180.0),
     "stationAzimuth": (0.0, 360.0),
+    "epicentralDistanceKm": (1.0, 12.0),
     # Nariño y su entorno inmediato (incluye la red CM Colombia-Ecuador, cuyos
     # eventos reales pueden cargarse en el simulador).
     "epicenterLat": (-1.0, 3.0),
@@ -115,6 +116,10 @@ class SimulationParams(BaseModel):
     # Acimut de la estación virtual respecto a la fuente: 0-360° desde el norte
     # en sentido horario. Orienta el corte y la rotación radial/transversal→N/E.
     stationAzimuth: float = Field(default=45, ge=0, le=360, description="Dirección de la estación (°), 0-360 desde el norte")
+    # Distancia epicentral: separación horizontal fuente→estación en superficie.
+    # Controla la separación temporal entre P, S y el tren superficial (a mayor
+    # distancia, más se separan). Rango acotado por el dominio y los rebotes.
+    epicentralDistanceKm: float = Field(default=2.5, ge=1.0, le=12.0, description="Distancia epicentral fuente→estación (km)")
 
     @model_validator(mode="after")
     def _check_physics(self):
@@ -590,10 +595,13 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     snapshot_interval = max(1, total_steps // 80)
 
     # Geometría simétrica respecto al centro del dominio: la fuente en X a −d/2
-    # y el receptor a +d/2 (d = distancia epicentral objetivo ≈ 2.5 km). Así
-    # ninguno queda cerca de un borde y el rebote de borde es lo más tardío
-    # posible para un dominio dado. La profundidad de la fuente sigue la focal.
-    epic_nodes = min(int(2500 / dx), (nx - 2 * abs_thick - 60) // 2)
+    # y el receptor a +d/2 (d = distancia epicentral pedida). Así ninguno queda
+    # cerca de un borde y el rebote de borde es lo más tardío posible para un
+    # dominio dado. La distancia se recorta al espacio disponible entre las zonas
+    # absorbentes (con margen) para no acercar fuente/receptor a los bordes. La
+    # profundidad de la fuente sigue la focal.
+    epic_target_nodes = int(params.epicentralDistanceKm * 1000 / dx)
+    epic_nodes = min(epic_target_nodes, (nx - 2 * abs_thick - 60) // 2)
     src_x = nx // 2 - epic_nodes // 2
     rec_x = nx // 2 + epic_nodes // 2
     src_z = min(int(nz * 0.70), max(5, int((depth * 1000) / dx)))
