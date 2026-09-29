@@ -47,7 +47,7 @@ describe('HU017 — Exportar PNG', () => {
 
     expect(source).toBe('webgl');
     expect(html2canvas).not.toHaveBeenCalled();
-    expect(clickedDownload).toBe('sismonarino_2d.png');
+    expect(clickedDownload).toBe('sismonarino_sismograma.png');
     expect(clickedHref).toMatch(/^data:image\/png/);
   });
 
@@ -61,7 +61,7 @@ describe('HU017 — Exportar PNG', () => {
 
     expect(source).toBe('html2canvas');
     expect(html2canvas).toHaveBeenCalledTimes(1);
-    expect(clickedDownload).toBe('sismonarino_2d.png');
+    expect(clickedDownload).toBe('sismonarino_sismograma.png');
     expect(clickedHref).toMatch(/^data:image\/png/);
   });
 });

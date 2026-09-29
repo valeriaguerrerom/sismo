@@ -76,7 +76,7 @@ describe('simulationsByMonth (RF-23)', () => {
 
 describe('buildReportPdf (RF-19)', () => {
   it('genera un PDF con al menos una página y contenido', async () => {
-    const { buildReportPdf } = await import('./reportPdf');
+    const { buildReportPdf } = await import('./reportPdfBuilder');
     const wave: WaveData = { time: [], north: [], east: [], vertical: [] };
     for (let i = 0; i < 400; i++) {
       wave.time.push(i * 0.1);

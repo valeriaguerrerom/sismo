@@ -34,7 +34,8 @@ vi.mock('jspdf', () => ({
     save: saveSpy,
     setFont: vi.fn(), setFontSize: vi.fn(), setTextColor: vi.fn(), setFillColor: vi.fn(),
     setDrawColor: vi.fn(), setLineWidth: vi.fn(), setLineDashPattern: vi.fn(),
-    text: vi.fn(), rect: vi.fn(), line: vi.fn(), addPage: vi.fn(),
+    text: vi.fn(), rect: vi.fn(), roundedRect: vi.fn(), line: vi.fn(), addPage: vi.fn(),
+    addImage: vi.fn(), addFileToVFS: vi.fn(), addFont: vi.fn(),
     getNumberOfPages: vi.fn(() => 1), setPage: vi.fn(),
     splitTextToSize: vi.fn(() => ['x']), getTextWidth: vi.fn(() => 10),
     internal: { pageSize: { getWidth: () => 210, getHeight: () => 297 } },
@@ -101,12 +102,13 @@ describe('HU014 — Historial de simulaciones', () => {
     expect(data.some((r: { id: string }) => r.id === 'rep-new')).toBe(false);
   });
 
-  it('CPR-014-4 test_exportar_pdf_reporte: genera el PDF de un reporte con waveData sin error', () => {
+  it('CPR-014-4 test_exportar_pdf_reporte: genera el PDF de un reporte con waveData sin error', async () => {
     const waveData: WaveData = {
       time: [0, 0.02, 0.04, 0.06], north: [0, 1e-4, -1e-4, 0],
       east: [0, 2e-4, -1e-4, 0], vertical: [0, 1e-4, 1e-4, 0],
     };
-    expect(() => downloadReportPdf({
+    // downloadReportPdf es async (carga jsPDF por import dinámico); esperamos.
+    await downloadReportPdf({
       title: 'Reporte con sismogramas',
       author: TEST_USER.full_name,
       notes: 'prueba',
@@ -116,7 +118,7 @@ describe('HU014 — Historial de simulaciones', () => {
         maxAmplitude: 1e-3, duration: 60, dominantFrequency: 2,
         pArrival: 3, sArrival: 5, waveData,
       },
-    })).not.toThrow();
+    });
     expect(saveSpy).toHaveBeenCalledTimes(1);
   });
 });
