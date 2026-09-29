@@ -32,14 +32,14 @@ function build(p: Omit<SimulationParams, 'lambda' | 'mu'>): SimulationParams {
 
 /**
  * Lista de escenarios. El primero es el que se carga al abrir el Simulador
- * (el más didáctico: P, S y tren de ondas superficiales bien separados).
+ * (el más didáctico: P y S bien separadas).
  */
 export const SCENARIOS: Scenario[] = [
   {
     id: 'superficial-didactico',
-    name: 'Superficial didáctico (P, S y superficiales)',
+    name: 'Cortical didáctico (P y S separadas)',
     expectation:
-      'Fuente somera a mayor distancia: observa la P, luego la S y, justo después, el tren de ondas superficiales en la vertical y la radial.',
+      'Fuente somera a mayor distancia: observa la llegada de la P y, después, la de la S, bien separadas en las tres componentes.',
     params: build({
       vp: 3200, vs: 1850, density: 2500, sourceType: 'tectonic',
       magnitude: 4.0, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
@@ -51,7 +51,7 @@ export const SCENARIOS: Scenario[] = [
     id: 'cortical-superficial-narino',
     name: 'Cortical superficial andino (Nariño)',
     expectation:
-      'Sismo cortical típico del suroccidente andino: P, S y tren superficial, con energía en las tres componentes (la transversal muestra el SH del mecanismo).',
+      'Sismo cortical del suroccidente andino: P y S separadas, con energía en las tres componentes (la transversal muestra el SH del mecanismo).',
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
       magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811,
@@ -63,7 +63,7 @@ export const SCENARIOS: Scenario[] = [
     id: 'cortical-profundo',
     name: 'Cortical más profundo (comparación)',
     expectation:
-      'La misma corteza pero con la fuente más profunda: la P y la S se separan más y el tren superficial casi desaparece. Compáralo con el superficial.',
+      'La misma corteza con la fuente más profunda: la P y la S llegan más tarde y más separadas entre sí. Compáralo con el superficial.',
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
       magnitude: 5.5, depth: 9, epicenterLat: 1.2136, epicenterLon: -77.2811,

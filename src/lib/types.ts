@@ -54,8 +54,8 @@ export interface SimulationParams {
   stationAzimuth?: number;
   /**
    * Distancia epicentral fuente→estación en superficie (km). Controla la
-   * separación temporal entre P, S y el tren de ondas superficiales (a mayor
-   * distancia, más se separan). Acotada por el dominio y los rebotes de borde.
+   * separación temporal entre la P y la S (a mayor distancia, más se separan).
+   * Acotada por el dominio y los rebotes de borde.
    */
   epicentralDistanceKm?: number;
 }

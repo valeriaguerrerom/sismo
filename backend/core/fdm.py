@@ -117,8 +117,8 @@ class SimulationParams(BaseModel):
     # en sentido horario. Orienta el corte y la rotación radial/transversal→N/E.
     stationAzimuth: float = Field(default=45, ge=0, le=360, description="Dirección de la estación (°), 0-360 desde el norte")
     # Distancia epicentral: separación horizontal fuente→estación en superficie.
-    # Controla la separación temporal entre P, S y el tren superficial (a mayor
-    # distancia, más se separan). Rango acotado por el dominio y los rebotes.
+    # Controla la separación temporal entre la P y la S (a mayor distancia, más
+    # se separan). Rango acotado por el dominio y los rebotes.
     epicentralDistanceKm: float = Field(default=2.5, ge=1.0, le=12.0, description="Distancia epicentral fuente→estación (km)")
 
     @model_validator(mode="after")
@@ -869,6 +869,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     result_params.dx = dx
     result_params.lambda_ = lam
     result_params.mu = mu
+    # Distancia epicentral EFECTIVA: si la pedida no cabía en la malla, la
+    # geometría la recortó; reportamos la realmente usada para que el panel y el
+    # PDF muestren el valor correcto.
+    result_params.epicentralDistanceKm = round(abs(rec_x - src_x) * dx / 1000, 3)
 
     return SimulationResult(
         waveData=WaveData(time=time_arr, north=north_arr, east=east_arr, vertical=vert_arr),

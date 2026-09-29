@@ -37,6 +37,28 @@ export function maxVsForVp(vp: number): number {
   return (vp / Math.SQRT2) * VS_VP_SAFETY;
 }
 
+// ── Distancia epicentral máxima alcanzable según dx ──
+// Debe reflejar exactamente la geometría del motor (backend/core/fdm.py):
+// nx = min(NX_MAX, max(80, 34000/dx)); la distancia se recorta a
+// (nx − 2·abs_thick − 60)/2 nodos, y cada nodo mide dx metros.
+const NX_MAX = 820;
+const ABS_THICK = 44;
+const EPIC_ABS_MAX_KM = 12; // tope duro del rango
+
+/**
+ * Distancia epicentral máxima (km) que el motor puede representar para un dx
+ * dado, sin acercar fuente/receptor a las zonas absorbentes. Nunca supera el
+ * tope duro del rango (12 km).
+ */
+export function maxEpicentralDistanceKm(dx: number): number {
+  const nx = Math.min(NX_MAX, Math.max(80, Math.floor(34000 / dx)));
+  const maxNodes = Math.floor((nx - 2 * ABS_THICK - 60) / 2);
+  const km = (maxNodes * dx) / 1000;
+  // Redondeo a 0.5 km hacia abajo para un tope "limpio" en el control.
+  const rounded = Math.floor(km * 2) / 2;
+  return Math.max(1, Math.min(EPIC_ABS_MAX_KM, rounded));
+}
+
 /** Resultado de un ajuste: valor corregido y, si hubo cambio, el porqué. */
 export interface Adjustment {
   value: number;
@@ -96,6 +118,13 @@ export function validateParams(p: SimulationParams): { params: SimulationParams;
     const dxLo = PARAM_RANGES.dx[0];
     out.dx = Math.max(dxLo, Math.floor(dxMax));
     messages.dx = `dx ajustado a ${out.dx} m para tener al menos 10 nodos por longitud de onda (evita dispersión numérica).`;
+  }
+
+  // 4. Distancia epicentral ≤ la máxima alcanzable para el dx resultante.
+  const distMax = maxEpicentralDistanceKm(out.dx);
+  if ((out.epicentralDistanceKm ?? 2.5) > distMax) {
+    out.epicentralDistanceKm = distMax;
+    messages.epicentralDistanceKm = `Distancia ajustada a ${distMax} km: es la máxima que cabe en la malla (dx = ${out.dx} m) sin acercar la fuente o la estación a los bordes.`;
   }
 
   return { params: out, messages };

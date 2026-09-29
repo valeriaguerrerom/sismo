@@ -3,7 +3,7 @@ import { SimulationParams } from '../../lib/types';
 import { computeLame, presetForSource } from '../../lib/simulation';
 import { SCENARIOS } from '../../lib/scenarios';
 import { formatBigInt } from '../../lib/format';
-import { validateParams } from '../../lib/paramLimits';
+import { validateParams, maxEpicentralDistanceKm } from '../../lib/paramLimits';
 import { Tooltip } from '../ui/Tooltip';
 import { Play, Loader } from '../../lib/icons';
 import { AccordionSection } from './AccordionSection';
@@ -258,7 +258,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           />
           <SliderRow
             label="Profundidad Focal"
-            tooltip="Distancia vertical desde la superficie hasta el hipocentro (foco) del sismo. Fuentes someras (pocos km) excitan mejor el tren de ondas superficiales."
+            tooltip="Distancia vertical desde la superficie hasta el hipocentro (foco) del sismo. Fuentes más profundas retrasan y separan más la P y la S."
             value={params.depth}
             min={1}
             max={100}
@@ -296,13 +296,14 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             Limitado a Nariño y su entorno (incluye la red CM Colombia-Ecuador). En este modelo homogéneo 2D la ubicación del epicentro es solo una referencia geográfica: no cambia el cálculo. La distancia y el acimut de la estación sí afectan el registro.
           </p>
 
-          {/* Distancia epicentral: separa P, S y el tren superficial. */}
+          {/* Distancia epicentral: separa en el tiempo la P y la S. El máximo
+              depende de dx (lo que cabe en la malla sin acercarse a los bordes). */}
           <SliderRow
             label="Distancia de la estación"
-            tooltip="Distancia horizontal de la estación virtual al epicentro (km). A mayor distancia, más se separan en el tiempo la P, la S y el tren de ondas superficiales."
+            tooltip="Distancia horizontal de la estación virtual al epicentro (km). A mayor distancia, más se separan en el tiempo la llegada de la P y la de la S. El máximo depende del tamaño de malla (dx)."
             value={params.epicentralDistanceKm ?? 2.5}
             min={1}
-            max={12}
+            max={maxEpicentralDistanceKm(params.dx)}
             step={0.5}
             unit="km"
             onChange={v => update('epicentralDistanceKm', v)}

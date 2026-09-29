@@ -29,9 +29,8 @@ interface Props {
 type ViewMode = '2d' | 'triaxial';
 
 export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUsed }: Props) {
-  // Al abrir, se carga el escenario más didáctico (P, S y tren superficial
-  // separados). Si llegan parámetros iniciales (p. ej. desde el Explorador),
-  // se aplican encima.
+  // Al abrir, se carga el escenario más didáctico (P y S bien separadas). Si
+  // llegan parámetros iniciales (p. ej. desde el Explorador), se aplican encima.
   const [params, setParams] = useState<SimulationParams>(() => ({
     ...defaultScenario().params,
     ...(initialParams ?? {}),
