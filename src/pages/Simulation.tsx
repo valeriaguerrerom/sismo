@@ -68,36 +68,58 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const [tourParam, setTourParam] = useState<ParamSectionId | null>(null);
   const [tourResult, setTourResult] = useState<ResultSectionId | null>(null);
   const tourRef = useRef(false); // evita relanzar el auto-tour
+  // Cuando el tour introductorio (solo parámetros) termina SIN que haya aún una
+  // simulación, queda "pendiente": al generar la primera, se continúa con los
+  // pasos de resultados automáticamente.
+  const resultTourPendingRef = useRef(false);
 
-  const launchTour = useCallback(() => {
-    // Al abrir un acordeón cambia la altura del panel y la posición del elemento
-    // resaltado. Pedimos a Driver.js que RECALCULE la posición del popover
-    // (refresh) tras el reflujo de React. Varios frames cubren el reflujo del
-    // acordeón (crece/encoge), evitando que el popover quede desalineado.
+  const launchTour = useCallback((opts?: { resultsOnly?: boolean }) => {
+    const resultsOnly = opts?.resultsOnly ?? false;
+    // Al abrir un acordeón o cambiar de pestaña cambia el layout y la posición
+    // del elemento resaltado. Pedimos a Driver.js que RECALCULE la posición del
+    // popover (refresh) tras el reflujo de React, en varios frames.
     const reposition = () => {
-      // Doble rAF: el primero espera al commit de React, el segundo al paint
-      // (cuando el acordeón ya tiene su nueva altura). Luego un par de refresh
-      // extra por si el reflujo tarda un poco más.
       requestAnimationFrame(() => requestAnimationFrame(() => {
         refreshActiveTour();
         setTimeout(refreshActiveTour, 120);
         setTimeout(refreshActiveTour, 260);
       }));
     };
+    const hasResult = resultRef.current !== null;
     const steps = buildSimulacionSteps({
       openParam: (s) => { setTourParam(s); reposition(); },
       openResult: (s) => { setTourResult(s); reposition(); },
-      // Los pasos de resultados solo se añaden si ya hay una simulación generada.
-      hasResult: resultRef.current !== null,
+      showView: (v) => { setViewMode(v); reposition(); },
+      hasResult,
+      resultsOnly,
     });
     startTour(steps, {
       onDone: () => {
-        markTourSeen('simulacion', SIMULACION_TOUR_VERSION);
         setTourParam(null);
         setTourResult(null);
+        // Si el tour de parámetros terminó pero aún no hay simulación, dejamos
+        // pendiente la parte de resultados para cuando el usuario genere. Solo
+        // se marca como visto del todo cuando ya se mostraron los resultados.
+        if (!resultsOnly && !hasResult) {
+          resultTourPendingRef.current = true;
+        } else {
+          resultTourPendingRef.current = false;
+          markTourSeen('simulacion', SIMULACION_TOUR_VERSION);
+        }
       },
     });
   }, [markTourSeen]);
+
+  // Continúa el tour con los pasos de resultados cuando llega la PRIMERA
+  // simulación y el tour de parámetros había quedado pendiente.
+  useEffect(() => {
+    if (result && resultTourPendingRef.current) {
+      resultTourPendingRef.current = false;
+      // Da un instante a que los paneles de resultados se pinten.
+      const id = setTimeout(() => launchTour({ resultsOnly: true }), 400);
+      return () => clearTimeout(id);
+    }
+  }, [result, launchTour]);
 
   // Lanza el tour automáticamente la primera vez que el usuario entra al
   // módulo, tras el primer render (rAF asegura que el DOM ya está pintado).
@@ -109,7 +131,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     const seenVer = typeof seen === 'number' ? seen : (seen ? 1 : 0);
     if (seenVer >= SIMULACION_TOUR_VERSION) return;
     tourRef.current = true;
-    const id = requestAnimationFrame(() => setTimeout(launchTour, 350));
+    const id = requestAnimationFrame(() => setTimeout(() => launchTour(), 350));
     return () => cancelAnimationFrame(id);
   }, [user, launchTour]);
   const [reportTitle, setReportTitle] = useState('');
@@ -338,7 +360,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               <Tooltip content="Ver guía">
                 <button
                   type="button"
-                  onClick={launchTour}
+                  onClick={() => launchTour()}
                   aria-label="Ver guía"
                   className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && ((typeof user.tours_vistos?.simulacion === 'number' ? user.tours_vistos.simulacion : (user.tours_vistos?.simulacion ? 1 : 0)) < SIMULACION_TOUR_VERSION) ? 'help-pulse' : ''}`}
                 >
@@ -391,6 +413,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     horizontal. */}
                 <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 gap-0.5">
                   <button
+                    data-tour="tab-2d"
                     onClick={() => setViewMode('2d')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                       viewMode === '2d' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
@@ -399,6 +422,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     <Waves size={13} /> <Tooltip content="Sismogramas triaxiales (Norte, Este, Vertical)">Sismogramas</Tooltip>
                   </button>
                   <button
+                    data-tour="tab-triaxial"
                     onClick={() => setViewMode('triaxial')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                       viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
@@ -407,6 +431,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)">Mapa de calor</Tooltip>
                   </button>
                   <button
+                    data-tour="tab-particle"
                     onClick={() => setViewMode('particle')}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                       viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'

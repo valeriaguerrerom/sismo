@@ -18,29 +18,39 @@ import type { TourStep } from './useTour';
  * fija), para que el popover no se desborde cuando la sección abierta es alta.
  * v6: con las secciones compactas y el acordeón exclusivo, los pasos vuelven a
  * resaltar la SECCIÓN COMPLETA (tarjeta con su contenido).
+ * v7: cada paso de resultados resalta su pestaña (Sismogramas/Mapa/Partícula) y
+ * cambia a ella; el tour de resultados se dispara tras la primera simulación.
  */
-export const SIMULACION_TOUR_VERSION = 6;
+export const SIMULACION_TOUR_VERSION = 7;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
 export type ResultSectionId = 'metricas' | 'malla' | 'interpretacion';
+/** Pestañas de la Visualización (deben coincidir con ViewMode de Simulation). */
+export type VizView = '2d' | 'triaxial' | 'particle';
 
 interface SimTourControls {
   /** Abre un acordeón del panel de parámetros (izquierda). */
   openParam: (s: ParamSectionId) => void;
   /** Abre un acordeón del panel de resultados (derecha). */
   openResult: (s: ResultSectionId) => void;
+  /** Cambia la pestaña de la Visualización (Sismogramas / Mapa / Partícula). */
+  showView: (v: VizView) => void;
   /** Si ya hay una simulación generada: añade los pasos de resultados. */
   hasResult?: boolean;
+  /** Si true, se OMITEN los pasos de parámetros y solo se muestran los de
+   *  resultados (para continuar el tour tras la primera simulación). */
+  resultsOnly?: boolean;
 }
 
 /** Construye los pasos del tour del Simulador con los controles dados. */
-export function buildSimulacionSteps({ openParam, openResult, hasResult = false }: SimTourControls): TourStep[] {
+export function buildSimulacionSteps({ openParam, openResult, showView, hasResult = false, resultsOnly = false }: SimTourControls): TourStep[] {
   // Los pasos de parámetros resaltan la SECCIÓN COMPLETA (tarjeta con su
   // contenido), no solo el encabezado. Como el acordeón es exclusivo y las
   // secciones son compactas, la tarjeta abierta cabe en la ventana y el popover
   // se coloca al lado sin desbordarse. La sección se abre con openParam.
-  const steps: TourStep[] = [
+  // En modo resultsOnly se omiten (para continuar el tour tras generar).
+  const steps: TourStep[] = resultsOnly ? [] : [
     {
       // Se empieza por "Variables elásticas", que es la sección abierta por
       // defecto: así el primer paso ya coincide sin tener que abrir otra.
@@ -87,33 +97,37 @@ export function buildSimulacionSteps({ openParam, openResult, hasResult = false 
 
   // Los pasos de resultados solo tienen sentido cuando ya se generó una
   // simulación (sus elementos existen y muestran contenido real).
-  if (hasResult) {
+  if (hasResult || resultsOnly) {
     steps.push(
       {
-        element: '[data-tour="viz-area"]',
+        // Cada paso cambia a SU pestaña y resalta el botón correspondiente.
+        element: '[data-tour="tab-2d"]',
+        onHighlightStarted: () => showView('2d'),
         popover: {
           title: 'Sismogramas',
           description: 'Las tres componentes (Norte, Este, Vertical). Cambia "Escala de amplitud" para compararlas mejor.',
-          side: 'left',
-          align: 'start',
+          side: 'bottom',
+          align: 'center',
         },
       },
       {
-        element: '[data-tour="viz-area"]',
+        element: '[data-tour="tab-triaxial"]',
+        onHighlightStarted: () => showView('triaxial'),
         popover: {
           title: 'Mapa de calor del subsuelo',
-          description: 'Cambia a esta pestaña para ver la onda propagándose en un corte vertical. Usa reproducir, la capa y la escala global.',
-          side: 'left',
-          align: 'start',
+          description: 'La onda propagándose en un corte vertical. Usa reproducir, la capa y la escala global.',
+          side: 'bottom',
+          align: 'center',
         },
       },
       {
-        element: '[data-tour="viz-area"]',
+        element: '[data-tour="tab-particle"]',
+        onHighlightStarted: () => showView('particle'),
         popover: {
           title: 'Movimiento de partícula',
-          description: 'En esta pestaña ves la trayectoria 3D del suelo. Gírala con el mouse: la P (terracota) empuja en la dirección de propagación y la S (verde), perpendicular.',
-          side: 'left',
-          align: 'start',
+          description: 'La trayectoria 3D del suelo. Gírala con el mouse: la P (terracota) empuja en la dirección de propagación y la S (verde), perpendicular.',
+          side: 'bottom',
+          align: 'center',
         },
       },
       {
