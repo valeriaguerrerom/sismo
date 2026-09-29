@@ -390,3 +390,31 @@ Se refinó la transmisión y el dibujo del corte del subsuelo (mapa de calor):
 - **Tipografía del corte ≥ 13 px.** Los números de los ejes, los rótulos de los
   ejes y las etiquetas "Superficie libre", "Fuente" y "Estación" se dibujan a un
   mínimo de 13 px, tanto en pantalla como en el PDF (mismo renderizador).
+
+## 8. Fuente multi-ciclo (Gabor) para sismogramas más realistas
+
+En un medio homogéneo la respuesta a una fuente de Ricker (un solo lóbulo) es
+esencialmente "un pulso P y un pulso S y silencio": todas las simulaciones se
+veían muy parecidas y poco llamativas. Para que cada arribo se parezca a un
+**tren de ondas** de un registro real, se añadió una wavelet de **Gabor**
+(coseno modulado por una gaussiana):
+
+    g(t) = cos(2π f₀ (t − t₀)) · exp( −( 2π f₀ (t − t₀) / (2·ciclos) )² )
+
+- Está centrada en la MISMA frecuencia dominante `f0` que la Ricker, así que la
+  banda del espectro no cambia: los nodos por longitud de onda (dispersión) y la
+  condición CFL se mantienen; el motor sigue siendo estable.
+- El parámetro `sourceCycles` (1–4) controla cuántas oscilaciones visibles tiene
+  el pulso. Con `1` se comporta como la Ricker de siempre (compatibilidad); con
+  `2–3` cada arribo P/S se ve como un paquete oscilante.
+- `t0` (centro del pulso) crece con los ciclos para no truncar la envolvente, y
+  la ventana de guarda entre la P y la búsqueda de la S también (`(3 + ciclos)/f0`),
+  para no confundir la cola de la P con la S.
+- Los presets del Simulador usan `sourceCycles` 2–3 y mecanismos/azimuts
+  contrastados, de modo que los cuatro escenarios se ven claramente distintos
+  entre sí (uno domina en Norte, otro en Este, otro con S−P grande, el volcánico
+  con vertical pequeña y pulso corto).
+
+La detección de arribos (STA + validación teórica) sigue funcionando; cuando el
+paquete más ancho dificulta la detección, se cae al arribo teórico (marcado con
+`*` en el panel), como ya ocurría.

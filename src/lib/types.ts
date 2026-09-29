@@ -53,6 +53,12 @@ export interface SimulationParams {
    */
   stationAzimuth?: number;
   /**
+   * Nº de ciclos del pulso de la fuente. 1 ≈ Ricker (un lóbulo); 2–3 produce
+   * un tren de ondas por arribo (más parecido a un sismo real). No cambia la
+   * frecuencia dominante, así que la malla y la estabilidad no se ven afectadas.
+   */
+  sourceCycles?: number;
+  /**
    * Distancia epicentral fuente→estación en superficie (km). Controla la
    * separación temporal entre la P y la S (a mayor distancia, más se separan).
    * Acotada por el dominio y los rebotes de borde.

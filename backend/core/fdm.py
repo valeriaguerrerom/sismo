@@ -120,6 +120,11 @@ class SimulationParams(BaseModel):
     # Controla la separación temporal entre la P y la S (a mayor distancia, más
     # se separan). Rango acotado por el dominio y los rebotes.
     epicentralDistanceKm: float = Field(default=2.5, ge=1.0, le=12.0, description="Distancia epicentral fuente→estación (km)")
+    # Nº de ciclos visibles del pulso de la fuente. 1 ≈ Ricker (un lóbulo);
+    # 2–3 produce un tren de ondas por arribo (más parecido a un sismo real y
+    # visualmente más llamativo). Se mantiene la frecuencia dominante f0, así
+    # que la dispersión numérica (nodos/λ) y la CFL no cambian.
+    sourceCycles: float = Field(default=1.0, ge=1.0, le=4.0, description="Ciclos del pulso de la fuente (1=Ricker, 2-3=tren de ondas)")
 
     @model_validator(mode="after")
     def _check_physics(self):
@@ -257,6 +262,34 @@ def ricker(t: float, f0: float, t0: float) -> float:
     """
     arg = math.pi * f0 * (t - t0)
     return (1 - 2 * arg * arg) * math.exp(-arg * arg)
+
+
+def gabor(t: float, f0: float, t0: float, cycles: float) -> float:
+    """Wavelet de Gabor: coseno modulado por una gaussiana (fuente multi-ciclo).
+
+    A diferencia de la Ricker (un solo lóbulo, "un pestañeo"), la Gabor oscila
+    varias veces dentro de una envolvente gaussiana, así cada arribo (P, S) se
+    ve como un TREN DE ONDAS de unos pocos ciclos —mucho más parecido a un
+    registro sísmico real y visualmente más llamativo— sin dejar de estar
+    centrada en la frecuencia dominante f0 (misma banda ⇒ misma dispersión/CFL):
+
+        g(t) = cos(2π f₀ (t−t₀)) · exp(−( 2π f₀ (t−t₀) / (2·cycles) )²)
+
+    ``cycles`` controla cuántas oscilaciones visibles tiene el pulso (ancho de
+    la envolvente). Con cycles≈1 se parece a una Ricker; con 2–3 se ve el tren.
+
+    Args:
+        t: Tiempo actual (s).
+        f0: Frecuencia dominante (Hz).
+        t0: Centro del pulso (s). Conviene t0 ≳ cycles / f0 para no truncar.
+        cycles: Número aproximado de ciclos visibles del pulso.
+
+    Returns:
+        Amplitud de la wavelet en el tiempo t (media cero, banda limitada).
+    """
+    w = 2.0 * math.pi * f0 * (t - t0)
+    envArg = w / (2.0 * max(0.5, cycles))
+    return math.cos(w) * math.exp(-envArg * envArg)
 
 
 def detect_arrival(signal: np.ndarray, dt: float, threshold: float = 0.05,
@@ -612,10 +645,19 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     src_z = min(int(nz * 0.70), max(5, int((depth * 1000) / dx)))
     rec_z = 2
 
-    # Parámetros de la fuente Ricker
+    # Parámetros de la fuente. f0 = frecuencia dominante. Con sourceCycles > 1
+    # se usa una wavelet de Gabor (tren de ondas de varios ciclos) en vez de la
+    # Ricker de un solo lóbulo: cada arribo P/S se ve como un paquete oscilante,
+    # más parecido a un sismo real. t0 (centro del pulso) se agranda con los
+    # ciclos para no truncar la envolvente.
     f0 = 2.0 if source_type == "volcanic" else 3.5
-    t0 = 1.5 / f0
+    cycles = max(1.0, float(getattr(params, "sourceCycles", 1.0)))
+    use_gabor = cycles > 1.0
+    t0 = (1.5 / f0) if not use_gabor else (cycles / f0 + 0.5 / f0)
     amp_scale = 10 ** (magnitude - 2) * 1e4
+
+    def source_at(tt: float) -> float:
+        return gabor(tt, f0, t0, cycles) if use_gabor else ricker(tt, f0, t0)
 
     # Inicialización de campos de desplazamiento — arrays 2D (nx, nz)
     # P-SV (en el plano del corte): ux (radial), uz (vertical).
@@ -731,7 +773,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         t = step * dt
 
         # ── Inyección de fuente distribuida ──
-        src_val = ricker(t, f0, t0) * amp_scale
+        src_val = source_at(t) * amp_scale
         spread = 2
         beta = 0.8 * spread
         for di in range(-spread, spread + 1):
@@ -841,8 +883,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         p_arrival = p_theoretical
         p_arrival_detected = False
 
-    # S-arrival: search AFTER P-arrival + wavelet duration (several periods)
-    wavelet_duration = 3.0 / f0
+    # S-arrival: search AFTER P-arrival + wavelet duration (several periods). Con
+    # la Gabor multi-ciclo el paquete P es más ancho, así que la ventana de
+    # guarda crece con el nº de ciclos para no confundir la cola de la P con la S.
+    wavelet_duration = (3.0 + cycles) / f0
     s_search_start_time = p_arrival + wavelet_duration
     s_search_start_idx = max(10, int(s_search_start_time / dt))
     # Se detecta sobre la radial (en el plano), independiente de la rotación a

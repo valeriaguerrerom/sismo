@@ -39,48 +39,52 @@ export const SCENARIOS: Scenario[] = [
     id: 'superficial-didactico',
     name: 'Cortical didáctico (P y S separadas)',
     expectation:
-      'Fuente somera a mayor distancia: observa la llegada de la P y, después, la de la S, bien separadas en las tres componentes.',
+      'Fuente somera de mecanismo inverso: la P llega primero y, bien separada, un tren de onda S fuerte. Domina la componente Norte.',
     params: build({
       vp: 3200, vs: 1850, density: 2500, sourceType: 'tectonic',
-      magnitude: 4.0, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 7, dx: 20, dt: 0.0045,
-      strike: 20, dip: 35, rake: 60, stationAzimuth: 40, epicentralDistanceKm: 6,
+      magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
+      duration: 8, dx: 20, dt: 0.0045,
+      strike: 20, dip: 35, rake: 90, stationAzimuth: 30, epicentralDistanceKm: 6,
+      sourceCycles: 2.5,
     }),
   },
   {
-    id: 'cortical-superficial-narino',
-    name: 'Cortical superficial andino (Nariño)',
+    id: 'cortical-desgarre-narino',
+    name: 'Falla de desgarre andina (Nariño)',
     expectation:
-      'Sismo cortical del suroccidente andino: P y S separadas, con energía en las tres componentes (la transversal muestra el SH del mecanismo).',
+      'Falla de rumbo (desgarre) casi vertical: la onda S domina en la componente Este y el movimiento es sobre todo horizontal. Muy distinto del inverso.',
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
-      magnitude: 5.0, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 7, dx: 22, dt: 0.004,
-      strike: 30, dip: 40, rake: 80, stationAzimuth: 45, epicentralDistanceKm: 6,
-    }),
-  },
-  {
-    id: 'cortical-profundo',
-    name: 'Cortical más profundo (comparación)',
-    expectation:
-      'La misma corteza con la fuente más profunda: la P y la S llegan más tarde y más separadas entre sí. Compáralo con el superficial.',
-    params: build({
-      vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
-      magnitude: 5.5, depth: 9, epicenterLat: 1.2136, epicenterLon: -77.2811,
+      magnitude: 5.5, depth: 6, epicenterLat: 1.2136, epicenterLon: -77.2811,
       duration: 8, dx: 22, dt: 0.004,
-      strike: 30, dip: 40, rake: 80, stationAzimuth: 45, epicentralDistanceKm: 5,
+      strike: 30, dip: 85, rake: 0, stationAzimuth: 75, epicentralDistanceKm: 7,
+      sourceCycles: 2.5,
+    }),
+  },
+  {
+    id: 'cortical-profundo-lejano',
+    name: 'Sismo profundo y lejano (P y S muy separadas)',
+    expectation:
+      'Fuente más profunda y estación lejana: la P y la S llegan tarde y muy separadas (S−P grande), con energía repartida en las tres componentes.',
+    params: build({
+      vp: 3600, vs: 2050, density: 2700, sourceType: 'tectonic',
+      magnitude: 6.0, depth: 12, epicenterLat: 1.2136, epicenterLon: -77.2811,
+      duration: 10, dx: 24, dt: 0.004,
+      strike: 30, dip: 45, rake: 80, stationAzimuth: 45, epicentralDistanceKm: 9,
+      sourceCycles: 3,
     }),
   },
   {
     id: 'volcano-tectonico-galeras',
     name: 'Volcano-tectónico del Galeras',
     expectation:
-      'Evento volcánico somero (fuente isótropa): domina la onda P y la componente transversal es casi nula (no hay cizalla). La señal decae rápido a la calma.',
+      'Evento volcánico somero (fuente isótropa): domina la onda P, la componente vertical es pequeña y la transversal casi nula (no hay cizalla). Pulso corto y rápido.',
     params: build({
       vp: 3000, vs: 1700, density: 2500, sourceType: 'volcanic',
-      magnitude: 2.5, depth: 3, epicenterLat: 1.2216, epicenterLon: -77.3742,
-      duration: 7, dx: 28, dt: 0.0055,
+      magnitude: 3.0, depth: 3, epicenterLat: 1.2216, epicenterLon: -77.3742,
+      duration: 7, dx: 26, dt: 0.005,
       strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 5,
+      sourceCycles: 2,
     }),
   },
 ];
