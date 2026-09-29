@@ -3,7 +3,7 @@ import { downsampleWave } from '../lib/reportPdf';
 import { SimulationParams, SimulationResult, SimProgress, GridInfo, WaveData } from '../lib/types';
 import { defaultParams } from '../lib/simulation';
 import { defaultScenario } from '../lib/scenarios';
-import { epicentralDistanceKm, epicentralDistanceLabel, commonMaxAmplitude } from '../lib/format';
+import { epicentralDistanceKm, commonMaxAmplitude } from '../lib/format';
 import { fetchSimulationFull } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
@@ -343,7 +343,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
             <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} />
           </div>
 
-          <div className="flex flex-col gap-4 lg:max-h-[calc(100dvh-154px)] lg:overflow-y-auto scrollbar-thin lg:pr-1">
+          <div className="flex flex-col gap-4 lg:pr-1">
             <div data-viz-area data-tour="viz-area" className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-4">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                 <div>
@@ -465,13 +465,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
                     </div>
-                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} robustScale />
+                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                 </div>
               )}
@@ -524,26 +524,14 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                     </div>
                   </div>
 
-                  <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <div className="flex gap-4 text-xs text-stone-500 mb-1">
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#C4553A] inline-block" /> Norte</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
-                    </div>
-                    <p className="text-[10px] text-stone-400 mb-3">
-                      Estación virtual a {epicentralDistanceLabel(result.gridInfo)} del epicentro, en superficie.
-                      {' '}
-                      {ampScale === 'common'
-                        ? 'Escala común: las tres trazas se normalizan contra el máximo de las tres.'
-                        : 'Escala por componente: cada traza se normaliza contra su propio máximo.'}
-                    </p>
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                  <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
-                  <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                  <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
-                  <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={110} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
+                  <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
+                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} />
                   </div>
                 </div>
               )}
