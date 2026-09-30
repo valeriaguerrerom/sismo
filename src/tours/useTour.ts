@@ -73,6 +73,25 @@ export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void 
     stageRadius: 12,
     allowClose: true,
     steps,
+    // Tras resaltar cada paso, aseguramos que el elemento quede COMPLETAMENTE
+    // visible dentro de su contenedor con scroll (las columnas de parámetros y
+    // resultados tienen scroll interno). Driver.js hace scrollIntoView del
+    // elemento, pero no siempre alcanza a mostrar una tarjeta larga que quedó
+    // parcialmente bajo el borde; forzamos un scroll centrado y refrescamos el
+    // popover para que "Siguiente" siempre apunte a la tarjeta bien encuadrada.
+    onHighlighted: (element) => {
+      if (!(element instanceof HTMLElement)) return;
+      // Dos frames para que el acordeón que abrió el paso ya haya crecido.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        try {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        } catch {
+          element.scrollIntoView();
+        }
+        // Recolocar el popover sobre el elemento ya encuadrado.
+        setTimeout(() => refreshActiveTour(), 320);
+      }));
+    },
     // Al terminar (botón Terminar en el último paso) o al destruir el tour.
     onDestroyed: () => { markDone(); if (activeDriver === d) activeDriver = null; },
     // Botón "Omitir" (enlace discreto) inyectado en el pie del popover.
