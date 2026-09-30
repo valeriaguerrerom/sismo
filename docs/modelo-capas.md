@@ -52,21 +52,70 @@ depósitos volcánicos"** trae el modelo de dos capas ya configurado.
 
 ## Verificación física
 
-Con el escenario "Pasto sobre depósitos volcánicos"
-(capa 0.5 km, Vp 1800 / Vs 600 / ρ 1900; roca Vp 4000 / Vs 2300 / ρ 2600;
-fuente a 2 km, estación a 4 km, dx 20 m):
+### Reflexión MEDIDA en la señal (no solo calculada)
 
-- **Reflexión P en la interfaz**: el motor reporta `interfaceReflP` y el valor
-  se compara con el **cálculo a mano** por el método de la imagen especular en
-  la roca (imagen del receptor a `2·z_interfaz − z_receptor`, distancia
-  fuente→imagen dividida por Vp de la roca, más el retardo del pulso `t0`).
-  Resultado: engine ≈ 2.283 s vs a mano ≈ 2.283 s (**diferencia ≈ 0.05 ms**).
-- **Reverberación vertical en la capa blanda**: `2·h/Vp_capa ≈ 0.56 s` (modo
-  dominante observable de la capa somera).
-- **Nodos por longitud de onda**: 10.0 (cumple el mínimo).
-- **Cómputo**: ≈ 10 s (< 15 s).
+La reflexión se **mide** restando la traza homogénea de la traza con capas
+(mismo pulso, misma frecuencia efectiva) y detectando la primera llegada de esa
+diferencia, y se compara con el cálculo a mano por el método de la imagen
+especular.
+
+- **Caso controlado y limpio** (fuente a 1.5 km DENTRO de la capa, interfaz a
+  3 km, roca rápida debajo; capa Vp 2500): la onda que baja se refleja en la
+  interfaz y vuelve a la superficie como una reflexión separable. La resta
+  capas−homogéneo aísla esa reflexión. Su **onset medido = 2.181 s**; el
+  cálculo a mano (imagen del receptor a través de la interfaz, con la velocidad
+  de la capa) da **2.415 s**. El onset llega antes que el centro geométrico por
+  la mitad delantera de la envolvente del pulso (`≈ 0.65/f0 = 0.232 s`);
+  corrigiendo por eso: 2.415 − 0.232 = **2.183 s** vs **2.181 s** medido →
+  **diferencia 2.2 ms**. La reflexión medida coincide con la calculada.
+
+- **En el escenario "Pasto"** (fuente a 2 km EN LA ROCA, interfaz somera a
+  0.5 km) la geometría es distinta: la interfaz está **encima** de la fuente,
+  así que la reflexión image-en-roca no es el evento dominante. La primera
+  diferencia capas−homogéneo (**2.149 s**) coincide con la **P directa
+  transmitida** por la capa (P en 2.177 s), no con una reflexión limpia. Es un
+  resultado honesto: para una fuente bajo una capa somera, lo que más cambia en
+  la estación es la P transmitida y las reverberaciones de la capa, no una
+  reflexión especular aislada.
+
+### Origen de la cola (RMS por ventanas de 1 s tras la S)
+
+Comparando la energía RMS después de la S entre capas y homogéneo (mismo pulso):
+
+| Ventana | capas / homogéneo |
+|---------|-------------------|
+| 4.2–5.2 s | **39×** |
+| 5.2–6.2 s | **11×** |
+| 6.2–6.5 s | **2.2×** |
+
+La cola larga es **mucho** mayor con capas: confirma que la coda proviene de la
+capa blanda (amplificación y reverberación), no de un artificio.
+
+### Rebote de borde y ventana
+
+Con roca rápida el rebote de borde de la **P** llega antes que el de la S. Por
+eso el dominio horizontal se **amplía** en el modo dos capas (1200 nodos ≈ 24 km
+frente a 820 del modo homogéneo), y la duración del escenario Pasto es **6.5 s**:
+
+- `firstBounceP ≈ 6.82 s` (> 6.5 s ⇒ **fuera** de la ventana).
+- `firstBounceS ≈ 10.94 s`.
+- El tope de duración del panel usa el **menor** de los dos rebotes (P o S).
+- **Cómputo ≈ 12 s** (< 15 s) con la malla ampliada 1200×700.
+
+### Otros
+
+- **Nodos por longitud de onda**: 10.0 (cumple el mínimo; f0 se baja a 1.2 Hz).
 - **No regresión**: los escenarios homogéneos dan un resultado **idéntico**
   (diferencia 0) al de antes de introducir el kernel por nodo.
+
+## Frecuencia de la fuente en el modelo de capas
+
+Cuando se activan dos capas y el usuario **no** fija una frecuencia manual, el
+motor puede **bajar `f0`** para que la capa lenta tenga ≥10 nodos/λ (evita
+dispersión numérica). En el escenario Pasto queda en **1.2 Hz**. Este ajuste se
+muestra al usuario con la nota *"La frecuencia de la fuente se ajustó a X Hz
+para representar bien la capa blanda sin dispersión numérica"* en las **métricas**
+del panel, en el **PDF** y en la **interpretación educativa**.
 
 ## Valores del escenario "Pasto sobre depósitos volcánicos"
 

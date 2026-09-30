@@ -6,7 +6,7 @@
  * @module reportPdfBuilder
  */
 import { jsPDF } from 'jspdf';
-import { interpretSimulation } from './interpretation';
+import { interpretSimulation, sourceFreqAdjustedNote } from './interpretation';
 import { computeEventWindow } from './waveWindow';
 import { LOGO_MARK_DATA_URL } from './logoDataUrl';
 import { PLEX_REGULAR_B64, PLEX_BOLD_B64 } from './pdfFont';
@@ -313,6 +313,18 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
       const note = `Después de ${bounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.`;
       const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
+      doc.text(lines, MARGIN, y);
+      y += lines.length * 3.4 + 2;
+      doc.setTextColor(...COLORS.text);
+    }
+  }
+  // Nota si la frecuencia de la fuente se ajustó por dispersión (dos capas).
+  {
+    const fnote = sourceFreqAdjustedNote(params, results.dominantFrequency);
+    if (fnote) {
+      y += 1;
+      doc.setFontSize(7.5); doc.setTextColor(45, 106, 79);
+      const lines = doc.splitTextToSize(fnote, CONTENT_W) as string[];
       doc.text(lines, MARGIN, y);
       y += lines.length * 3.4 + 2;
       doc.setTextColor(...COLORS.text);

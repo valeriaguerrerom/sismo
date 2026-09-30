@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
 import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from '../../lib/icons';
-import { interpretSimulation } from '../../lib/interpretation';
+import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
 import { renderCrossSectionPng, computeGlobalPeak, fontScaleForPdf } from '../../lib/crossSectionRender';
@@ -316,6 +316,12 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         {typeof gridInfo.firstBounceS === 'number' && gridInfo.firstBounceS > 0 && duration > gridInfo.firstBounceS + 0.05 && (
           <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
             Después de {gridInfo.firstBounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.
+          </p>
+        )}
+        {/* Nota si la frecuencia de la fuente se bajó por dispersión (dos capas). */}
+        {sourceFreqAdjustedNote(params, dominantFrequency) && (
+          <p className="text-[10px] text-[#2D6A4F] mt-1.5 bg-[#2D6A4F]/5 rounded-lg p-2 border border-[#2D6A4F]/10">
+            {sourceFreqAdjustedNote(params, dominantFrequency)}
           </p>
         )}
       </AccordionSection>

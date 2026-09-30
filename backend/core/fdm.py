@@ -645,10 +645,16 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # señal debe decaer a la calma tras la P/S/superficial. La coda física real
     # vendrá del modelo de capas (trabajo futuro), no de reflexiones de borde.
     abs_thick = 44
-    NX_MAX = 820
+    # Con dos capas el semiespacio de roca suele ser rápido (Vp alto) y el
+    # rebote de borde de la P llega antes; se AMPLÍA el dominio horizontal para
+    # que ese primer rebote quede fuera de la ventana útil (el cómputo sigue
+    # < 15 s gracias al kernel Numba). En medio homogéneo se mantiene el dominio
+    # canónico para no alterar los presets existentes.
+    NX_MAX = 1200 if two_layer else 820
     NZ_MAX = 700
+    domain_span_m = 48000 if two_layer else 34000
 
-    nx = min(NX_MAX, max(80, int(34000 / dx)))
+    nx = min(NX_MAX, max(80, int(domain_span_m / dx)))
 
     # La fuente se ubica al ~70% de nz; el resto es propagación + sponge inferior.
     depth_nodes = int((depth * 1000) / dx)

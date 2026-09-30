@@ -27,11 +27,13 @@ interface Props {
   /** Sección que el tour guiado quiere abrir (cambia por paso). */
   forceSection?: ParamSection | null;
   /**
-   * Tiempo del primer rebote de borde de la S (s) de la última simulación,
-   * calculado por el backend con la geometría real. Si está disponible, el aviso
-   * de duración lo usa en vez de un valor fijo por tipo de fuente.
+   * Tiempos del primer rebote de borde (s) de la última simulación, calculados
+   * por el backend con la geometría real. El aviso de duración usa el MENOR de
+   * los dos (el rebote de la P suele llegar antes cuando la roca es rápida, p.
+   * ej. en el modelo de dos capas). Si no hay valor, se usa un tope por tipo.
    */
   firstBounceS?: number | null;
+  firstBounceP?: number | null;
 }
 
 function SliderRow({
@@ -86,7 +88,7 @@ function SliderRow({
   );
 }
 
-export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS }: Props) {
+export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS, firstBounceP }: Props) {
   // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
   // cierran las demás). Así el contenido siempre cabe sin scroll. Al inicio
   // solo "Variables elásticas" está abierta.
@@ -464,11 +466,17 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
             // Así el dominio se mantiene grande y solo se acota el tiempo.
             const MAX_STEPS = 8000;
             const computeCap = Math.floor(MAX_STEPS * params.dt); // s que caben en el tope de pasos
-            const bounceS = (typeof firstBounceS === 'number' && firstBounceS > 0)
-              ? Math.floor(firstBounceS)
+            // Se toma el MENOR rebote de borde (P o S): con roca rápida —p. ej.
+            // el semiespacio del modelo de dos capas— el rebote de la P llega
+            // antes que el de la S, así que es el que acota la ventana útil.
+            const bounces = [firstBounceP, firstBounceS].filter(
+              (b): b is number => typeof b === 'number' && b > 0,
+            );
+            const bounce = bounces.length
+              ? Math.floor(Math.min(...bounces))
               : (params.sourceType === 'volcanic' ? 13 : 8);
-            const maxDur = Math.max(5, Math.min(120, bounceS, computeCap));
-            const capReason = bounceS <= computeCap
+            const maxDur = Math.max(5, Math.min(120, bounce, computeCap));
+            const capReason = bounce <= computeCap
               ? `Máx ${maxDur} s: hasta el primer rebote de borde. Después aparecerían reflexiones artificiales de los límites de la malla.`
               : `Máx ${maxDur} s por el presupuesto de cómputo (tope de ${formatBigInt(MAX_STEPS)} pasos).`;
             return (

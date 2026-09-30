@@ -42,6 +42,30 @@ export function depthClass(depthKm: number): 'superficial' | 'intermedia' | 'pro
   return depthKm < 30 ? 'superficial' : depthKm < 70 ? 'intermedia' : 'profunda';
 }
 
+/** Frecuencia por defecto de la fuente según el tipo (Hz). */
+function defaultSourceFreq(sourceType: SimulationParams['sourceType']): number {
+  return sourceType === 'volcanic' ? 2.0 : 3.5;
+}
+
+/**
+ * Detecta si la frecuencia de la fuente se BAJÓ automáticamente por dispersión
+ * (solo en el modelo de dos capas, cuando el usuario no fijó `sourceFreq`). El
+ * motor la reduce para que la capa lenta tenga ≥10 nodos/λ. Devuelve la nota
+ * educativa o null si no aplica. Se usa igual en métricas, PDF e interpretación.
+ */
+export function sourceFreqAdjustedNote(
+  params: SimulationParams,
+  dominantFrequency: number,
+): string | null {
+  if (params.subsurfaceModel !== 'twoLayer') return null;
+  // Si el usuario fijó una frecuencia manual (>0), no fue un autoajuste.
+  if (typeof params.sourceFreq === 'number' && params.sourceFreq > 0) return null;
+  const def = defaultSourceFreq(params.sourceType);
+  // Se considera ajustada si quedó por debajo del valor por tipo (con margen).
+  if (dominantFrequency >= def - 0.05) return null;
+  return `La frecuencia de la fuente se ajustó a ${dominantFrequency.toFixed(1)} Hz para representar bien la capa blanda sin dispersión numérica.`;
+}
+
 /** Genera el texto interpretativo de una simulación. */
 export function interpretSimulation(input: InterpretationInput): string {
   const { params, dominantFrequency, gridInfo, pArrival, sArrival } = input;
@@ -54,6 +78,8 @@ export function interpretSimulation(input: InterpretationInput): string {
   let text = `${grid} de un evento de fuente ${typeLabel} Mw ${params.magnitude.toFixed(1)} a ${params.depth} km de profundidad (${depthDesc}). `;
   text += `El medio se modeló con Vp = ${params.vp} m/s, Vs = ${params.vs} m/s y densidad ${params.density} kg/m³ (Vp/Vs = ${(params.vp / params.vs).toFixed(2)}). `;
   text += `La frecuencia dominante del registro es ${dominantFrequency.toFixed(1)} Hz. `;
+  const freqNote = sourceFreqAdjustedNote(params, dominantFrequency);
+  if (freqNote) text += freqNote + ' ';
 
   const distKm = epicentralKm(gridInfo);
   if (distKm !== null) {

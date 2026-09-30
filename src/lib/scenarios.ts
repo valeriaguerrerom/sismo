@@ -95,7 +95,10 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 4000, vs: 2300, density: 2600, sourceType: 'tectonic',
       magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 7.5, dx: 20, dt: 0.0035,
+      // Duración 6.5 s: termina antes del primer rebote de borde de la P
+      // (~6.8 s con el dominio ampliado del modo dos capas) y deja ver la
+      // coda amplificada de la capa (verificado con la resta capas−homogéneo).
+      duration: 6.5, dx: 20, dt: 0.0035,
       strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 4,
       sourceCycles: 1,
       // Capa superficial blanda (valores REPRESENTATIVOS con fines educativos,
