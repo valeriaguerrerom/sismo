@@ -26,6 +26,7 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { WaveData } from '../../lib/types';
+import { computeEventWindow } from '../../lib/waveWindow';
 import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
@@ -139,16 +140,28 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     // (así la vertical se ve tan pequeña o grande como es respecto a N y E).
     const { time, north, east, vertical } = waveData;
     const nAll = time.length;
-    // VENTANA LIMPIA: la trayectoria solo muestra hasta un poco después de la S
-    // (P + S + una cola corta). Con la coda larga de reverberación la partícula
-    // daría cientos de vueltas y se vería como un ovillo; recortar a esta
-    // ventana deja el hodograma didáctico (los lazos de la P y la S se leen).
-    const winEnd = (sArrival > 0 && pArrival > 0)
-      ? sArrival + (sArrival - pArrival) + 2.0
-      : (time[nAll - 1] || 1);
+    // VENTANA a dibujar. Dos casos:
+    //  - Simulación FDM (hay arribos P/S): hasta un poco después de la S
+    //    (P + S + cola corta), para que se lean los lazos de la P y la S.
+    //  - Registro REAL (sin P/S): la señal puede durar cientos de segundos; si
+    //    se dibujara entera, la trayectoria sería un ovillo denso e ilegible.
+    //    Se recorta a la VENTANA ENERGÉTICA del evento (misma que los
+    //    sismogramas): un poco antes del inicio de la energía hasta un poco
+    //    después de que decae. Así el hodograma se lee.
+    let winStart = 0;
+    let winEnd: number;
+    if (sArrival > 0 && pArrival > 0) {
+      winEnd = sArrival + (sArrival - pArrival) + 2.0;
+    } else {
+      const w = computeEventWindow(waveData);
+      winStart = w.start;
+      winEnd = w.end;
+    }
+    let iWinStart = 0;
+    for (let i = 0; i < nAll; i++) { if (time[i] >= winStart) { iWinStart = i; break; } }
     let nWin = nAll;
     for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { nWin = i; break; } }
-    nWin = Math.max(2, nWin);
+    nWin = Math.max(iWinStart + 2, nWin);
 
     // Rango de muestras según el modo (B3):
     //  - 'full': toda la ventana limpia.
@@ -158,7 +171,7 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       for (let i = 0; i < nAll; i++) { if (time[i] >= t) return i; }
       return nAll - 1;
     };
-    let iStart = 0;
+    let iStart = iWinStart; // 'full': arranca en el inicio de la ventana útil
     let iEnd = nWin; // exclusivo
     if (mode === 'p' && pArrival > 0 && sArrival > pArrival) {
       iStart = idxAtOrAfter(pArrival);
@@ -167,7 +180,7 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       iStart = idxAtOrAfter(sArrival);
       iEnd = nWin;
     }
-    if (iEnd - iStart < 2) { iStart = 0; iEnd = nWin; } // salvaguarda
+    if (iEnd - iStart < 2) { iStart = iWinStart; iEnd = nWin; } // salvaguarda
 
     // Escala: en 'solo' se reescala SOLO con el pico de ese tramo, para que el
     // movimiento (pequeño en la P) llene la vista. La escala queda ampliada,

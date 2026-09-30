@@ -10,6 +10,7 @@ import { renderParticleMotionPng } from '../../lib/particleMotionRender';
 import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
+import { VolcanoLoader } from '../ui/VolcanoLoader';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 
@@ -448,6 +449,18 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       {pdfDialog && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={() => !pdfBusy && setPdfDialog(false)}>
           <div className="bg-white rounded-2xl shadow-xl border border-stone-200 w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            {pdfBusy ? (
+              // Mientras se arma el PDF (renderiza el hodograma 3D y los
+              // fotogramas del mapa de calor, que tardan unos segundos) se
+              // muestra el volcán cargando para que no parezca congelado.
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <VolcanoLoader size={44} label="Generando el reporte PDF…" />
+                <p className="text-[11px] text-stone-400 mt-3 max-w-xs leading-relaxed">
+                  Renderizando el hodograma y los fotogramas del subsuelo. Tarda unos segundos.
+                </p>
+              </div>
+            ) : (
+            <>
             <h3 className="font-bold text-[#1A1A2E] text-sm mb-1 flex items-center gap-2"><FileDown size={16} className="text-[#C4553A]" /> Contenido del PDF</h3>
             <p className="text-[11px] text-stone-500 mb-3">Elige qué secciones incluir.</p>
             <div className="space-y-2">
@@ -481,6 +494,9 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
               <button
                 onClick={async () => {
                   setPdfBusy(true);
+                  // Cede dos frames para que el volcán cargando se pinte ANTES
+                  // del render pesado del PDF (que bloquea el hilo principal).
+                  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                   try {
                     await exportPDF(result, { ...pdfSections, crossSection: pdfSections.crossSection && canCrossSection, particleMotion: pdfSections.particleMotion && canParticleMotion }, realRecord, ampScale, heatmapGrid);
                     setPdfDialog(false);
@@ -491,9 +507,11 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
                 disabled={pdfBusy}
                 className="flex-1 py-2 rounded-xl bg-[#C4553A] text-white text-sm font-bold shadow-md shadow-[#C4553A]/20 disabled:opacity-60"
               >
-                {pdfBusy ? 'Generando…' : 'Generar PDF'}
+                Generar PDF
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
       )}

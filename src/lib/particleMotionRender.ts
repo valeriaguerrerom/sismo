@@ -16,6 +16,7 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { WaveData } from './types';
+import { computeEventWindow } from './waveWindow';
 
 const COLOR_REST = new THREE.Color('#A8A29E');
 const COLOR_P = new THREE.Color('#C4553A');
@@ -37,14 +38,25 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   const { waveData, pArrival, sArrival, sizePx = 900 } = opts;
   const { time, north, east, vertical } = waveData;
   const nAll = time.length;
-  // Misma ventana limpia que en pantalla: hasta un poco después de la S, para
-  // que la trayectoria no sea un ovillo de coda.
-  const winEnd = (sArrival > 0 && pArrival > 0)
-    ? sArrival + (sArrival - pArrival) + 2.0
-    : (time[nAll - 1] || 1);
+  // Ventana a dibujar (igual criterio que en pantalla):
+  //  - Simulación (hay P/S): hasta un poco después de la S.
+  //  - Registro REAL (sin P/S): la señal puede durar cientos de segundos; se
+  //    recorta a la VENTANA ENERGÉTICA del evento para que la trayectoria no
+  //    sea un ovillo denso ilegible.
+  let winStart = 0;
+  let winEnd: number;
+  if (sArrival > 0 && pArrival > 0) {
+    winEnd = sArrival + (sArrival - pArrival) + 2.0;
+  } else {
+    const w = computeEventWindow(waveData);
+    winStart = w.start;
+    winEnd = w.end;
+  }
+  let iStart = 0;
+  for (let i = 0; i < nAll; i++) { if (time[i] >= winStart) { iStart = i; break; } }
   let n = nAll;
   for (let i = 0; i < nAll; i++) { if (time[i] > winEnd) { n = i; break; } }
-  n = Math.max(2, n);
+  n = Math.max(iStart + 2, n);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#FAFAF8');
@@ -72,16 +84,16 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   const grid = new THREE.GridHelper(2 * AXIS, 8, 0xe0ddd9, 0xeeece9);
   scene.add(grid);
 
-  // Escala común (máximo absoluto de las tres componentes).
+  // Escala común (máximo absoluto de las tres componentes en la ventana).
   let peak = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = iStart; i < n; i++) {
     peak = Math.max(peak, Math.abs(north[i]), Math.abs(east[i]), Math.abs(vertical[i]));
   }
   const s = peak > 0 ? AXIS / peak : 1;
 
   const positions: number[] = [];
   const colors: number[] = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = iStart; i < n; i++) {
     positions.push(east[i] * s, vertical[i] * s, north[i] * s);
     const c = time[i] < pArrival ? COLOR_REST : time[i] < sArrival ? COLOR_P : COLOR_S;
     colors.push(c.r, c.g, c.b);
