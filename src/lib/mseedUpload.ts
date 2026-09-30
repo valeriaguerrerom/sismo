@@ -21,6 +21,8 @@ export interface MseedUploadResult {
   station: string;
   network: string;
   channels: Record<string, string>;
+  /** Tipo de sensor usado: 'velocimetro' o 'acelerometro'. */
+  sensor_kind: string;
   sampling_rate: number;
   starttime_utc: string;
   duration: number;
@@ -28,6 +30,12 @@ export interface MseedUploadResult {
   normalization_factor: number;
   filtro: { freqmin: number; freqmax: number } | null;
   waveData: WaveData;
+  /** true si las horizontales están orientadas a Norte/Este. */
+  orientation_confirmed: boolean;
+  /** Aviso cuando la orientación no está confirmada (1/2 sin azimut). */
+  orientation_note: string | null;
+  /** Rótulos de las horizontales (Norte/Este o Horizontal 1/2). */
+  horizontal_labels: { north: string; east: string };
 }
 
 export interface MseedUploadOptions {

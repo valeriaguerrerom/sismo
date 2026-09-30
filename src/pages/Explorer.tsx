@@ -9,6 +9,7 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth } from '../lib/auth';
 import { loadCatalog } from '../lib/catalog';
+import { getStations, Station } from '../lib/api3d';
 import { startTour } from '../tours/useTour';
 import { buildExploradorSteps } from '../tours/explorador';
 
@@ -104,20 +105,8 @@ const COLOR_INK = '#1A1A2E';
 /** Colores de las componentes, iguales que en el Simulador. */
 const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
 
-/**
- * Coordenadas aproximadas de las estaciones de la red del SGC en Nariño y su
- * entorno. Los registros CM no traen coordenadas, así que se ubican aquí para
- * el mapa de estaciones. PAS2 y TUM3C son ubicaciones APROXIMADAS.
- */
-const STATION_COORDS: Record<string, { lat: number; lon: number; name: string; approx?: boolean }> = {
-  TUM:   { lat: 1.8240, lon: -78.7460, name: 'Tumaco' },
-  TUM3C: { lat: 1.8210, lon: -78.7420, name: 'Tumaco (arreglo)', approx: true },
-  CRU:   { lat: 1.6020, lon: -76.9740, name: 'La Cruz' },
-  CUM:   { lat: 0.9060, lon: -77.8790, name: 'Cumbal' },
-  PAS2:  { lat: 1.2100, lon: -77.2810, name: 'Pasto', approx: true },
-  BBAC:  { lat: 1.4970, lon: -77.2200, name: 'Buesaco' },
-  CPOP2: { lat: 1.2470, lon: -77.2860, name: 'Pasto (sur)' },
-};
+// Las coordenadas de las estaciones vienen del backend (GET /api/stations,
+// respaldado por backend/core/stations.py). No se duplican aquí.
 
 const VOLCANIC_SUBTYPES = [
   { value: 'all', label: 'Todos' },
@@ -295,6 +284,8 @@ export function Explorer({ onLoadRealData }: Props) {
   const [galeras, setGaleras] = useState<GalerasEvent[]>([]);
   const [cm, setCm] = useState<CMEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  // Estaciones (coordenadas oficiales) desde el backend, única fuente de verdad.
+  const [stations, setStations] = useState<Station[]>([]);
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -381,6 +372,15 @@ export function Explorer({ onLoadRealData }: Props) {
     load();
   }, []);
 
+  // Coordenadas de estaciones desde el backend (core/stations.py). Si el
+  // backend no responde, el mapa tectónico queda sin marcadores pero la lista
+  // sigue funcionando.
+  useEffect(() => {
+    let alive = true;
+    getStations().then(s => { if (alive) setStations(s); }).catch(() => { /* sin mapa de estaciones */ });
+    return () => { alive = false; };
+  }, []);
+
   // Reset al cambiar fuente o filtros
   useEffect(() => {
     setPage(1);
@@ -440,20 +440,20 @@ export function Explorer({ onLoadRealData }: Props) {
         },
       ];
     }
-    // Tectónico: todas las estaciones conocidas de la red (siempre visibles).
+    // Tectónico: todas las estaciones de la red (del backend, siempre visibles).
     const recording = new Set(openCMEvent?.stations.map(s => s.station) ?? []);
-    return Object.entries(STATION_COORDS).map(([code, c]) => ({
-      id: `station-${code}`,
-      lat: c.lat,
-      lon: c.lon,
+    return stations.map(s => ({
+      id: `station-${s.code}`,
+      lat: s.latitude,
+      lon: s.longitude,
       color: COLOR_TECTONIC,
       station: true,
-      highlighted: recording.has(code),
-      badge: code,
-      label: `Estación ${code}${c.approx ? ' (ubicación aproximada)' : ''}`,
-      sublabel: recording.has(code) ? `${c.name} · registró el evento abierto` : c.name,
+      highlighted: recording.has(s.code),
+      badge: s.code,
+      label: `Estación ${s.code}${s.approx ? ' (ubicación aproximada)' : ''}`,
+      sublabel: recording.has(s.code) ? `${s.name} · registró el evento abierto` : s.name,
     }));
-  }, [source, openCMEvent]);
+  }, [source, openCMEvent, stations]);
 
   const mapArea: MapArea | null = source === 'volcanic'
     ? { lat: GALERAS_CRATER.lat, lon: GALERAS_CRATER.lon, radiusMeters: 3000, color: COLOR_VOLCANIC, label: 'Zona de origen de la sismicidad volcánica según el OVSP' }

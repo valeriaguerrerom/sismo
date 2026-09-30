@@ -94,16 +94,20 @@ function HowToGetMseed() {
               y anota su fecha, hora y magnitud.
             </li>
             <li>
-              Descarga las formas de onda de ese evento desde{' '}
+              De la estación <b>TUM</b> (Tumaco) puedes descargar las formas de onda directamente desde{' '}
               <a href="https://ds.iris.edu/wilber3/find_event" target="_blank" rel="noopener noreferrer" className="text-[#C4553A] font-semibold inline-flex items-center gap-0.5">
                 EarthScope (Wilber 3) <ExternalLink size={11} />
-              </a>. Busca el evento por su fecha y elige "MiniSEED" como formato.
+              </a>: busca el evento por su fecha y elige "MiniSEED" como formato. Es la única de nuestra
+              red que está federada ahí (lo comprobamos).
             </li>
             <li>
-              Al elegir los datos, selecciona una <b>estación de la lista</b> (TUM, TUM3C, CRU, CUM,
-              PAS2, BBAC, CPOP2 o Galeras), sus <b>tres componentes</b> (Norte, Este y Vertical) y una
-              <b> ventana de tiempo</b> que cubra el sismo (unos segundos antes de la llegada y hasta que
-              la señal se calme).
+              Las demás estaciones (TUM3C, CRU, CUM, PAS2, BBAC, CPOP2 y Galeras) no están en
+              EarthScope; sus registros se solicitan directamente al SGC.
+            </li>
+            <li>
+              Al elegir los datos, toma una <b>estación de la lista</b>, sus <b>tres componentes</b>
+              (Norte, Este y Vertical) y una <b>ventana de tiempo</b> que cubra el sismo (unos segundos
+              antes de la llegada y hasta que la señal se calme).
             </li>
             <li>Sube aquí el archivo descargado y SismoNariño lo procesa para explorarlo y simularlo.</li>
           </ol>
@@ -230,17 +234,31 @@ export function MseedUpload({ onLoadRealData }: Props) {
           <div className="space-y-3 animate-fade-in">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500">
               <span><b className="text-[#1A1A2E]">{result.network}.{result.station}</b> · {Object.values(result.channels).join(', ')}</span>
+              <span>{result.sensor_kind === 'acelerometro' ? 'Acelerómetro' : 'Velocímetro'}</span>
               <span>{result.sampling_rate} Hz</span>
               <span>{result.duration.toFixed(1)} s</span>
               <span>{result.num_samples} muestras</span>
               <span>Inicio {result.starttime_utc.replace('T', ' ').slice(0, 19)} UTC</span>
               {result.filtro && <span>Pasabanda {result.filtro.freqmin}–{result.filtro.freqmax} Hz</span>}
             </div>
+            {/* Aviso cuando las horizontales vienen como 1/2 sin azimut. */}
+            {!result.orientation_confirmed && result.orientation_note && (
+              <div className="flex items-start gap-2 text-[11px] text-[#8a6d1a] bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-lg p-2.5">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" /> {result.orientation_note}
+              </div>
+            )}
             <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
-              <WaveTrace data={result.waveData.north} label="Norte (N)" color={WAVE_COLORS.north} />
-              <WaveTrace data={result.waveData.east} label="Este (E)" color={WAVE_COLORS.east} />
+              <WaveTrace data={result.waveData.north} label={result.horizontal_labels.north} color={WAVE_COLORS.north} />
+              <WaveTrace data={result.waveData.east} label={result.horizontal_labels.east} color={WAVE_COLORS.east} />
               <WaveTrace data={result.waveData.vertical} label="Vertical (Z)" color={WAVE_COLORS.vertical} />
             </div>
+            {!result.orientation_confirmed ? (
+              // Sin orientación confirmada no se puede cargar como N/E al simulador.
+              <div className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200/60 rounded-lg p-2.5">
+                Este registro no se puede cargar en el Simulador hasta confirmar la orientación de las horizontales
+                (necesita el StationXML con el azimut de los sensores).
+              </div>
+            ) : (
             <button
               onClick={() => onLoadRealData?.(
                 result.waveData,
@@ -251,6 +269,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
             >
               <Activity size={14} /> Cargar en Simulador
             </button>
+            )}
           </div>
         )}
       </div>

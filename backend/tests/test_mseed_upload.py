@@ -9,7 +9,7 @@ from api.mseed_upload import process_mseed_bytes
 from main import app
 
 
-def _make_mseed(stations=("CUFP",), fs=100.0, seconds=20.0, comps=("Z", "N", "E")) -> bytes:
+def _make_mseed(stations=("CUFP",), fs=100.0, seconds=20.0, comps=("Z", "N", "E"), network="CM") -> bytes:
     """Genera un MiniSEED sintético en memoria con ObsPy."""
     from obspy import Stream, Trace, UTCDateTime
 
@@ -20,7 +20,7 @@ def _make_mseed(stations=("CUFP",), fs=100.0, seconds=20.0, comps=("Z", "N", "E"
         for i, comp in enumerate(comps):
             sig = np.sin(2 * np.pi * (2 + i) * t) * np.exp(-((t - 8) ** 2) / 4) * 1000 + 50
             tr = Trace(data=sig.astype(np.float32))
-            tr.stats.network = "CM"
+            tr.stats.network = network
             tr.stats.station = sta
             tr.stats.channel = f"HH{comp}"
             tr.stats.sampling_rate = fs
@@ -56,14 +56,49 @@ def test_process_mseed_selecciona_estacion_indicada():
     assert {s.station for s in res.stations} == {"CUM", "BBAC"}
 
 
-def test_process_mseed_acepta_componentes_numericas():
-    # Convención 1/2/Z (horizontales numéricas) debe reconocerse como N/E/Z.
+def test_process_mseed_componentes_alfabeticas_orientacion_confirmada():
+    # Con canales N/E/Z la orientación está confirmada (rótulos Norte/Este).
+    res = process_mseed_bytes(_make_mseed(stations=("CUM",)), "ne.mseed")
+    assert res.orientation_confirmed is True
+    assert res.orientation_note is None
+    assert res.horizontal_labels == {"north": "Norte (N)", "east": "Este (E)"}
+
+
+def test_process_mseed_componentes_numericas_no_se_rotan():
+    # Convención 1/2/Z sin azimut: se leen las tres series PERO la orientación
+    # NO se confirma: se etiquetan Horizontal 1/2 y no se presentan como N/E.
     data = _make_mseed(stations=("CUM",), comps=("Z", "1", "2"))
     res = process_mseed_bytes(data, "num.mseed")
     assert res.station == "CUM"
     wd = res.waveData
-    # Las tres series tienen datos (no quedaron en ceros).
     assert any(v != 0 for v in wd.north) and any(v != 0 for v in wd.east)
+    assert res.orientation_confirmed is False
+    assert "no se rotaron" in (res.orientation_note or "")
+    assert res.horizontal_labels == {"north": "Horizontal 1", "east": "Horizontal 2"}
+
+
+def test_process_mseed_prefiere_velocimetro_sobre_acelerometro():
+    # Estación con velocímetro (EH) y acelerómetro (HN): debe usar el velocímetro.
+    from obspy import Stream, Trace, UTCDateTime
+    import io as _io
+
+    st = Stream()
+    n = int(100 * 20)
+    t = np.arange(n) / 100.0
+    for prefix in ("EH", "HN"):
+        for comp in ("Z", "N", "E"):
+            sig = np.sin(2 * np.pi * 3 * t) * 1000
+            tr = Trace(data=sig.astype(np.float32))
+            tr.stats.network = "CM"
+            tr.stats.station = "CUM"
+            tr.stats.channel = f"{prefix}{comp}"
+            tr.stats.sampling_rate = 100.0
+            tr.stats.starttime = UTCDateTime("2024-01-01T00:00:00")
+            st += tr
+    buf = _io.BytesIO(); st.write(buf, format="MSEED")
+    res = process_mseed_bytes(buf.getvalue(), "mix.mseed")
+    assert res.sensor_kind == "velocimetro"
+    assert all(ch.startswith("EH") for ch in res.channels.values())
 
 
 def test_process_mseed_aplica_pasabanda():
@@ -96,6 +131,18 @@ def test_process_mseed_rechaza_componentes_incompletas():
         process_mseed_bytes(data, "incompleto.mseed")
     assert exc.value.status_code == 422
     assert "tres componentes" in exc.value.detail
+
+
+def test_process_mseed_rechaza_codigo_valido_en_red_incorrecta():
+    # 'CUM' es un código aceptado, pero en una red distinta a CM se rechaza:
+    # la lista blanca es por par RED.ESTACIÓN.
+    from fastapi import HTTPException
+
+    data = _make_mseed(stations=("CUM",), network="XX")
+    with pytest.raises(HTTPException) as exc:
+        process_mseed_bytes(data, "otra_red.mseed")
+    assert exc.value.status_code == 422
+    assert "no hace parte de la red de Nariño" in exc.value.detail
 
 
 def test_endpoint_upload_mseed():

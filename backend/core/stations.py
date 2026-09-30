@@ -72,27 +72,42 @@ STATIONS: list[Station] = [
 # ─────────────────────────────────────────────────────────────────────
 # Estaciones ACEPTADAS para la carga de MiniSEED por investigadores.
 # ─────────────────────────────────────────────────────────────────────
-# Además de las 7 estaciones de la red CM (arriba), se acepta CUFP, la estación
-# de banda ancha del Volcán Galeras (OVSP) con la que se procesaron los 32
-# registros volcánicos que ya están en la base. Esta es la ÚNICA lista que hay
-# que ampliar para admitir nuevas estaciones en la carga.
+# La red del SGC opera bajo el código FDSN "CM". Las 7 estaciones CM y la
+# estación del Galeras (CUFP, OVSP) comparten esa red. La lista blanca se
+# define por par RED.ESTACIÓN (p. ej. "CM.CUM") para no aceptar por accidente
+# una estación homónima de otra red. Esta es la ÚNICA lista que hay que ampliar
+# para admitir nuevas estaciones en la carga.
 GALERAS_STATION_CODE = "CUFP"
+NARINO_NETWORK = "CM"  # red FDSN del SGC (incluye CUFP del OVSP)
 
+# Pares RED.ESTACIÓN aceptados.
+ACCEPTED_NET_STA: tuple[str, ...] = tuple(
+    [f"{NARINO_NETWORK}.{s.code}" for s in STATIONS]
+    + [f"{NARINO_NETWORK}.{GALERAS_STATION_CODE}"]
+)
+
+# Solo los códigos de estación (para mensajes al usuario).
 ACCEPTED_STATION_CODES: tuple[str, ...] = tuple(
     [s.code for s in STATIONS] + [GALERAS_STATION_CODE]
 )
 
 
-def is_accepted_station(code: str) -> bool:
-    """True si la estación hace parte de la red de Nariño que usa SismoNariño.
+def is_accepted_station(code: str, network: str | None = None) -> bool:
+    """True si la estación (y su red, si se da) hace parte de la red de Nariño.
 
     Args:
         code: Código FDSN de la estación (p. ej. 'CUM', 'CUFP').
+        network: Código de red FDSN (p. ej. 'CM'). Si se omite, solo se valida
+            el código de estación (compatibilidad); si se da, debe coincidir el
+            par RED.ESTACIÓN.
 
     Returns:
-        True si está en ``ACCEPTED_STATION_CODES``.
+        True si la estación (o el par red.estación) está en la lista blanca.
     """
-    return (code or "").upper() in {c.upper() for c in ACCEPTED_STATION_CODES}
+    code_u = (code or "").upper()
+    if network:
+        return f"{network.upper()}.{code_u}" in {p.upper() for p in ACCEPTED_NET_STA}
+    return code_u in {c.upper() for c in ACCEPTED_STATION_CODES}
 
 
 def get_stations() -> list[Station]:

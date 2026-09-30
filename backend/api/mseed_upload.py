@@ -26,7 +26,11 @@ router = APIRouter(tags=["Importación"])
 
 MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_POINTS = 3000
-CHANNEL_PRIORITY = ("HH", "BH", "HN", "EH", "EL", "SH")
+# Prioridad de canal: primero VELOCÍMETROS (banda ancha HH, luego periodo corto
+# EH/SH, luego banda ancha de baja tasa BH), y solo al final ACELERÓMETROS
+# (HN/HL). Así, si una estación tiene velocímetro y acelerómetro, se usa el
+# velocímetro (respuesta más "natural" del suelo para visualizar).
+CHANNEL_PRIORITY = ("HH", "EH", "SH", "BH", "HN", "HL")
 
 # Texto de la lista de estaciones aceptadas, para los mensajes de rechazo.
 ACCEPTED_LIST_TEXT = ", ".join(ACCEPTED_STATION_CODES[:-1]) + " y Galeras"
@@ -53,6 +57,7 @@ class MseedUploadResponse(BaseModel):
     station: str = Field(description="Estación seleccionada")
     network: str
     channels: dict[str, str] = Field(description="Canal usado por componente N/E/Z")
+    sensor_kind: str = Field(description="Tipo de sensor usado: 'velocimetro' o 'acelerometro'")
     sampling_rate: float
     starttime_utc: str
     duration: float
@@ -60,6 +65,19 @@ class MseedUploadResponse(BaseModel):
     normalization_factor: float
     filtro: dict[str, float] | None
     waveData: WaveData
+    orientation_confirmed: bool = Field(
+        default=True,
+        description="True si las horizontales están orientadas a Norte/Este. "
+                    "False si vienen como 1/2 sin azimut (no se rotaron).",
+    )
+    orientation_note: str | None = Field(
+        default=None,
+        description="Aviso cuando la orientación no está confirmada.",
+    )
+    horizontal_labels: dict[str, str] = Field(
+        default_factory=lambda: {"north": "Norte (N)", "east": "Este (E)"},
+        description="Rótulos a mostrar para las dos horizontales.",
+    )
 
 
 def _decimate(values: list[float], max_points: int = MAX_POINTS) -> list[float]:
@@ -110,11 +128,12 @@ def _pick_station(stations: list[StationInfo], requested: str | None) -> Station
         match = next((s for s in stations if s.station == requested), None)
         if match is None:
             raise HTTPException(status_code=404, detail=f"La estación '{requested}' no está en el archivo.")
-        if not is_accepted_station(match.station):
+        if not is_accepted_station(match.station, match.network):
             _reject_station(match.station)
         return match
 
-    accepted = [s for s in stations if is_accepted_station(s.station)]
+    # Se valida por par RED.ESTACIÓN (p. ej. CM.CUM), no solo por el código.
+    accepted = [s for s in stations if is_accepted_station(s.station, s.network)]
     if not accepted:
         # Ninguna estación del archivo pertenece a la red de Nariño.
         _reject_station(stations[0].station if stations else "desconocida")
@@ -140,24 +159,55 @@ def _component_of(channel: str) -> str | None:
     return None
 
 
-def _pick_traces(st, station: str) -> dict[str, object]:
-    """Elige una traza por componente (N/E/Z) priorizando canales de banda ancha.
+def _sensor_kind(prefix: str) -> str:
+    """Clasifica el prefijo de canal en velocímetro o acelerómetro."""
+    return "acelerometro" if prefix.upper() in ("HN", "HL") else "velocimetro"
 
-    Reconoce tanto la nomenclatura alfabética (N/E/Z) como la numérica (1/2/Z).
+
+def _pick_traces(st, station: str) -> tuple[dict[str, object], dict[str, str], str]:
+    """Elige una traza por componente (N/E/Z) de UN SOLO sensor.
+
+    Recorre los prefijos por prioridad (velocímetros antes que acelerómetros) y
+    se queda con el PRIMER prefijo que dé las tres componentes; así no mezcla un
+    velocímetro con un acelerómetro. Reconoce la nomenclatura alfabética
+    (N/E/Z) y la numérica (1/2/Z).
+
+    Returns:
+        (traces, raw_last_char, sensor_kind):
+          traces: {'N': Trace, 'E': Trace, 'Z': Trace} (las que encontró),
+          raw_last_char: último carácter real del canal por componente
+            (para saber si las horizontales venían como 1/2),
+          sensor_kind: 'velocimetro' | 'acelerometro' del prefijo elegido.
     """
     sub = st.select(station=station)
-    chosen: dict[str, object] = {}
-    for prefix in CHANNEL_PRIORITY + ("",):
+    best: dict[str, object] = {}
+    best_raw: dict[str, str] = {}
+    best_kind = "velocimetro"
+    for prefix in CHANNEL_PRIORITY:
+        chosen: dict[str, object] = {}
+        raw: dict[str, str] = {}
         for tr in sub:
             ch = tr.stats.channel
-            if prefix and not ch.startswith(prefix):
+            if not ch.startswith(prefix):
                 continue
             comp = _component_of(ch)
             if comp and comp not in chosen:
                 chosen[comp] = tr
+                raw[comp] = ch[-1].upper()
+        # Nos quedamos con el mejor set alcanzado hasta ahora.
+        if len(chosen) > len(best):
+            best, best_raw, best_kind = chosen, raw, _sensor_kind(prefix)
         if {"Z", "N", "E"} <= set(chosen):
-            break
-    return chosen
+            return chosen, raw, _sensor_kind(prefix)
+    # Ningún prefijo dio las tres; devolvemos el mejor set parcial (para el
+    # mensaje de "faltan componentes") o, en última instancia, cualquier canal.
+    if not best:
+        for tr in sub:
+            comp = _component_of(tr.stats.channel)
+            if comp and comp not in best:
+                best[comp] = tr
+                best_raw[comp] = tr.stats.channel[-1].upper()
+    return best, best_raw, best_kind
 
 
 def process_mseed_bytes(
@@ -189,7 +239,7 @@ def process_mseed_bytes(
 
     stations = _list_stations(st)
     info = _pick_station(stations, station)  # valida que sea de la red de Nariño
-    traces = _pick_traces(st, info.station)
+    traces, raw_last, sensor_kind = _pick_traces(st, info.station)
 
     # Deben estar las TRES componentes (N, E, Z o 1, 2, Z). Si falta alguna, se
     # rechaza con el mismo estilo de mensaje que las estaciones no aceptadas.
@@ -205,6 +255,26 @@ def process_mseed_bytes(
                 f"para simular el movimiento del suelo."
             ),
         )
+
+    # ── Orientación de las horizontales ──
+    # Si las horizontales vienen como 1/2 (no N/E), su orientación real no se
+    # conoce a partir del MiniSEED (el azimut vive en el StationXML, que no se
+    # sube). ObsPy solo puede rotar 1/2→N/E si hay azimut en el inventario. Sin
+    # ese dato, NO las rotamos ni las presentamos como Norte/Este: se muestran
+    # como "Horizontal 1" y "Horizontal 2" con un aviso, y el Simulador no debe
+    # usarlas como N/E.
+    horiz_numeric = raw_last.get("N") in ("1",) or raw_last.get("E") in ("2",)
+    azimuth_available = False  # el MiniSEED subido no trae azimut de sensores
+    orientation_confirmed = not horiz_numeric or azimuth_available
+    if orientation_confirmed:
+        orientation_note = None
+        horizontal_labels = {"north": "Norte (N)", "east": "Este (E)"}
+    else:
+        orientation_note = (
+            "Orientación no confirmada; no se rotaron a norte y este. "
+            "El archivo trae componentes 1 y 2 sin azimut de los sensores."
+        )
+        horizontal_labels = {"north": "Horizontal 1", "east": "Horizontal 2"}
 
     # Alinear inicio y duración común
     start = max(tr.stats.starttime for tr in traces.values())
@@ -255,6 +325,7 @@ def process_mseed_bytes(
         station=info.station,
         network=info.network,
         channels={c: t.stats.channel for c, t in traces.items()},
+        sensor_kind=sensor_kind,
         sampling_rate=fs,
         starttime_utc=str(start),
         duration=round(float(end - start), 3),
@@ -262,6 +333,9 @@ def process_mseed_bytes(
         normalization_factor=float(peak),
         filtro=filtro,
         waveData=wave,
+        orientation_confirmed=orientation_confirmed,
+        orientation_note=orientation_note,
+        horizontal_labels=horizontal_labels,
     )
 
 
