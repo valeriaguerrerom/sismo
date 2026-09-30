@@ -68,7 +68,7 @@ export function buildSimulacionSteps({ openParam, openResult, showView, hasResul
       onHighlightStarted: () => openParam('elasticas'),
       popover: {
         title: 'Subsuelo: homogéneo o dos capas',
-        description: 'Elige "Dos capas" para poner una capa superficial blanda sobre la roca. Aparecen la reflexión en la interfaz y una sacudida más larga y amplificada en superficie. El escenario "Pasto sobre depósitos volcánicos" ya viene así.',
+        description: 'Elige "Dos capas" para poner una capa superficial blanda sobre la roca. La capa blanda amplifica el movimiento y prolonga la sacudida en superficie. El escenario "Pasto sobre depósitos volcánicos" ya viene así.',
         side: 'right',
         align: 'start',
       },

@@ -66,6 +66,19 @@ function fmtDate(d?: string | Date): string {
   return date.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' });
 }
 
+/**
+ * Primer rebote de borde = el MENOR entre el de la P y el de la S (con roca
+ * rápida la P rebota antes). Tiempo tras el cual pueden aparecer reflexiones
+ * artificiales de los límites de la malla. null si no hay datos.
+ */
+function earliestBounce(gridInfo?: { firstBounceP?: number; firstBounceS?: number }): number | null {
+  if (!gridInfo) return null;
+  const bs = [gridInfo.firstBounceP, gridInfo.firstBounceS].filter(
+    (b): b is number => typeof b === 'number' && b > 0,
+  );
+  return bs.length ? Math.min(...bs) : null;
+}
+
 function drawTrace(
   doc: jsPDF,
   x: number,
@@ -307,11 +320,11 @@ export function buildReportPdf(input: ReportInput): jsPDF {
   kv(metricRows);
   // Aviso de reflexiones si la ventana supera el primer rebote de borde.
   {
-    const bounceS = results.gridInfo?.firstBounceS;
-    if (results.isRealRecord !== true && typeof bounceS === 'number' && bounceS > 0 && results.duration > bounceS + 0.05) {
+    const bounceMin = earliestBounce(results.gridInfo);
+    if (results.isRealRecord !== true && bounceMin !== null && results.duration > bounceMin + 0.05) {
       y += 1;
       doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
-      const note = `Después de ${bounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.`;
+      const note = `Después de ${bounceMin.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.`;
       const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
       doc.text(lines, MARGIN, y);
       y += lines.length * 3.4 + 2;
@@ -361,9 +374,9 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const refMax = scaleCommon ? commonMax : undefined;
     // Tiempo del primer rebote de borde: si la ventana lo supera, se marca en
     // las trazas y se advierte que lo posterior es artificial (no en real).
-    const bounceS = results.gridInfo?.firstBounceS;
-    const reflAfter = (!real && typeof bounceS === 'number' && bounceS > 0 && results.duration > bounceS + 0.05)
-      ? bounceS : undefined;
+    const bounceMin = earliestBounce(results.gridInfo);
+    const reflAfter = (!real && bounceMin !== null && results.duration > bounceMin + 0.05)
+      ? bounceMin : undefined;
     // Encuadre "del evento" (B1): el PDF muestra el tramo del pulso, no toda la
     // duración, para que el sismograma se lea. Mismo criterio que la pantalla.
     const win = computeEventWindow(wd, real ? {} : { pArrival: results.pArrival, sArrival: results.sArrival });

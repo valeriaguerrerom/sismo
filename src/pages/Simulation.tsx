@@ -307,6 +307,21 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const simWin = fitToEvent ? simWindow : null;
   const realWin = fitToEvent ? realWindow : null;
 
+  // Primer rebote de borde = el MENOR entre el de la P y el de la S (con roca
+  // rápida, p. ej. el semiespacio de dos capas, la P rebota antes). Es el
+  // tiempo tras el cual pueden aparecer reflexiones artificiales de los bordes.
+  const firstBounce = useMemo(() => {
+    const g = result?.gridInfo;
+    if (!g) return null;
+    const bs = [g.firstBounceP, g.firstBounceS].filter(
+      (b): b is number => typeof b === 'number' && b > 0,
+    );
+    return bs.length ? Math.min(...bs) : null;
+  }, [result]);
+  // Tiempo a marcar en las trazas (solo si la ventana lo supera).
+  const reflAfter = (firstBounce !== null && result && result.duration > firstBounce)
+    ? firstBounce : undefined;
+
   // Botón compacto para alternar el encuadre de los sismogramas (B1).
   const FitToggle = () => (
     <button
@@ -551,12 +566,12 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   {/* Aviso de reflexiones de borde: solo si la ventana supera el
-                      primer rebote de la S (con el dominio grande y la duración
-                      acotada normalmente NO aparece). */}
-                  {typeof result.gridInfo.firstBounceS === 'number' && result.gridInfo.firstBounceS > 0 && result.duration > result.gridInfo.firstBounceS + 0.05 && (
+                      primer rebote (el MENOR entre P y S). Con el dominio grande
+                      y la duración acotada normalmente NO aparece. */}
+                  {firstBounce !== null && result.duration > firstBounce + 0.05 && (
                     <div className="flex items-start gap-2 bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-2.5 text-[11px] text-[#C4553A]">
                       <Info size={14} className="mt-0.5 shrink-0" />
-                      <span>Después de {result.gridInfo.firstBounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (marcadas con la línea punteada).</span>
+                      <span>Después de {firstBounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (marcadas con la línea punteada).</span>
                     </div>
                   )}
 
@@ -574,13 +589,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
+                    <WaveChart data={result.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={reflAfter} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
+                    <WaveChart data={result.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={reflAfter} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-2 border border-stone-100">
-                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={typeof result.gridInfo.firstBounceS === 'number' && result.duration > result.gridInfo.firstBounceS ? result.gridInfo.firstBounceS : undefined} windowStart={simWin?.start} windowEnd={simWin?.end} />
+                    <WaveChart data={result.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} pArrival={result.pArrival} sArrival={result.sArrival} refAmpOverride={ampScale === 'common' ? commonMaxAmplitude(result.waveData) : undefined} reflectionsAfter={reflAfter} windowStart={simWin?.start} windowEnd={simWin?.end} />
                   </div>
                 </div>
               )}

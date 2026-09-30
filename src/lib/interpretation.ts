@@ -94,5 +94,16 @@ export function interpretSimulation(input: InterpretationInput): string {
     ? 'El mecanismo isótropo (explosivo) irradia de forma uniforme y casi sin ondas de cizalla, por lo que la componente transversal es prácticamente nula: la energía se reparte entre la radial y la vertical, típico de sismicidad volcánica somera.'
     : 'El registro triaxial se arma con dos simulaciones 2D en el plano del corte: P-SV (radial y vertical) y SH (transversal), excitadas por el tensor de momento del doble par; luego la radial y la transversal se rotan a Norte y Este según el acimut de la estación, así las tres componentes son independientes.';
 
+  // Nota del modelo de dos capas: lo observable depende de dónde está la fuente
+  // respecto a la interfaz. Solo con la fuente DENTRO de la capa hay una
+  // reflexión que vuelve a la estación; con la fuente en la roca lo que domina
+  // es la amplificación de la S y una sacudida más prolongada en superficie.
+  if (params.subsurfaceModel === 'twoLayer') {
+    const layerH = params.layerThickness ?? 0.5;
+    text += ' ' + (params.depth < layerH
+      ? `Hay una capa superficial blanda de ${layerH} km sobre un semiespacio de roca: como la fuente está dentro de la capa, parte de la energía se refleja en la interfaz y regresa a la estación, y el suelo blando amplifica y prolonga la sacudida.`
+      : `Hay una capa superficial blanda de ${layerH} km sobre un semiespacio de roca, con la fuente en la roca por debajo: la capa blanda amplifica la onda S y prolonga la sacudida en superficie (reverberación en la capa). No llega una reflexión aislada de la interfaz a la estación en esta geometría.`);
+  }
+
   return text;
 }

@@ -91,7 +91,7 @@ export const SCENARIOS: Scenario[] = [
     id: 'pasto-deposito-volcanico',
     name: 'Pasto sobre depósitos volcánicos (dos capas)',
     expectation:
-      'Capa blanda de depósitos volcánicos sobre roca: aparece la reflexión en la interfaz y la sacudida en superficie dura más y se amplifica (reverberación en la capa blanda). Compárala con un modelo homogéneo.',
+      'Observa cómo la capa blanda amplifica la onda S y prolonga la sacudida después de su llegada. Compárala con un modelo homogéneo.',
     params: build({
       vp: 4000, vs: 2300, density: 2600, sourceType: 'tectonic',
       magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,

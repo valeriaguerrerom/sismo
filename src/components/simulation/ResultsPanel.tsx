@@ -229,6 +229,8 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
           dtAdjusted: result.gridInfo.dtAdjusted,
           dxAdjusted: result.gridInfo.dxAdjusted,
           epicentralDistanceKm: epicentralDistanceKm(result.gridInfo),
+          firstBounceP: result.gridInfo.firstBounceP,
+          firstBounceS: result.gridInfo.firstBounceS,
         },
         waveData: downsampleWave(realRecord ? realRecord.waveData : result.waveData, 600),
         isRealRecord: Boolean(realRecord),
@@ -313,11 +315,21 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         {(!pArrivalDetected || !sArrivalDetected) && (
           <p className="text-[10px] text-stone-500 mt-1.5 italic">* Tiempo teórico (distancia ÷ velocidad); ver detalle en el ícono de la métrica.</p>
         )}
-        {typeof gridInfo.firstBounceS === 'number' && gridInfo.firstBounceS > 0 && duration > gridInfo.firstBounceS + 0.05 && (
-          <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-            Después de {gridInfo.firstBounceS.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.
-          </p>
-        )}
+        {(() => {
+          // Rebote más temprano (menor entre P y S): con roca rápida la P
+          // rebota antes en los bordes. Es el tiempo tras el cual pueden
+          // aparecer reflexiones artificiales.
+          const bs = [gridInfo.firstBounceP, gridInfo.firstBounceS].filter(
+            (b): b is number => typeof b === 'number' && b > 0,
+          );
+          const bounce = bs.length ? Math.min(...bs) : null;
+          if (bounce === null || duration <= bounce + 0.05) return null;
+          return (
+            <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
+              Después de {bounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.
+            </p>
+          );
+        })()}
         {/* Nota si la frecuencia de la fuente se bajó por dispersión (dos capas). */}
         {sourceFreqAdjustedNote(params, dominantFrequency) && (
           <p className="text-[10px] text-[#2D6A4F] mt-1.5 bg-[#2D6A4F]/5 rounded-lg p-2 border border-[#2D6A4F]/10">

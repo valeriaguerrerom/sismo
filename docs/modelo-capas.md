@@ -43,8 +43,15 @@ depósitos volcánicos"** trae el modelo de dos capas ya configurado.
 
 ## Física observable (que no aparece en el modelo homogéneo)
 
-- **Reflexión en la interfaz**: parte de la energía rebota en el contacto entre
-  capas y vuelve a la estación. Se marca su tiempo teórico (`interfaceReflP`).
+- **Reflexión en la interfaz (según la geometría)**: solo cuando la fuente está
+  **dentro de la capa superficial** (más somera que la interfaz), la onda que
+  baja se refleja en la interfaz y **vuelve a la estación** como un arribo
+  separable. En ese caso el motor calcula su tiempo teórico (`interfaceReflP`,
+  con la velocidad de la capa) y coincide con la señal medida. Si la fuente está
+  en la roca **por debajo** de la interfaz (como en el escenario "Pasto"), esa
+  reflexión no regresa a la estación: `interfaceReflP` queda en 0 y **no se
+  marca** ninguna reflexión. Lo dominante entonces es la P transmitida y la
+  amplificación de la capa.
 - **Amplificación de sitio y reverberación**: la capa blanda atrapa el
   movimiento; la sacudida en superficie **dura más y es más fuerte** que sobre
   roca desnuda. Esta coda sale de la **física del modelo**, no de un artificio.

@@ -209,7 +209,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
           {/* ── Modelo de subsuelo: homogéneo o dos capas ── */}
           <div className="pt-2 border-t border-stone-200/60" data-tour="params-subsuelo">
-            <Tooltip content="Homogéneo: un solo material en todo el subsuelo. Dos capas: una capa superficial blanda sobre un semiespacio de roca, con una interfaz entre ambos. Con dos capas aparecen la reflexión en la interfaz y la amplificación en la capa blanda." showIcon>
+            <Tooltip content="Homogéneo: un solo material en todo el subsuelo. Dos capas: una capa superficial blanda sobre un semiespacio de roca, con una interfaz entre ambos. La capa blanda amplifica el movimiento y prolonga la sacudida en superficie." showIcon>
               <span className="text-xs font-medium text-stone-600">Subsuelo</span>
             </Tooltip>
             <div className="grid grid-cols-2 gap-2 mt-1.5">
@@ -277,9 +277,19 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
                 unit="kg/m³"
                 onChange={v => onChange({ ...params, layerDensity: v })}
               />
-              <p className="text-[10px] text-[#C4553A] leading-snug">
-                Con dos capas, en el mapa de calor verás la interfaz y una reflexión que vuelve a la estación; en superficie la sacudida dura más y se amplifica.
-              </p>
+              {/* La reflexión en la interfaz solo se observa en la estación
+                  cuando la fuente está DENTRO de la capa (profundidad menor que
+                  el espesor). Si la fuente está en la roca, bajo la interfaz, lo
+                  observable es la amplificación y la sacudida prolongada. */}
+              {params.depth < (params.layerThickness ?? 0.5) ? (
+                <p className="text-[10px] text-[#C4553A] leading-snug">
+                  La fuente está dentro de la capa: en el mapa de calor verás la interfaz y una reflexión que vuelve a la estación, además de una sacudida más larga en superficie.
+                </p>
+              ) : (
+                <p className="text-[10px] text-[#C4553A] leading-snug">
+                  La fuente está en la roca, bajo la interfaz: en superficie la onda S se amplifica y la sacudida se prolonga. La interfaz se marca en el mapa de calor.
+                </p>
+              )}
             </div>
           )}
         </div>

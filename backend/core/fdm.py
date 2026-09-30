@@ -1066,17 +1066,26 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
 
     # ── Reflexión P en la interfaz de capas (solo twoLayer) ──
     # Método de la imagen especular EN EL SEMIESPACIO (roca): la reflexión de la
-    # onda P que baja/sube y rebota en la interfaz horizontal (z = interface_z)
-    # equivale a una fuente imagen reflejada al otro lado de la interfaz. Con la
-    # fuente a zs y el receptor a zr, la imagen del receptor es zr_img =
-    # 2·interface_z − zr; la distancia fuente→imagen dividida por Vp del medio de
-    # roca da el tiempo de reflexión (+ t0 por el retardo del pulso). Esto es lo
-    # que verificamos a mano. (En la capa blanda el modo dominante observable es
-    # la reverberación vertical 2·h/Vp_capa, que también reportamos en docs.)
-    if two_layer and interface_z > 0:
+    # onda P que baja de la fuente, rebota en la interfaz horizontal
+    # (z = interface_z) y vuelve a la superficie equivale a una imagen del
+    # receptor al otro lado de la interfaz: zr_img = 2·interface_z − zr; la
+    # distancia fuente→imagen dividida por Vp de la CAPA (el rayo viaja por la
+    # capa, encima de la interfaz) más t0 da el tiempo de reflexión.
+    #
+    # IMPORTANTE (coherencia física): esta reflexión SOLO es observable en la
+    # estación cuando la fuente está DENTRO de la capa superficial (src_z <
+    # interface_z). Si la fuente está en el semiespacio, BAJO la interfaz (como
+    # en el escenario "Pasto"), la onda que sube cruza la interfaz hacia el
+    # receptor (P transmitida directa) y la parte que se refleja va hacia ABAJO,
+    # sin volver a la estación: no hay una reflexión aislada que marcar. En ese
+    # caso interface_refl_p queda en 0 y no se dibuja marcador.
+    interface_refl_observable = two_layer and interface_z > 0 and src_z < interface_z
+    if interface_refl_observable:
         zr_img = 2 * interface_z - rec_z
         refl_dist = math.hypot((rec_x - src_x) * dx, (zr_img - src_z) * dx)
-        interface_refl_p = refl_dist / vp + t0
+        # Velocidad de la capa superficial (donde viaja el rayo reflejado).
+        vp_layer = params.layerVp if two_layer else vp
+        interface_refl_p = refl_dist / vp_layer + t0
 
     # Submuestreo para limitar tamaño de respuesta
     max_points = 3000
