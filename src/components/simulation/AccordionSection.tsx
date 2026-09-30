@@ -34,9 +34,9 @@ interface AccordionSectionProps {
  *
  * Cada tarjeta ocupa el ALTO DE SU CONTENIDO (sin scroll interno propio): la
  * sección abierta crece lo que necesite y la cerrada queda solo con su
- * encabezado. `shrink-0` evita que el flex de la columna aplaste las tarjetas
- * (por eso antes los encabezados vecinos se cortaban). Si el conjunto no cabe
- * en la columna, es la COLUMNA la que scrollea suavemente, no cada tarjeta.
+ * encabezado. `shrink-0` evita que el flex de la columna aplaste las tarjetas.
+ * El scroll vive SOLO en la columna (una sola barra); la sección no scrollea
+ * por dentro, para no tener dos barras anidadas con textos largos.
  */
 export function AccordionSection({ title, icon, open, onToggle, dataTour, headerDataTour, children }: AccordionSectionProps) {
   return (
@@ -61,12 +61,12 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
           style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
         />
       </button>
-      {/* El cuerpo abierto tiene un tope de alto y scroll interno propio SOLO
-          si su contenido excede la ventana (caso extremo en pantallas muy
-          bajas). En pantallas normales no aparece; evita que scrollee toda la
-          columna y mantiene visibles los encabezados y los botones de abajo. */}
+      {/* El cuerpo abierto crece hasta el alto de su contenido, SIN scroll
+          interno propio: así no aparece una segunda barra de scroll dentro de la
+          sección (se veía mal con textos largos como la interpretación). Cuando
+          el conjunto no cabe, es la COLUMNA la que scrollea, una sola barra. */}
       {open && (
-        <div className="animate-soft-in px-4 pb-3 max-h-[calc(100dvh-230px)] overflow-y-auto scrollbar-thin">
+        <div className="animate-soft-in px-4 pb-3">
           {children}
         </div>
       )}
