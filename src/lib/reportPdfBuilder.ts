@@ -95,6 +95,7 @@ function drawTrace(
   reflectionsAfter?: number,
   winStart?: number,
   winEnd?: number,
+  robust?: boolean,
 ) {
   // Marco
   doc.setDrawColor(...COLORS.line);
@@ -115,7 +116,13 @@ function drawTrace(
   if (vMax === 0) vMax = 1;
 
   const px = (t: number) => x + ((t - tMin) / tSpan) * w;
-  const py = (v: number) => y + h / 2 - (v / vMax) * (h / 2) * 0.9;
+  // Con escala robusta (registro real), se satura para que un pico aislado no
+  // se salga del marco, igual que en pantalla (WaveChart).
+  const py = (v: number) => {
+    let s = v / vMax;
+    if (robust) s = Math.max(-1.1, Math.min(1.1, s));
+    return y + h / 2 - s * (h / 2) * 0.9;
+  };
 
   // Líneas verticales de arribo: ambas en GRIS, diferenciadas por el patrón de
   // línea (P punteada fina, S guiones largos). Las LETRAS se dibujan al final,
@@ -365,11 +372,27 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     // que la P domina en la vertical y la S en las horizontales). En 'component'
     // cada traza se normaliza contra su propio pico (refMax = undefined).
     const scaleCommon = results.ampScale !== 'component';
-    let commonMax = 0;
-    for (const arr of [wd.north, wd.east, wd.vertical]) {
-      for (const v of arr) commonMax = Math.max(commonMax, Math.abs(v));
+    // Escala común. En un REGISTRO REAL se usa una referencia ROBUSTA (percentil
+    // 99 del valor absoluto de las tres componentes), igual que la pantalla, para
+    // que un pico aislado no aplaste toda la señal (se vería plana). En una
+    // simulación se usa el máximo absoluto (no hay picos espurios).
+    let refMax: number | undefined;
+    if (scaleCommon) {
+      if (real) {
+        const absAll: number[] = [];
+        for (const arr of [wd.north, wd.east, wd.vertical]) {
+          for (const v of arr) absAll.push(Math.abs(v));
+        }
+        absAll.sort((a, b) => a - b);
+        refMax = absAll[Math.floor(absAll.length * 0.99)] || absAll[absAll.length - 1] || 1;
+      } else {
+        let commonMax = 0;
+        for (const arr of [wd.north, wd.east, wd.vertical]) {
+          for (const v of arr) commonMax = Math.max(commonMax, Math.abs(v));
+        }
+        refMax = commonMax;
+      }
     }
-    const refMax = scaleCommon ? commonMax : undefined;
     // Tiempo del primer rebote de borde: si la ventana lo supera, se marca en
     // las trazas y se advierte que lo posterior es artificial (no en real).
     const bounceMin = earliestBounce(results.gridInfo);
@@ -407,7 +430,7 @@ export function buildReportPdf(input: ReportInput): jsPDF {
       drawTrace(doc, MARGIN, y, CONTENT_W, traceH, wd.time, vals, color, label,
         real ? undefined : results.pArrival,
         real ? undefined : results.sArrival,
-        refMax, reflAfter, win.start, win.end);
+        refMax, reflAfter, win.start, win.end, real);
       y += traceH + gap;
     }
     const scaleNote = scaleCommon
