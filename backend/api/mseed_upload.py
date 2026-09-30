@@ -20,11 +20,16 @@ import math
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
+
 router = APIRouter(tags=["Importación"])
 
 MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_POINTS = 3000
 CHANNEL_PRIORITY = ("HH", "BH", "HN", "EH", "EL", "SH")
+
+# Texto de la lista de estaciones aceptadas, para los mensajes de rechazo.
+ACCEPTED_LIST_TEXT = ", ".join(ACCEPTED_STATION_CODES[:-1]) + " y Galeras"
 
 
 class StationInfo(BaseModel):
@@ -73,7 +78,7 @@ def _list_stations(st) -> list[StationInfo]:
         info["channels"].add(tr.stats.channel)
     out = []
     for (net, sta), info in sorted(by_station.items(), key=lambda kv: kv[0][1]):
-        comps = {ch[-1].upper() for ch in info["channels"]}
+        comps = {_component_of(ch) for ch in info["channels"]} - {None}
         out.append(StationInfo(
             station=sta, network=net, channels=sorted(info["channels"]),
             sampling_rate=info["fs"], triaxial={"Z", "N", "E"} <= comps,
@@ -81,18 +86,65 @@ def _list_stations(st) -> list[StationInfo]:
     return out
 
 
+def _reject_station(code: str) -> None:
+    """Lanza 422 con el mensaje estándar de estación fuera de la red de Nariño."""
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            f"Este archivo es de la estación {code}, que no hace parte de la red de "
+            f"Nariño que usa SismoNariño. Por ahora solo aceptamos registros de "
+            f"{ACCEPTED_LIST_TEXT}."
+        ),
+    )
+
+
 def _pick_station(stations: list[StationInfo], requested: str | None) -> StationInfo:
+    """Elige la estación a procesar, aceptando SOLO las de la red de Nariño.
+
+    Si se pide una estación concreta, debe existir en el archivo y estar en la
+    lista blanca. Si no se pide ninguna, se elige la primera estación ACEPTADA
+    (con preferencia por las triaxiales). Si el archivo no trae ninguna estación
+    de la red, se rechaza con un mensaje claro.
+    """
     if requested:
-        for s in stations:
-            if s.station == requested:
-                return s
-        raise HTTPException(status_code=404, detail=f"La estación '{requested}' no está en el archivo.")
-    triax = [s for s in stations if s.triaxial]
-    return triax[0] if triax else stations[0]
+        match = next((s for s in stations if s.station == requested), None)
+        if match is None:
+            raise HTTPException(status_code=404, detail=f"La estación '{requested}' no está en el archivo.")
+        if not is_accepted_station(match.station):
+            _reject_station(match.station)
+        return match
+
+    accepted = [s for s in stations if is_accepted_station(s.station)]
+    if not accepted:
+        # Ninguna estación del archivo pertenece a la red de Nariño.
+        _reject_station(stations[0].station if stations else "desconocida")
+    triax = [s for s in accepted if s.triaxial]
+    return triax[0] if triax else accepted[0]
+
+
+def _component_of(channel: str) -> str | None:
+    """Componente normalizada (N/E/Z) del último carácter del canal.
+
+    Acepta la convención alfabética (…N/…E/…Z) y la numérica (…1→N, …2→E, …3→Z)
+    que usan algunos sensores. Devuelve None si no es una componente reconocida.
+    """
+    if not channel:
+        return None
+    c = channel[-1].upper()
+    if c in ("N", "1"):
+        return "N"
+    if c in ("E", "2"):
+        return "E"
+    if c in ("Z", "3"):
+        return "Z"
+    return None
 
 
 def _pick_traces(st, station: str) -> dict[str, object]:
-    """Elige una traza por componente priorizando canales de banda ancha."""
+    """Elige una traza por componente (N/E/Z) priorizando canales de banda ancha.
+
+    Reconoce tanto la nomenclatura alfabética (N/E/Z) como la numérica (1/2/Z).
+    """
     sub = st.select(station=station)
     chosen: dict[str, object] = {}
     for prefix in CHANNEL_PRIORITY + ("",):
@@ -100,10 +152,10 @@ def _pick_traces(st, station: str) -> dict[str, object]:
             ch = tr.stats.channel
             if prefix and not ch.startswith(prefix):
                 continue
-            comp = ch[-1].upper()
-            if comp in ("Z", "N", "E") and comp not in chosen:
+            comp = _component_of(ch)
+            if comp and comp not in chosen:
                 chosen[comp] = tr
-        if "Z" in chosen and ("N" in chosen or "E" in chosen):
+        if {"Z", "N", "E"} <= set(chosen):
             break
     return chosen
 
@@ -136,10 +188,23 @@ def process_mseed_bytes(
         pass
 
     stations = _list_stations(st)
-    info = _pick_station(stations, station)
+    info = _pick_station(stations, station)  # valida que sea de la red de Nariño
     traces = _pick_traces(st, info.station)
-    if "Z" not in traces:
-        raise HTTPException(status_code=404, detail=f"La estación '{info.station}' no tiene componente vertical (Z).")
+
+    # Deben estar las TRES componentes (N, E, Z o 1, 2, Z). Si falta alguna, se
+    # rechaza con el mismo estilo de mensaje que las estaciones no aceptadas.
+    missing = [c for c in ("N", "E", "Z") if c not in traces]
+    if missing:
+        nombres = {"N": "Norte (N)", "E": "Este (E)", "Z": "Vertical (Z)"}
+        faltan = ", ".join(nombres[c] for c in missing)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"El registro de la estación {info.station} no trae las tres componentes: "
+                f"falta {faltan}. SismoNariño necesita las tres (Norte, Este y Vertical) "
+                f"para simular el movimiento del suelo."
+            ),
+        )
 
     # Alinear inicio y duración común
     start = max(tr.stats.starttime for tr in traces.values())

@@ -5,9 +5,24 @@
  * previsualizar las tres componentes y enviarlas al simulador.
  */
 import { useRef, useState, ChangeEvent } from 'react';
-import { Upload, Activity, FileAudio, RefreshCw, AlertTriangle, Info, Waves } from '../../lib/icons';
+import { Upload, Activity, FileAudio, RefreshCw, AlertTriangle, Info, Waves, ChevronRight, Download, ExternalLink } from '../../lib/icons';
 import { uploadMseed, MseedUploadResult } from '../../lib/mseedUpload';
 import type { WaveData } from '../../lib/types';
+
+/**
+ * URL del archivo MiniSEED de ejemplo (un registro tectónico corto de la
+ * estación CUM). Se sirve desde Supabase Storage (bucket público). Se puede
+ * sobreescribir con VITE_EXAMPLE_MSEED_URL; si no, se arma con la URL del
+ * proyecto Supabase + la ruta estándar del bucket 'examples'.
+ */
+const EXAMPLE_MSEED_URL: string = (() => {
+  const override = import.meta.env.VITE_EXAMPLE_MSEED_URL as string | undefined;
+  if (override) return override;
+  const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  return base
+    ? `${base}/storage/v1/object/public/examples/ejemplo_CUM_tectonico.mseed`
+    : '';
+})();
 
 interface Props {
   onLoadRealData?: (waveData: WaveData, label: string, meta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic' }) => void;
@@ -15,6 +30,9 @@ interface Props {
 
 /** Colores de las componentes, iguales que en el Simulador. */
 const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
+
+/** Estaciones aceptadas (deben coincidir con el backend core/stations.py). */
+const ACCEPTED_STATIONS = ['TUM', 'TUM3C', 'CRU', 'CUM', 'PAS2', 'BBAC', 'CPOP2', 'Galeras'];
 
 function WaveTrace({ data, label, color }: { data: number[]; label: string; color: string }) {
   if (!data || data.length === 0) return null;
@@ -37,6 +55,72 @@ function WaveTrace({ data, label, color }: { data: number[]; label: string; colo
         <line x1="0" y1={mid} x2={w} y2={mid} stroke="#e7e5e4" strokeWidth="0.5" />
         <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="1.4" />
       </svg>
+    </div>
+  );
+}
+
+/**
+ * Bloque desplegable "¿Cómo consigo un archivo MiniSEED?". Cerrado por defecto.
+ * Explica el mismo procedimiento con el que se descargaron los eventos del
+ * catálogo: ubicar el sismo en el catálogo del SGC y descargar sus formas de
+ * onda por estación desde EarthScope (Wilber 3). Incluye qué datos buscar y un
+ * botón para descargar un archivo de ejemplo.
+ */
+function HowToGetMseed() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-tour="exp-mseed-tutorial" className="bg-white rounded-xl border border-stone-200/60">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-stone-50/70 transition-colors rounded-xl"
+      >
+        <span className="text-sm font-bold text-[#1A1A2E]">¿Cómo consigo un archivo MiniSEED?</span>
+        <ChevronRight size={15} className="text-stone-400 transition-transform duration-200" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 animate-soft-in space-y-3 text-[12px] text-stone-600 leading-relaxed">
+          <p>
+            Un MiniSEED es el archivo estándar con la señal cruda de una estación. Así conseguimos
+            los registros del catálogo:
+          </p>
+          <ol className="space-y-2 list-decimal pl-4">
+            <li>
+              Ubica el sismo en el catálogo del{' '}
+              <a href="https://sismo.sgc.gov.co/" target="_blank" rel="noopener noreferrer" className="text-[#C4553A] font-semibold inline-flex items-center gap-0.5">
+                Servicio Geológico Colombiano <ExternalLink size={11} />
+              </a>{' '}
+              y anota su fecha, hora y magnitud.
+            </li>
+            <li>
+              Descarga las formas de onda de ese evento desde{' '}
+              <a href="https://ds.iris.edu/wilber3/find_event" target="_blank" rel="noopener noreferrer" className="text-[#C4553A] font-semibold inline-flex items-center gap-0.5">
+                EarthScope (Wilber 3) <ExternalLink size={11} />
+              </a>. Busca el evento por su fecha y elige "MiniSEED" como formato.
+            </li>
+            <li>
+              Al elegir los datos, selecciona una <b>estación de la lista</b> (TUM, TUM3C, CRU, CUM,
+              PAS2, BBAC, CPOP2 o Galeras), sus <b>tres componentes</b> (Norte, Este y Vertical) y una
+              <b> ventana de tiempo</b> que cubra el sismo (unos segundos antes de la llegada y hasta que
+              la señal se calme).
+            </li>
+            <li>Sube aquí el archivo descargado y SismoNariño lo procesa para explorarlo y simularlo.</li>
+          </ol>
+          {EXAMPLE_MSEED_URL && (
+            <a
+              href={EXAMPLE_MSEED_URL}
+              download
+              className="inline-flex items-center gap-2 bg-[#C4553A] text-white text-xs font-bold px-4 py-2.5 rounded-lg btn-hover"
+            >
+              <Download size={14} /> Descargar archivo de ejemplo
+            </a>
+          )}
+          <p className="text-[11px] text-stone-400">
+            El ejemplo es un registro real corto de la estación CUM (Cumbal, Nariño) de la red del SGC.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -84,7 +168,9 @@ export function MseedUpload({ onLoadRealData }: Props) {
   const fmtSize = (b: number) => b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(b / 1e3).toFixed(0)} KB`;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
+    <div className="space-y-4">
+      <HowToGetMseed />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
       <div className="bg-white rounded-xl border border-stone-200/60 p-4 space-y-4">
         {/* Zona de carga */}
         <div
@@ -104,6 +190,13 @@ export function MseedUpload({ onLoadRealData }: Props) {
             <>
               <div className="text-sm font-bold text-[#1A1A2E]">Cargar archivo MiniSEED</div>
               <div className="text-[11px] text-stone-400 mt-0.5">.mseed · hasta 50 MB · se procesa con ObsPy en el servidor, no se almacena</div>
+              <div className="text-[10px] text-stone-400 mt-2 leading-relaxed">
+                Estaciones aceptadas: {ACCEPTED_STATIONS.map((s, i) => (
+                  <span key={s}>
+                    <span className="font-semibold text-stone-500">{s}</span>{i < ACCEPTED_STATIONS.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+              </div>
             </>
           )}
         </div>
@@ -218,6 +311,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
           <Info size={12} className="flex-shrink-0 mt-0.5" />
           Se elimina la media y la tendencia lineal, y se normaliza a [−1, 1] con la misma escala en las tres componentes. El registro se dibuja submuestreado (máx. 3000 puntos) solo para la vista previa.
         </p>
+      </div>
       </div>
     </div>
   );

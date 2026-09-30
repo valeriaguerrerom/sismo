@@ -42,7 +42,7 @@ export function buildExploradorSteps({ canUpload }: ExploradorTourOptions): Tour
       popover: {
         title: '3 · Tu archivo MiniSEED',
         description:
-          'Sube tu propio registro .mseed y el sistema lo procesa para explorarlo aquí.',
+          'Sube tu propio registro .mseed de una estación de Nariño y el sistema lo procesa para explorarlo aquí.',
         side: 'bottom',
         align: 'end',
       },

@@ -49,10 +49,21 @@ def test_process_mseed_devuelve_registro_triaxial_normalizado():
 
 
 def test_process_mseed_selecciona_estacion_indicada():
-    data = _make_mseed(stations=("AAAA", "BBBB"))
-    res = process_mseed_bytes(data, "dos.mseed", station="BBBB")
-    assert res.station == "BBBB"
-    assert {s.station for s in res.stations} == {"AAAA", "BBBB"}
+    # Dos estaciones ACEPTADAS de la red de Nariño (CUM y BBAC).
+    data = _make_mseed(stations=("CUM", "BBAC"))
+    res = process_mseed_bytes(data, "dos.mseed", station="BBAC")
+    assert res.station == "BBAC"
+    assert {s.station for s in res.stations} == {"CUM", "BBAC"}
+
+
+def test_process_mseed_acepta_componentes_numericas():
+    # Convención 1/2/Z (horizontales numéricas) debe reconocerse como N/E/Z.
+    data = _make_mseed(stations=("CUM",), comps=("Z", "1", "2"))
+    res = process_mseed_bytes(data, "num.mseed")
+    assert res.station == "CUM"
+    wd = res.waveData
+    # Las tres series tienen datos (no quedaron en ceros).
+    assert any(v != 0 for v in wd.north) and any(v != 0 for v in wd.east)
 
 
 def test_process_mseed_aplica_pasabanda():
@@ -63,6 +74,28 @@ def test_process_mseed_aplica_pasabanda():
 def test_process_mseed_rechaza_basura():
     with pytest.raises(ValueError):
         process_mseed_bytes(b"esto no es miniseed", "malo.mseed")
+
+
+def test_process_mseed_rechaza_estacion_fuera_de_la_red():
+    # Estación que NO pertenece a la red de Nariño → 422 con mensaje claro.
+    from fastapi import HTTPException
+
+    data = _make_mseed(stations=("ZZZZ",))
+    with pytest.raises(HTTPException) as exc:
+        process_mseed_bytes(data, "fuera.mseed")
+    assert exc.value.status_code == 422
+    assert "no hace parte de la red de Nariño" in exc.value.detail
+
+
+def test_process_mseed_rechaza_componentes_incompletas():
+    # Estación aceptada pero sin la componente Este → 422.
+    from fastapi import HTTPException
+
+    data = _make_mseed(stations=("CUM",), comps=("Z", "N"))
+    with pytest.raises(HTTPException) as exc:
+        process_mseed_bytes(data, "incompleto.mseed")
+    assert exc.value.status_code == 422
+    assert "tres componentes" in exc.value.detail
 
 
 def test_endpoint_upload_mseed():
@@ -86,6 +119,16 @@ def test_endpoint_upload_mseed_estacion_inexistente():
         data={"station": "ZZZZ"},
     )
     assert r.status_code == 404
+
+
+def test_endpoint_upload_mseed_estacion_fuera_de_la_red():
+    client = TestClient(app)
+    r = client.post(
+        "/api/upload/mseed",
+        files={"file": ("fuera.mseed", _make_mseed(stations=("ZZZZ",)), "application/octet-stream")},
+    )
+    assert r.status_code == 422, r.text
+    assert "red de Nariño" in r.json()["detail"]
 
 
 def test_endpoint_upload_mseed_invalido():

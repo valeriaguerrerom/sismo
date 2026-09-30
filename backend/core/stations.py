@@ -69,6 +69,32 @@ STATIONS: list[Station] = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Estaciones ACEPTADAS para la carga de MiniSEED por investigadores.
+# ─────────────────────────────────────────────────────────────────────
+# Además de las 7 estaciones de la red CM (arriba), se acepta CUFP, la estación
+# de banda ancha del Volcán Galeras (OVSP) con la que se procesaron los 32
+# registros volcánicos que ya están en la base. Esta es la ÚNICA lista que hay
+# que ampliar para admitir nuevas estaciones en la carga.
+GALERAS_STATION_CODE = "CUFP"
+
+ACCEPTED_STATION_CODES: tuple[str, ...] = tuple(
+    [s.code for s in STATIONS] + [GALERAS_STATION_CODE]
+)
+
+
+def is_accepted_station(code: str) -> bool:
+    """True si la estación hace parte de la red de Nariño que usa SismoNariño.
+
+    Args:
+        code: Código FDSN de la estación (p. ej. 'CUM', 'CUFP').
+
+    Returns:
+        True si está en ``ACCEPTED_STATION_CODES``.
+    """
+    return (code or "").upper() in {c.upper() for c in ACCEPTED_STATION_CODES}
+
+
 def get_stations() -> list[Station]:
     """Devuelve la lista de estaciones del dominio de Nariño.
 
