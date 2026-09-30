@@ -168,6 +168,17 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // efecto de datos reales sin meterla en sus dependencias (evita re-lanzar).
   const runSimulationRef = useRef<(p?: SimulationParams, to3D?: boolean) => void>(() => {});
 
+  // ── Reproducción 2D (declarada antes del efecto de carga real, que la usa
+  //    para arrancar la animación automáticamente) ──
+  const [wave2dPlaying, setWave2dPlaying] = useState(false);
+  const [wave2dRatio, setWave2dRatio] = useState(1);
+  // Velocidad de reproducción por defecto 2x (B2); opciones 0.5–4x.
+  const [wave2dSpeed, setWave2dSpeed] = useState(2);
+  // Encuadre de los sismogramas (B1): "Ajustar al evento" por defecto (recorta
+  // al pulso) con opción de ver toda la duración.
+  const [fitToEvent, setFitToEvent] = useState(true);
+  const wave2dRef = useRef<number>(0);
+
   // Cargar datos reales enviados desde el Explorer.
   // Muestra el registro real (vista 2D) y lanza el FDM en segundo plano para
   // la propagación 3D. IMPORTANTE: la simulación usa los parámetros que llegan
@@ -180,6 +191,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     setRealData({ waveData: realLoad.waveData, label: realLoad.label });
     setParams({ ...defaultParams(), ...realLoad.params });
     setViewMode('2d');
+    // Arranca la REPRODUCCIÓN del sismograma real automáticamente al cargarlo
+    // (desde el inicio), igual que cuando se genera una simulación: así el
+    // registro "empieza a correr" solo, sin tener que pulsar play.
+    setWave2dRatio(0);
+    setWave2dPlaying(true);
 
     const runParams: SimulationParams = { ...defaultParams(), ...realLoad.params };
 
@@ -197,15 +213,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realLoad?.nonce]);
 
-  // 2D waveform playback
-  const [wave2dPlaying, setWave2dPlaying] = useState(false);
-  const [wave2dRatio, setWave2dRatio] = useState(1);
-  // Velocidad de reproducción por defecto 2x (B2); opciones 0.5–4x.
-  const [wave2dSpeed, setWave2dSpeed] = useState(2);
-  // Encuadre de los sismogramas (B1): "Ajustar al evento" por defecto (recorta
-  // al pulso) con opción de ver toda la duración.
-  const [fitToEvent, setFitToEvent] = useState(true);
-  const wave2dRef = useRef<number>(0);
+
 
   // Ejecuta el FDM. Acepta params explícitos (para el auto-run de datos reales,
   // que debe usar los del evento y no el estado `params` que puede ir desfasado).
