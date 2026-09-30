@@ -119,7 +119,7 @@ def test_process_mseed_rechaza_estacion_fuera_de_la_red():
     with pytest.raises(HTTPException) as exc:
         process_mseed_bytes(data, "fuera.mseed")
     assert exc.value.status_code == 422
-    assert "no hace parte de la red de Nariño" in exc.value.detail
+    assert "estaciones del proyecto en Nariño y sur del Cauca" in exc.value.detail
 
 
 def test_process_mseed_rechaza_componentes_incompletas():
@@ -142,7 +142,7 @@ def test_process_mseed_rechaza_codigo_valido_en_red_incorrecta():
     with pytest.raises(HTTPException) as exc:
         process_mseed_bytes(data, "otra_red.mseed")
     assert exc.value.status_code == 422
-    assert "no hace parte de la red de Nariño" in exc.value.detail
+    assert "estaciones del proyecto en Nariño y sur del Cauca" in exc.value.detail
 
 
 def test_endpoint_upload_mseed():
@@ -175,10 +175,23 @@ def test_endpoint_upload_mseed_estacion_fuera_de_la_red():
         files={"file": ("fuera.mseed", _make_mseed(stations=("ZZZZ",)), "application/octet-stream")},
     )
     assert r.status_code == 422, r.text
-    assert "red de Nariño" in r.json()["detail"]
+    assert "estaciones del proyecto" in r.json()["detail"]
 
 
 def test_endpoint_upload_mseed_invalido():
     client = TestClient(app)
     r = client.post("/api/upload/mseed", files={"file": ("x.mseed", b"nada", "application/octet-stream")})
     assert r.status_code == 400
+
+
+def test_endpoint_example_mseed_descarga():
+    # El backend sirve el archivo de ejemplo como descarga (Content-Disposition).
+    client = TestClient(app)
+    r = client.get("/api/examples/mseed")
+    assert r.status_code == 200, r.text
+    assert "attachment" in r.headers.get("content-disposition", "")
+    assert "ejemplo_CUM_tectonico.mseed" in r.headers.get("content-disposition", "")
+    # Debe ser un MiniSEED legible con la estación CUM.
+    from obspy import read
+    st = read(io.BytesIO(r.content))
+    assert {tr.stats.station for tr in st} == {"CUM"}

@@ -4,8 +4,8 @@ para el tutorial "¿Cómo consigo un archivo MiniSEED?" del Explorador.
 
 Toma un evento tectónico corto de la red CM, se queda solo con la estación CUM
 (Cumbal, Nariño) y sus tres componentes, y escribe un .mseed liviano. Ese
-archivo se sube luego a Supabase Storage (bucket público) y el botón
-"Descargar archivo de ejemplo" apunta a su URL pública.
+archivo se incluye en la imagen Docker del backend y se sirve en
+GET /api/examples/mseed; el botón "Descargar archivo de ejemplo" apunta ahí.
 
 Uso:
     cd backend

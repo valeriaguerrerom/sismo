@@ -10,19 +10,12 @@ import { uploadMseed, MseedUploadResult } from '../../lib/mseedUpload';
 import type { WaveData } from '../../lib/types';
 
 /**
- * URL del archivo MiniSEED de ejemplo (un registro tectónico corto de la
- * estación CUM). Se sirve desde Supabase Storage (bucket público). Se puede
- * sobreescribir con VITE_EXAMPLE_MSEED_URL; si no, se arma con la URL del
- * proyecto Supabase + la ruta estándar del bucket 'examples'.
+ * URL del archivo MiniSEED de ejemplo. Lo sirve el propio backend en
+ * GET /api/examples/mseed (el archivo va dentro de la imagen Docker), así que
+ * no depende de Supabase Storage. En desarrollo Vite hace proxy de /api a :8000;
+ * en producción se usa VITE_API_URL o el proxy de Nginx.
  */
-const EXAMPLE_MSEED_URL: string = (() => {
-  const override = import.meta.env.VITE_EXAMPLE_MSEED_URL as string | undefined;
-  if (override) return override;
-  const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  return base
-    ? `${base}/storage/v1/object/public/examples/ejemplo_CUM_tectonico.mseed`
-    : '';
-})();
+const EXAMPLE_MSEED_URL = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api/examples/mseed`;
 
 interface Props {
   onLoadRealData?: (waveData: WaveData, label: string, meta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic' }) => void;
@@ -195,7 +188,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
               <div className="text-sm font-bold text-[#1A1A2E]">Cargar archivo MiniSEED</div>
               <div className="text-[11px] text-stone-400 mt-0.5">.mseed · hasta 50 MB · se procesa con ObsPy en el servidor, no se almacena</div>
               <div className="text-[10px] text-stone-400 mt-2 leading-relaxed">
-                Estaciones aceptadas: {ACCEPTED_STATIONS.map((s, i) => (
+                Estaciones del proyecto (Nariño y sur del Cauca): {ACCEPTED_STATIONS.map((s, i) => (
                   <span key={s}>
                     <span className="font-semibold text-stone-500">{s}</span>{i < ACCEPTED_STATIONS.length - 1 ? ', ' : ''}
                   </span>

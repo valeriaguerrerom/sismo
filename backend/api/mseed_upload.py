@@ -16,11 +16,17 @@ from __future__ import annotations
 
 import io
 import math
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
+
+# Archivo MiniSEED de ejemplo servido por el backend (se incluye en la imagen
+# Docker; ver backend/Dockerfile: COPY . . y .dockerignore no excluye example_data).
+EXAMPLE_MSEED_PATH = Path(__file__).resolve().parent.parent / "example_data" / "ejemplo_CUM_tectonico.mseed"
 
 router = APIRouter(tags=["Importación"])
 
@@ -105,13 +111,13 @@ def _list_stations(st) -> list[StationInfo]:
 
 
 def _reject_station(code: str) -> None:
-    """Lanza 422 con el mensaje estándar de estación fuera de la red de Nariño."""
+    """Lanza 422 con el mensaje estándar de estación fuera del proyecto."""
     raise HTTPException(
         status_code=422,
         detail=(
-            f"Este archivo es de la estación {code}, que no hace parte de la red de "
-            f"Nariño que usa SismoNariño. Por ahora solo aceptamos registros de "
-            f"{ACCEPTED_LIST_TEXT}."
+            f"Este archivo es de la estación {code}, que no hace parte de las "
+            f"estaciones del proyecto en Nariño y sur del Cauca que usa SismoNariño. "
+            f"Por ahora solo aceptamos registros de {ACCEPTED_LIST_TEXT}."
         ),
     )
 
@@ -362,3 +368,24 @@ async def upload_mseed(
         return process_mseed_bytes(data, file.filename or "archivo.mseed", station, freqmin, freqmax)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/examples/mseed", summary="Descargar el MiniSEED de ejemplo (estación CUM)")
+def download_example_mseed():
+    """Sirve el archivo MiniSEED de ejemplo (registro real corto de CUM).
+
+    Es un registro tectónico de la estación CUM (Cumbal, Nariño) con velocímetro
+    y acelerómetro, para probar la carga. Se sirve como descarga desde el propio
+    backend (no depende de Supabase Storage).
+
+    Raises:
+        HTTPException 404: si el archivo no está en la imagen.
+    """
+    if not EXAMPLE_MSEED_PATH.exists():
+        raise HTTPException(status_code=404, detail="El archivo de ejemplo no está disponible.")
+    return FileResponse(
+        EXAMPLE_MSEED_PATH,
+        media_type="application/vnd.fdsn.mseed",
+        filename="ejemplo_CUM_tectonico.mseed",
+        content_disposition_type="attachment",
+    )

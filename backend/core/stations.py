@@ -72,11 +72,12 @@ STATIONS: list[Station] = [
 # ─────────────────────────────────────────────────────────────────────
 # Estaciones ACEPTADAS para la carga de MiniSEED por investigadores.
 # ─────────────────────────────────────────────────────────────────────
-# La red del SGC opera bajo el código FDSN "CM". Las 7 estaciones CM y la
-# estación del Galeras (CUFP, OVSP) comparten esa red. La lista blanca se
-# define por par RED.ESTACIÓN (p. ej. "CM.CUM") para no aceptar por accidente
-# una estación homónima de otra red. Esta es la ÚNICA lista que hay que ampliar
-# para admitir nuevas estaciones en la carga.
+# La red del SGC opera bajo el código FDSN "CM". Las 7 estaciones del proyecto
+# (en Nariño y el sur del Cauca — BBAC en Balboa y CPOP2 en Popayán son del
+# Cauca) y la estación del Galeras (CUFP, OVSP) comparten esa red. La lista
+# blanca se define por par RED.ESTACIÓN (p. ej. "CM.CUM") para no aceptar por
+# accidente una estación homónima de otra red. Esta es la ÚNICA lista que hay
+# que ampliar para admitir nuevas estaciones en la carga.
 GALERAS_STATION_CODE = "CUFP"
 NARINO_NETWORK = "CM"  # red FDSN del SGC (incluye CUFP del OVSP)
 
