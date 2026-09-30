@@ -50,9 +50,11 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   scene.background = new THREE.Color('#FAFAF8');
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-  // Cámara más cercana (FOV menor + menor distancia) para que la trayectoria
-  // llene el encuadre y no quede tanto margen vacío alrededor (B1).
-  camera.position.set(1.85, 1.5, 1.85);
+  // Vista casi "de frente" (poca elevación): la Vertical (Z) queda arriba, el
+  // Norte a la derecha y el Este hacia el fondo, como se prefiere para el PDF.
+  // Altura baja (y pequeño) con un ligero picado para dar relieve; el
+  // auto-encuadre posterior solo ajusta la DISTANCIA, conserva esta dirección.
+  camera.position.set(1.35, 0.55, 2.35);
   camera.lookAt(0, 0, 0);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.95));
