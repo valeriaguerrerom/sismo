@@ -354,7 +354,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   );
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] pt-16">
+    <div className="min-h-screen lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden bg-[#FAFAF8] pt-16">
       {/* Confirmación para salir del registro real hacia el laboratorio. */}
       {exitRealPrompt && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={() => setExitRealPrompt(false)}>
@@ -406,7 +406,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           {/* Columna de parámetros: sticky en desktop, sin recortar contenido.
               Con acordeón exclusivo el contenido es corto; si una sección larga
               excede la altura, hay scroll interno suave (nunca corte). */}
-          <div className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
+          <div className="lg:h-[calc(100dvh-170px)] lg:sticky lg:top-16">
             <ParametersPanel params={params} onChange={handleParamsChange} onRun={handleRunGuarded} loading={loading} locked={Boolean(realData)} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} firstBounceP={result?.gridInfo.firstBounceP ?? null} />
           </div>
 
@@ -728,7 +728,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           {/* Columna de resultados: sticky con altura acotada. El scroll vive
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
-          <div data-tour="results-panel" className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
+          <div data-tour="results-panel" className="lg:h-[calc(100dvh-170px)] lg:sticky lg:top-16">
             <ResultsPanel result={result} realRecord={realData} realParams={realParams} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
           </div>
         </div>
