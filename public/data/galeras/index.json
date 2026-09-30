@@ -8,7 +8,7 @@
       "sampling_rate": 100.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 1,
-      "normalization_factor": 7345.7466863033915,
+      "normalization_factor": 7148.6559182225365,
       "duration": 20.36,
       "num_samples": 2037,
       "components": [
@@ -30,7 +30,7 @@
       "sampling_rate": 100.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 1,
-      "normalization_factor": 5146.335536547427,
+      "normalization_factor": 4780.352984688544,
       "duration": 25.71,
       "num_samples": 2572,
       "components": [
@@ -52,7 +52,7 @@
       "sampling_rate": 20.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 5,
-      "normalization_factor": 122320.85919173609,
+      "normalization_factor": 2930.8006534431725,
       "duration": 121.95,
       "num_samples": 2440,
       "components": [
@@ -75,7 +75,7 @@
       "sampling_rate": 11.11111111111111,
       "original_sampling_rate": 100.0,
       "decimation_factor": 9,
-      "normalization_factor": 123156.66092113305,
+      "normalization_factor": 2629.1384366262464,
       "duration": 243.99,
       "num_samples": 2712,
       "components": [
@@ -98,7 +98,7 @@
       "sampling_rate": 33.333333333333336,
       "original_sampling_rate": 100.0,
       "decimation_factor": 3,
-      "normalization_factor": 120856.24300722298,
+      "normalization_factor": 5245.036348882674,
       "duration": 74.37,
       "num_samples": 2480,
       "components": [
@@ -120,7 +120,7 @@
       "sampling_rate": 3.125,
       "original_sampling_rate": 100.0,
       "decimation_factor": 32,
-      "normalization_factor": 122099.45868548597,
+      "normalization_factor": 3198.208994847658,
       "duration": 537.92,
       "num_samples": 1682,
       "components": [
@@ -142,7 +142,7 @@
       "sampling_rate": 14.285714285714286,
       "original_sampling_rate": 100.0,
       "decimation_factor": 7,
-      "normalization_factor": 122157.33670935908,
+      "normalization_factor": 3699.501588991974,
       "duration": 201.67,
       "num_samples": 2882,
       "components": [
@@ -164,7 +164,7 @@
       "sampling_rate": 14.285714285714286,
       "original_sampling_rate": 100.0,
       "decimation_factor": 7,
-      "normalization_factor": 122426.79289454973,
+      "normalization_factor": 3541.2697966479004,
       "duration": 193.27,
       "num_samples": 2762,
       "components": [
@@ -186,7 +186,7 @@
       "sampling_rate": 11.11111111111111,
       "original_sampling_rate": 100.0,
       "decimation_factor": 9,
-      "normalization_factor": 122455.96577738434,
+      "normalization_factor": 3900.3078073609227,
       "duration": 245.97,
       "num_samples": 2734,
       "components": [
@@ -209,7 +209,7 @@
       "sampling_rate": 10.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 10,
-      "normalization_factor": 122460.383030925,
+      "normalization_factor": 3507.7225987017764,
       "duration": 278.8,
       "num_samples": 2789,
       "components": [
@@ -231,7 +231,7 @@
       "sampling_rate": 20.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 5,
-      "normalization_factor": 122310.36279978073,
+      "normalization_factor": 2497.654306640352,
       "duration": 145.35,
       "num_samples": 2908,
       "components": [
@@ -253,7 +253,7 @@
       "sampling_rate": 20.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 5,
-      "normalization_factor": 122204.75176244054,
+      "normalization_factor": 2308.5959850025893,
       "duration": 120.95,
       "num_samples": 2420,
       "components": [
@@ -276,7 +276,7 @@
       "sampling_rate": 50.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 2,
-      "normalization_factor": 122137.26136643092,
+      "normalization_factor": 1747.5096710877274,
       "duration": 30.26,
       "num_samples": 1514,
       "components": [
@@ -298,7 +298,7 @@
       "sampling_rate": 50.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 2,
-      "normalization_factor": 124749.89008836723,
+      "normalization_factor": 1664.5026222475674,
       "duration": 34.08,
       "num_samples": 1705,
       "components": [
@@ -340,7 +340,7 @@
       "sampling_rate": 50.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 2,
-      "normalization_factor": 123097.03699152492,
+      "normalization_factor": 2885.9282723787483,
       "duration": 51.66,
       "num_samples": 2584,
       "components": [
@@ -362,7 +362,7 @@
       "sampling_rate": 20.0,
       "original_sampling_rate": 100.0,
       "decimation_factor": 5,
-      "normalization_factor": 122138.42572445882,
+      "normalization_factor": 1964.1704606290693,
       "duration": 122.15,
       "num_samples": 2444,
       "components": [
@@ -549,7 +549,7 @@
       "sampling_rate": 3.125,
       "original_sampling_rate": 100.0,
       "decimation_factor": 32,
-      "normalization_factor": 122305.25784967252,
+      "normalization_factor": 3479.600362561814,
       "duration": 484.8,
       "num_samples": 1516,
       "components": [
@@ -572,7 +572,7 @@
       "sampling_rate": 11.11111111111111,
       "original_sampling_rate": 100.0,
       "decimation_factor": 9,
-      "normalization_factor": 121609.57741024572,
+      "normalization_factor": 5373.286354078186,
       "duration": 257.4,
       "num_samples": 2861,
       "components": [
@@ -594,7 +594,7 @@
       "sampling_rate": 6.666666666666667,
       "original_sampling_rate": 100.0,
       "decimation_factor": 15,
-      "normalization_factor": 122504.89137901332,
+      "normalization_factor": 3147.7609858041337,
       "duration": 449.7,
       "num_samples": 2999,
       "components": [
@@ -616,7 +616,7 @@
       "sampling_rate": 8.333333333333334,
       "original_sampling_rate": 100.0,
       "decimation_factor": 12,
-      "normalization_factor": 122082.52501708797,
+      "normalization_factor": 3674.773344519339,
       "duration": 355.56,
       "num_samples": 2964,
       "components": [
@@ -638,7 +638,7 @@
       "sampling_rate": 9.090909090909092,
       "original_sampling_rate": 100.0,
       "decimation_factor": 11,
-      "normalization_factor": 161729.98643574194,
+      "normalization_factor": 3640.7825259664532,
       "duration": 305.69,
       "num_samples": 2780,
       "components": [
@@ -660,7 +660,7 @@
       "sampling_rate": 11.11111111111111,
       "original_sampling_rate": 100.0,
       "decimation_factor": 9,
-      "normalization_factor": 122620.64498871088,
+      "normalization_factor": 3090.0082335052753,
       "duration": 243.99,
       "num_samples": 2712,
       "components": [

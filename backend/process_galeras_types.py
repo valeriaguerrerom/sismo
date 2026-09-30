@@ -206,6 +206,16 @@ def process_event(folder: Path, meta: dict, max_samples: int = 3000) -> dict | N
         station_name = tr_ref.stats.station
         npts_original = tr_ref.stats.npts
 
+        # ── Acondicionamiento ANTES de diezmar (evita el transitorio de borde) ──
+        # El filtro antialias del `decimate` genera un transitorio enorme al
+        # inicio si la traza tiene tendencia/offset o bordes abruptos. Se quita
+        # con detrend lineal + un taper coseno corto en los extremos, así el
+        # diezmado no introduce un pico artificial en t≈0 (que aplastaría la
+        # señal real al normalizar).
+        for c in traces:
+            traces[c].detrend("linear")
+            traces[c].taper(max_percentage=0.02, type="cosine")
+
         # ── Diezmado con filtro antialias (mismo factor para las 3) ──
         decimation_factor = 1
         if npts_original > max_samples:
