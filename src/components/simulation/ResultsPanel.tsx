@@ -279,6 +279,19 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   }, [forceSection]);
 
   if (!result) {
+    // Con un registro real cargado, la simulación de apoyo (métricas, malla,
+    // interpretación y reporte) aún se está calculando: se avisa con el volcán
+    // cargando en vez del empty state de "3 pasos" (que no aplica aquí).
+    if (realRecord) {
+      return (
+        <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full flex flex-col items-center justify-center text-center">
+          <VolcanoLoader size={44} label="Preparando el análisis del registro…" />
+          <p className="text-[11px] text-stone-400 mt-3 max-w-xs leading-relaxed">
+            Con el registro real cargado, se calcula una simulación equivalente para las métricas, el mapa de calor y la interpretación. Tarda unos segundos; el sismograma ya se reproduce a la izquierda.
+          </p>
+        </div>
+      );
+    }
     const steps = [
       { n: 1, title: 'Elige un escenario o ajusta el subsuelo', text: 'Parte de un caso listo (sismo andino, volcánico del Galeras…) o mueve las velocidades y la densidad en "Variables elásticas".' },
       { n: 2, title: 'Revisa la fuente', text: 'Define el tipo de fuente, la magnitud, la profundidad y la distancia de la estación en "Fuente sísmica".' },
