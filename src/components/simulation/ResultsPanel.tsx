@@ -30,6 +30,10 @@ interface Props {
   ampScale?: 'common' | 'component';
   /** Grid submuestreado del corte (posiciones fuente/receptor reescaladas). */
   heatmapGrid?: GridInfo | null;
+  /** Falló la simulación de apoyo del registro real (para avisar + reintentar). */
+  bgSimError?: string | null;
+  /** Reintenta la simulación de apoyo del registro real. */
+  onRetryBackground?: () => void;
 }
 
 function exportCSV(result: SimulationResult) {
@@ -188,7 +192,7 @@ async function exportPDF(
   }, 'sismograma_narino');
 }
 
-export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid }: Props) {
+export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid, bgSimError, onRetryBackground }: Props) {
   // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
   // cierran las demás), para que siempre quepa sin scroll. Al inicio solo
   // "Métricas" está abierta.
@@ -283,6 +287,26 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
     // interpretación y reporte) aún se está calculando: se avisa con el volcán
     // cargando en vez del empty state de "3 pasos" (que no aplica aquí).
     if (realRecord) {
+      // Si la simulación de apoyo falló (backend caído, timeout…), no dejamos el
+      // volcán girando para siempre: mostramos el error y un botón para reintentar.
+      if (bgSimError) {
+        return (
+          <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full flex flex-col items-center justify-center text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
+              <Info size={22} className="text-[#C4553A]" />
+            </div>
+            <p className="text-xs text-stone-600 max-w-xs leading-relaxed mb-4">{bgSimError}</p>
+            {onRetryBackground && (
+              <button
+                onClick={onRetryBackground}
+                className="text-xs font-bold px-4 py-2 rounded-lg bg-[#C4553A] text-white btn-hover"
+              >
+                Reintentar
+              </button>
+            )}
+          </div>
+        );
+      }
       return (
         <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full flex flex-col items-center justify-center text-center">
           <VolcanoLoader size={44} label="Preparando el análisis del registro…" />

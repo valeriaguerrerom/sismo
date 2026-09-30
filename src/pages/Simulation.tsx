@@ -53,6 +53,10 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // las pestañas "Mapa de calor" y "Partícula" muestran un aviso de que se está
   // generando, en vez de quedar en blanco.
   const [bgSimRunning, setBgSimRunning] = useState(false);
+  // Falló la simulación de apoyo del registro real (backend caído, timeout…).
+  // Guardamos los params para poder reintentar sin repetir el flujo de carga.
+  const [bgSimError, setBgSimError] = useState<string | null>(null);
+  const bgSimParamsRef = useRef<SimulationParams | null>(null);
   const [progress, setProgress] = useState<SimProgress | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
@@ -232,6 +236,8 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       // Simulación de apoyo (registro real): marca que se está generando el
       // mapa de calor para avisar en esas pestañas mientras llega el resultado.
       setBgSimRunning(true);
+      setBgSimError(null);
+      bgSimParamsRef.current = runParams;
     }
 
     // El cómputo ocurre en el backend (FastAPI). Como la respuesta es una sola
@@ -273,6 +279,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
           setLoading(false);
           setProgress(null);
           setSimError('No pudimos completar la simulación. Revisa tu conexión e inténtalo de nuevo.');
+        } else {
+          // Registro real: la simulación de apoyo falló. Guardamos el error para
+          // que el panel muestre un aviso con "Reintentar" en vez de quedarse
+          // con el volcán cargando indefinidamente.
+          setBgSimError('No pudimos preparar el análisis del registro. Revisa tu conexión e inténtalo de nuevo.');
         }
       });
   }, [params]);
@@ -286,6 +297,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   const handleRun = useCallback(() => {
     runSimulation(undefined, false);
   }, [runSimulation]);
+
+  // Reintenta la simulación de apoyo del registro real tras un fallo, con los
+  // mismos parámetros que se usaron al cargarlo.
+  const retryBackgroundSim = useCallback(() => {
+    const p = bgSimParamsRef.current;
+    if (p) runSimulationRef.current(p, true);
+  }, []);
 
   // 2D waveform playback animation. Solo corre en la pestaña de sismogramas;
   // en el corte del subsuelo el reproductor del propio componente avanza el
@@ -646,6 +664,20 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 </div>
               )}
 
+              {/* La simulación de apoyo falló: en vez de dejar la pestaña en
+                  blanco, se avisa y se ofrece reintentar (mismo params). */}
+              {!loading && !result && !bgSimRunning && realData && bgSimError && (viewMode === 'triaxial' || viewMode === 'particle') && (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
+                    <Info size={22} className="text-[#C4553A]" />
+                  </div>
+                  <p className="text-stone-500 text-xs max-w-xs leading-relaxed mb-4">{bgSimError}</p>
+                  <button onClick={retryBackgroundSim} className="text-xs font-bold px-4 py-2 rounded-lg bg-[#C4553A] text-white btn-hover">
+                    Reintentar
+                  </button>
+                </div>
+              )}
+
               {!loading && result && viewMode === 'triaxial' && (
                 <TriaxialPlane
                   snapshots={result.snapshots}
@@ -669,7 +701,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               {/* Partícula: si hay registro real pero la simulación de apoyo aún
                   corre (sin result), se muestra el aviso de arriba en vez del
                   hodograma con arribos P/S en cero. */}
-              {!loading && (result || (realData && !bgSimRunning)) && viewMode === 'particle' && (() => {
+              {!loading && (result || (realData && !bgSimRunning && !bgSimError)) && viewMode === 'particle' && (() => {
                 const pmWave = realData ? realData.waveData : result!.waveData;
                 const pmLastT = pmWave.time[pmWave.time.length - 1] ?? 0;
                 return (
@@ -718,7 +750,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
           <div data-tour="results-panel" className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
-            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
+            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} bgSimError={bgSimError} onRetryBackground={retryBackgroundSim} />
           </div>
         </div>
       </div>
