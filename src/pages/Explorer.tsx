@@ -10,7 +10,6 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
 import { loadCatalog } from '../lib/catalog';
-import { sanitizeRealWave } from '../lib/realWaveSanitize';
 import { startTour } from '../tours/useTour';
 import { buildExploradorSteps } from '../tours/explorador';
 
@@ -421,9 +420,7 @@ export function Explorer({ onLoadRealData }: Props) {
     try {
       const res = await fetch(`/data/galeras/${ev.id}.json`);
       const data = await res.json();
-      // Sanea el transitorio de borde del diezmado (spike artificial en t≈0)
-      // que aplasta la señal real en algunos eventos largos reprocesados.
-      setGalerasWave(sanitizeRealWave(data.waveData));
+      setGalerasWave(data.waveData);
     } catch { /* ignore */ }
     setLoadingWave(false);
   }, [selectedId]);
@@ -442,8 +439,7 @@ export function Explorer({ onLoadRealData }: Props) {
     try {
       const res = await fetch(`/data/cm/${ev.id}/${st.station}.json`);
       const data: CMStationData = await res.json();
-      // Sanea el transitorio de borde del diezmado si lo hubiera.
-      setCmWave({ ...data, waveData: sanitizeRealWave(data.waveData) });
+      setCmWave(data);
     } catch { /* ignore */ }
     setLoadingCMWave(false);
   }, []);
