@@ -6,6 +6,14 @@ interface TooltipProps {
   content: string;
   children?: ReactNode;
   showIcon?: boolean;
+  /**
+   * Solo hover (escritorio): el clic NO fija el tooltip. Úsalo cuando el
+   * Tooltip envuelve un control con su propia acción (p. ej. las pestañas de la
+   * Visualización): al hacer clic, el tooltip se oculta y la acción del control
+   * corre normal, en vez de quedar "pegado". Sin esta bandera, el texto sin
+   * ícono se puede tocar para fijar el tooltip (útil en táctil).
+   */
+  hoverOnly?: boolean;
 }
 
 /** Ancho fijo del tooltip (px). Se usa para clampear con precisión al viewport. */
@@ -19,7 +27,7 @@ const TIP_WIDTH = 224; // 14rem
  * Se recalcula la posición al hacer scroll o redimensionar, y se ajusta (clamp)
  * al ancho de la ventana para que nunca se corte por ningún borde.
  */
-export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
+export function Tooltip({ content, children, showIcon = false, hoverOnly = false }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   // En táctil no hay hover: el tooltip se fija con un toque y se cierra tocando
   // fuera o tocando de nuevo. `pinned` distingue ese modo del hover de escritorio.
@@ -79,12 +87,16 @@ export function Tooltip({ content, children, showIcon = false }: TooltipProps) {
       onMouseEnter={() => setVisible(true)}
       onMouseLeave={() => { if (!pinned) setVisible(false); }}
     >
-      {/* Cuando NO hay ícono, el contenido suele ser solo texto informativo: se
-          hace tocable directamente, SIN stopPropagation (no hay acción que
-          bloquear, y si el texto está dentro de un botón, el clic fluye a él).
-          Cuando hay ícono, el texto/control se deja intacto. */}
+      {/* Sin ícono: por defecto el texto se puede tocar para fijar el tooltip
+          (útil en táctil). Con `hoverOnly` (el Tooltip envuelve un control con
+          su propia acción, p. ej. las pestañas) el clic NO fija el tooltip: lo
+          oculta y deja fluir la acción del control, para que no quede "pegado".
+          Con ícono, el texto/control se deja intacto. */}
       {showIcon ? children : (
-        <span className="cursor-help" onClick={() => toggle()}>
+        <span
+          className="cursor-help"
+          onClick={() => { if (hoverOnly) { setPinned(false); setVisible(false); } else { toggle(); } }}
+        >
           {children}
         </span>
       )}

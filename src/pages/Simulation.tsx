@@ -443,7 +443,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       viewMode === '2d' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                     }`}
                   >
-                    <Waves size={13} /> <Tooltip content="Sismogramas triaxiales (Norte, Este, Vertical)">Sismogramas</Tooltip>
+                    <Waves size={13} /> <Tooltip content="Sismogramas triaxiales (Norte, Este, Vertical)" hoverOnly>Sismogramas</Tooltip>
                   </button>
                   {/* El mapa de calor y el movimiento de partícula solo aplican
                       a una simulación del laboratorio. Con un registro real
@@ -457,7 +457,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                           viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                         }`}
                       >
-                        <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)">Mapa de calor</Tooltip>
+                        <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)" hoverOnly>Mapa de calor</Tooltip>
                       </button>
                       <button
                         data-tour="tab-particle"
@@ -466,7 +466,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                           viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
                         }`}
                       >
-                        <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)">Partícula</Tooltip>
+                        <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)" hoverOnly>Partícula</Tooltip>
                       </button>
                     </>
                   )}
