@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Circle, Popup, Tooltip as LeafletTooltip, useMap } from 'react-leaflet';
 import type { LatLngExpression, LatLngBoundsExpression } from 'leaflet';
 
-/** Punto de evento a dibujar en el mapa. */
+/** Punto (evento o estación) a dibujar en el mapa. */
 export interface MapPoint {
   id: string;
   lat: number;
@@ -10,6 +10,21 @@ export interface MapPoint {
   label: string;
   sublabel?: string;
   color: string;
+  /** Marcador de estación (cuadrado/anillo) en vez de círculo de evento. */
+  station?: boolean;
+  /** Estación resaltada (registró el evento abierto). */
+  highlighted?: boolean;
+  /** Etiqueta corta fija junto al marcador (p. ej. la sigla de la estación). */
+  badge?: string;
+}
+
+/** Área sombreada (zona de origen) con centro, radio en metros y leyenda. */
+export interface MapArea {
+  lat: number;
+  lon: number;
+  radiusMeters: number;
+  color: string;
+  label?: string;
 }
 
 interface Props {
@@ -21,6 +36,8 @@ interface Props {
   zoom: number;
   /** Límites opcionales para encuadrar todos los puntos. */
   bounds?: LatLngBoundsExpression | null;
+  /** Área sombreada opcional (zona de origen de la sismicidad). */
+  area?: MapArea | null;
 }
 
 /** Reencuadra el mapa cuando cambian el centro/zoom o los límites. */
@@ -32,7 +49,7 @@ function MapController({ center, zoom, bounds }: { center: LatLngExpression; zoo
     // desmontaje y tocar nodos internos ya destruidos (_leaflet_pos → crash).
     try {
       if (bounds) {
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 11, animate: false });
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12, animate: false });
       } else {
         map.setView(center, zoom, { animate: false });
       }
@@ -51,11 +68,12 @@ function MapController({ center, zoom, bounds }: { center: LatLngExpression; zoo
 }
 
 /**
- * Mapa de epicentros basado en Leaflet + OpenStreetMap.
- * Dibuja un CircleMarker por evento, resalta el seleccionado y permite
- * seleccionar haciendo clic en el marcador.
+ * Mapa basado en Leaflet + OpenStreetMap. Dibuja:
+ *  - un área sombreada opcional (zona de origen de la sismicidad volcánica),
+ *  - marcadores de eventos o de estaciones (con resaltado y sigla),
+ * y permite seleccionar haciendo clic en un marcador.
  */
-export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds }: Props) {
+export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds, area }: Props) {
   // Evita re-render innecesario de los marcadores
   const markers = useMemo(() => points, [points]);
 
@@ -73,8 +91,54 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds 
       />
       <MapController center={center} zoom={zoom} bounds={bounds} />
 
+      {/* Zona de origen sombreada (p. ej. área de la sismicidad del Galeras). */}
+      {area && (
+        <Circle
+          center={[area.lat, area.lon]}
+          radius={area.radiusMeters}
+          pathOptions={{ color: area.color, weight: 1.5, fillColor: area.color, fillOpacity: 0.12, dashArray: '4 4' }}
+        >
+          {area.label && (
+            <Popup>
+              <div style={{ fontSize: 12 }}>{area.label}</div>
+            </Popup>
+          )}
+        </Circle>
+      )}
+
       {markers.map(p => {
         const isSelected = p.id === selectedId;
+        if (p.station) {
+          // Estación: anillo con relleno tenue; resaltado si registró el evento.
+          const active = p.highlighted || isSelected;
+          return (
+            <CircleMarker
+              key={p.id}
+              center={[p.lat, p.lon]}
+              radius={active ? 9 : 6}
+              pathOptions={{
+                color: p.color,
+                weight: active ? 3 : 2,
+                fillColor: '#ffffff',
+                fillOpacity: active ? 0.95 : 0.7,
+              }}
+              eventHandlers={{ click: () => onSelect?.(p.id) }}
+            >
+              {p.badge && (
+                <LeafletTooltip permanent direction="top" offset={[0, -6]} className="sismo-station-badge">
+                  {p.badge}
+                </LeafletTooltip>
+              )}
+              <Popup>
+                <div style={{ fontSize: 12 }}>
+                  <strong>{p.label}</strong>
+                  {p.sublabel && <div style={{ color: '#78716c' }}>{p.sublabel}</div>}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        }
+        // Evento (o cráter): círculo relleno.
         return (
           <CircleMarker
             key={p.id}
@@ -84,10 +148,15 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds 
               color: '#ffffff',
               weight: isSelected ? 3 : 1.5,
               fillColor: p.color,
-              fillOpacity: isSelected ? 1 : 0.75,
+              fillOpacity: isSelected ? 1 : 0.85,
             }}
             eventHandlers={{ click: () => onSelect?.(p.id) }}
           >
+            {p.badge && (
+              <LeafletTooltip permanent direction="top" offset={[0, -6]} className="sismo-station-badge">
+                {p.badge}
+              </LeafletTooltip>
+            )}
             <Popup>
               <div style={{ fontSize: 12 }}>
                 <strong>{p.label}</strong>

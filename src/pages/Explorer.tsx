@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Badge } from '../components/ui/Badge';
-import { SeismicMap, MapPoint } from '../components/explorer/SeismicMap';
+import { SeismicMap, MapPoint, MapArea } from '../components/explorer/SeismicMap';
 import {
   Database, MapPin, Search, Waves, Flame, Clock, Activity, Radio,
   X, ChevronLeft, ChevronRight, Mountain, Upload, HelpCircle,
@@ -8,7 +7,7 @@ import {
 import { MseedUpload } from '../components/explorer/MseedUpload';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
-import { useAuth, ROLE_LABELS } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import { loadCatalog } from '../lib/catalog';
 import { startTour } from '../tours/useTour';
 import { buildExploradorSteps } from '../tours/explorador';
@@ -32,6 +31,7 @@ interface GalerasEvent {
   event_date: string;
   event_time: string;
   station: string;
+  /** Frecuencia de muestreo ORIGINAL del equipo (Hz). */
   sampling_rate: number;
   duration: number;
   num_samples: number;
@@ -55,13 +55,13 @@ interface CMStation {
   location: string;
   instrument_type: string;
   physical_quantity: string;
+  /** Frecuencia decimada (para dibujar). */
   sampling_rate: number;
+  /** Frecuencia ORIGINAL del equipo (Hz), tomada de la cabecera MiniSEED. */
+  original_sampling_rate?: number;
   duration: number;
   num_samples: number;
   had_gaps: boolean;
-  latitude?: number;
-  longitude?: number;
-  approx_location?: boolean;
 }
 
 interface CMEvent {
@@ -81,6 +81,7 @@ interface CMStationData {
   instrument_type: string;
   physical_quantity: string;
   sampling_rate: number;
+  original_sampling_rate?: number;
   duration: number;
   waveData: WaveSeries;
 }
@@ -91,59 +92,93 @@ interface CMStationData {
 
 const PAGE_SIZE = 8;
 
-const GALERAS_COORDS = { lat: 1.2216, lon: -77.3742 };
+/** Cráter del Volcán Galeras (fuente OVSP). */
+const GALERAS_CRATER = { lat: 1.2288, lon: -77.3592 };
+/** Estación que registró los eventos volcánicos del Galeras. */
+const GALERAS_STATION = { code: 'CUFP', lat: 1.2200, lon: -77.3480 };
+
 const COLOR_VOLCANIC = '#C4553A';
 const COLOR_TECTONIC = '#2D6A4F';
+const COLOR_INK = '#1A1A2E';
+
+/** Colores de las componentes, iguales que en el Simulador. */
+const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
+
+/**
+ * Coordenadas aproximadas de las estaciones de la red del SGC en Nariño y su
+ * entorno. Los registros CM no traen coordenadas, así que se ubican aquí para
+ * el mapa de estaciones. PAS2 y TUM3C son ubicaciones APROXIMADAS.
+ */
+const STATION_COORDS: Record<string, { lat: number; lon: number; name: string; approx?: boolean }> = {
+  TUM:   { lat: 1.8240, lon: -78.7460, name: 'Tumaco' },
+  TUM3C: { lat: 1.8210, lon: -78.7420, name: 'Tumaco (arreglo)', approx: true },
+  CRU:   { lat: 1.6020, lon: -76.9740, name: 'La Cruz' },
+  CUM:   { lat: 0.9060, lon: -77.8790, name: 'Cumbal' },
+  PAS2:  { lat: 1.2100, lon: -77.2810, name: 'Pasto', approx: true },
+  BBAC:  { lat: 1.4970, lon: -77.2200, name: 'Buesaco' },
+  CPOP2: { lat: 1.2470, lon: -77.2860, name: 'Pasto (sur)' },
+};
 
 const VOLCANIC_SUBTYPES = [
-  { value: 'all', label: 'Todos', short: 'Todos' },
-  { value: 'lp', label: 'Largo Período', short: 'LP' },
-  { value: 'to', label: 'Tornillo', short: 'Tornillo' },
-  { value: 'tr', label: 'Tremor', short: 'Tremor' },
-  { value: 'va', label: 'Volcano-Tectónico', short: 'VT' },
+  { value: 'all', label: 'Todos' },
+  { value: 'lp', label: 'Largo período' },
+  { value: 'to', label: 'Tornillo' },
+  { value: 'tr', label: 'Tremor' },
+  { value: 'va', label: 'Volcano-tectónico' },
+  { value: 'none', label: 'Sin clasificar' },
 ];
 
 const CM_REGIONS = ['all', 'Colombia', 'Ecuador'] as const;
 
-/** Etiqueta legible por código de subtipo volcánico. */
+/** Etiqueta legible (sentence case) por código de subtipo volcánico. */
 const SUBTYPE_LABELS: Record<string, string> = {
-  lp: 'Largo Período', to: 'Tornillo', tr: 'Tremor', va: 'Volcano-Tectónico',
+  lp: 'Largo período', to: 'Tornillo', tr: 'Tremor', va: 'Volcano-tectónico',
 };
 
-/**
- * Desplaza ligeramente los puntos que comparten coordenada exacta (el cráter
- * del Galeras) para que los marcadores no se apilen. Determinístico por índice.
- */
-function jitter(lat: number, lon: number, index: number): [number, number] {
-  const angle = (index * 137.5 * Math.PI) / 180; // ángulo áureo
-  const r = 0.012 * Math.sqrt(index + 1);
-  return [lat + r * Math.cos(angle), lon + r * Math.sin(angle)];
+/** Nombre del instrumento en español, con tildes, según el tipo de la cabecera. */
+function instrumentLabelEs(raw: string): string {
+  const s = (raw || '').toLowerCase();
+  if (s.includes('broadband') || s.includes('banda ancha')) return 'Velocímetro de banda ancha';
+  if (s.includes('short') || s.includes('periodo corto') || s.includes('período corto')) return 'Velocímetro de periodo corto';
+  if (s.includes('strong') || s.includes('acele')) return 'Acelerómetro de movimiento fuerte';
+  return raw;
+}
+
+/** Magnitud física medida por la componente, en español. */
+function physicalQuantityEs(raw: string): string {
+  const s = (raw || '').toLowerCase();
+  if (s.includes('acel')) return 'aceleración';
+  if (s.includes('veloc')) return 'velocidad';
+  return raw || 'movimiento';
+}
+
+/** Formatea una duración con un decimal y espacio: "122.9 s". */
+function fmtDuration(sec: number): string {
+  return `${sec.toFixed(1)} s`;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════
 
-/** Mini sismograma SVG para una componente. */
+/**
+ * Mini sismograma SVG de una componente. Dibuja la envolvente min/max sobre
+ * TODAS las muestras (no diezma la señal; el submuestreo a 3000 solo aplica al
+ * guardar el JSON). Amplitud normalizada de forma robusta (percentil 99).
+ */
 function WaveTrace({ data, label, color }: { data: number[]; label: string; color: string }) {
   if (!data || data.length === 0) return null;
   const w = 800, h = 70, mid = h / 2;
 
-  // Amplitud de referencia robusta: en vez del pico global (que aplasta la
-  // señal cuando hay un arribo dominante), usamos un percentil alto (p99).
-  // Así la energía "normal" del sismograma se ve, no solo el pico.
   const absVals = data.map(Math.abs).sort((a, b) => a - b);
   const p99 = absVals[Math.floor(absVals.length * 0.99)] || absVals[absVals.length - 1] || 1;
   const ref = p99 < 1e-10 ? 1 : p99;
   const amp = (v: number) => {
-    // Escala por p99 y satura suavemente para que el pico no se salga.
     const s = v / ref;
     const clamped = Math.max(-1.15, Math.min(1.15, s));
     return mid - clamped * (mid - 4);
   };
 
-  // Envelope min/max por columna de píxel: recorre TODAS las muestras y por
-  // cada columna dibuja el rango [min, max] de las muestras que caen ahí.
   const n = data.length;
   const topPts: string[] = [];
   const botPts: string[] = [];
@@ -160,7 +195,6 @@ function WaveTrace({ data, label, color }: { data: number[]; label: string; colo
     topPts.push(`${x},${amp(hi).toFixed(1)}`);
     botPts.push(`${x},${amp(lo).toFixed(1)}`);
   }
-  // Área rellena entre el máximo y el mínimo (aspecto de sismograma real).
   const areaPath = `M ${topPts.join(' L ')} L ${botPts.reverse().join(' L ')} Z`;
 
   return (
@@ -173,6 +207,30 @@ function WaveTrace({ data, label, color }: { data: number[]; label: string; colo
         <line x1="0" y1={mid} x2={w} y2={mid} stroke="#e7e5e4" strokeWidth="0.5" />
         <path d={areaPath} fill={color} fillOpacity="0.85" stroke={color} strokeWidth="0.4" />
       </svg>
+    </div>
+  );
+}
+
+/**
+ * Grupo de las tres componentes (Norte, Este, Vertical) con un eje de tiempo en
+ * segundos COMPARTIDO abajo y la magnitud física normalizada en el título. Los
+ * colores coinciden con el Simulador (Norte terracota, Este verde, Vertical ocre).
+ */
+function TriaxialPreview({ wave, duration, physical }: { wave: WaveSeries; duration: number; physical: string }) {
+  // Marcas del eje de tiempo (0, ¼, ½, ¾, fin) en segundos.
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => (f * duration));
+  return (
+    <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
+      <p className="text-[10px] text-stone-500">
+        Movimiento del suelo ({physicalQuantityEs(physical)}, normalizado). Ejes: Norte, Este y Vertical a la misma escala.
+      </p>
+      <WaveTrace data={wave.north} label="Norte (N)" color={WAVE_COLORS.north} />
+      <WaveTrace data={wave.east} label="Este (E)" color={WAVE_COLORS.east} />
+      <WaveTrace data={wave.vertical} label="Vertical (Z)" color={WAVE_COLORS.vertical} />
+      {/* Eje de tiempo compartido por las tres trazas. */}
+      <div className="flex justify-between text-[9px] text-stone-400 px-0.5 pt-0.5">
+        {ticks.map((t, i) => <span key={i}>{t.toFixed(1)} s</span>)}
+      </div>
     </div>
   );
 }
@@ -222,7 +280,6 @@ export function Explorer({ onLoadRealData }: Props) {
     startTour(buildExploradorSteps({ canUpload: Boolean(user) }), { onDone: () => markTourSeen('explorador') });
   }, [markTourSeen, user]);
 
-  // Lanza el tour la primera vez que el usuario entra al módulo.
   useEffect(() => {
     if (tourRef.current || !user) return;
     if (user.tours_vistos?.explorador) return;
@@ -257,12 +314,9 @@ export function Explorer({ onLoadRealData }: Props) {
   const [page, setPage] = useState(1);
 
   // ─── Carga de datos ───
-  // La LISTA de eventos viene del catálogo (tabla seismic_events de Supabase).
-  // El DETALLE de estaciones de cada evento CM se toma de los JSON por event_id.
   useEffect(() => {
     async function load() {
       setLoading(true);
-      // Catálogo = fuente de verdad de qué eventos existen (Supabase).
       const catalog = await loadCatalog();
 
       // Detalle de estaciones por evento CM (desde el índice JSON, por id).
@@ -272,14 +326,14 @@ export function Explorer({ onLoadRealData }: Props) {
         for (const e of cmIndex.events ?? []) stationsByEvent[e.id] = e.stations ?? [];
       } catch { stationsByEvent = {}; }
 
-      // Metadatos de forma de onda por evento Galeras (duración, muestras, Hz).
-      // El catálogo de Supabase no los guarda, así que se toman del índice JSON.
+      // Metadatos de forma de onda por evento Galeras (Hz original, duración…).
       const galMetaById: Record<string, { sampling_rate: number; duration: number; num_samples: number; station: string; components: string[] }> = {};
       try {
         const galIndex = await fetch('/data/galeras/index.json').then(r => r.json());
         for (const e of galIndex.events ?? []) {
           galMetaById[e.id] = {
-            sampling_rate: e.sampling_rate ?? 0,
+            // Frecuencia ORIGINAL del equipo (no la diezmada para dibujar).
+            sampling_rate: e.original_sampling_rate ?? e.sampling_rate ?? 0,
             duration: e.duration ?? 0,
             num_samples: e.num_samples ?? 0,
             station: e.station ?? 'CUFP',
@@ -288,7 +342,6 @@ export function Explorer({ onLoadRealData }: Props) {
         }
       } catch { /* sin índice: quedan en 0 */ }
 
-      // Mapear filas del catálogo a las estructuras que ya usa el Explorer.
       const gal: GalerasEvent[] = catalog
         .filter(r => r.event_type === 'volcanic')
         .map(r => {
@@ -340,7 +393,8 @@ export function Explorer({ onLoadRealData }: Props) {
   // ─── Filtrado ───
   const filteredGaleras = useMemo(() => {
     let g = [...galeras];
-    if (subtype !== 'all') g = g.filter(e => e.volcanic_subtype === subtype);
+    if (subtype === 'none') g = g.filter(e => !e.volcanic_subtype);
+    else if (subtype !== 'all') g = g.filter(e => e.volcanic_subtype === subtype);
     if (search) {
       const q = search.toLowerCase();
       g = g.filter(e => e.location_name?.toLowerCase().includes(q) || e.station?.toLowerCase().includes(q) || e.event_date.includes(q));
@@ -362,49 +416,59 @@ export function Explorer({ onLoadRealData }: Props) {
   const activeList = source === 'volcanic' ? filteredGaleras : filteredCM;
   const pageItems = activeList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // ─── Puntos del mapa ───
-  // Volcánico: un punto por evento (disperso alrededor del cráter).
-  // Tectónico: un punto por ESTACIÓN única que registró los eventos filtrados.
+  // Evento CM abierto (para resaltar sus estaciones en el mapa).
+  const openCMEvent = useMemo(
+    () => (source === 'tectonic' ? filteredCM.find(e => e.id === selectedId) ?? null : null),
+    [source, filteredCM, selectedId],
+  );
+
+  // ─── Puntos y área del mapa ───
+  // Volcánico: cráter + estación registradora (sin epicentros individuales).
+  // Tectónico: las 7 estaciones de la red; se resaltan las del evento abierto.
   const mapPoints: MapPoint[] = useMemo(() => {
     if (source === 'volcanic') {
-      return filteredGaleras.map((e, i) => {
-        const [lat, lon] = jitter(GALERAS_COORDS.lat, GALERAS_COORDS.lon, i);
-        return {
-          id: e.id, lat, lon, color: COLOR_VOLCANIC,
-          label: `${e.volcanic_subtype_label ?? 'Volcánico'} — ${e.event_date}`,
-          sublabel: `${e.event_time} UTC · Est. ${e.station}`,
-        };
-      });
+      return [
+        {
+          id: 'crater', lat: GALERAS_CRATER.lat, lon: GALERAS_CRATER.lon, color: COLOR_VOLCANIC,
+          label: 'Cráter del Volcán Galeras', sublabel: 'Zona de origen de la sismicidad volcánica (OVSP)',
+          badge: 'Galeras',
+        },
+        {
+          id: `station-${GALERAS_STATION.code}`, lat: GALERAS_STATION.lat, lon: GALERAS_STATION.lon, color: COLOR_INK,
+          label: `Estación ${GALERAS_STATION.code}`, sublabel: 'Estación que registró los eventos',
+          station: true, badge: GALERAS_STATION.code,
+        },
+      ];
     }
-    // Agrupar estaciones únicas y contar cuántos eventos registró cada una
-    const byStation = new Map<string, { st: CMStation; count: number }>();
-    for (const ev of filteredCM) {
-      for (const st of ev.stations) {
-        if (st.latitude == null || st.longitude == null) continue;
-        const entry = byStation.get(st.station);
-        if (entry) entry.count++;
-        else byStation.set(st.station, { st, count: 1 });
-      }
-    }
-    return Array.from(byStation.values()).map(({ st, count }) => ({
-      id: `station-${st.station}`,
-      lat: st.latitude!,
-      lon: st.longitude!,
+    // Tectónico: todas las estaciones conocidas de la red (siempre visibles).
+    const recording = new Set(openCMEvent?.stations.map(s => s.station) ?? []);
+    return Object.entries(STATION_COORDS).map(([code, c]) => ({
+      id: `station-${code}`,
+      lat: c.lat,
+      lon: c.lon,
       color: COLOR_TECTONIC,
-      label: `Estación ${st.station}${st.approx_location ? ' (aprox.)' : ''}`,
-      sublabel: `${st.location} · ${count} evento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''}`,
+      station: true,
+      highlighted: recording.has(code),
+      badge: code,
+      label: `Estación ${code}${c.approx ? ' (ubicación aproximada)' : ''}`,
+      sublabel: recording.has(code) ? `${c.name} · registró el evento abierto` : c.name,
     }));
-  }, [source, filteredGaleras, filteredCM]);
+  }, [source, openCMEvent]);
+
+  const mapArea: MapArea | null = source === 'volcanic'
+    ? { lat: GALERAS_CRATER.lat, lon: GALERAS_CRATER.lon, radiusMeters: 3000, color: COLOR_VOLCANIC, label: 'Zona de origen de la sismicidad volcánica según el OVSP' }
+    : null;
 
   const mapView = source === 'volcanic'
-    ? { center: [GALERAS_COORDS.lat, GALERAS_COORDS.lon] as [number, number], zoom: 12 }
-    : { center: [1.5, -77.5] as [number, number], zoom: 7 };
+    ? { center: [GALERAS_CRATER.lat, GALERAS_CRATER.lon] as [number, number], zoom: 13 }
+    : { center: [1.35, -77.7] as [number, number], zoom: 7 };
 
-  // En tectónico, encuadrar todas las estaciones visibles.
+  // Tectónico: encuadrar todas las estaciones conocidas.
   const mapBounds = useMemo(() => {
-    if (source !== 'tectonic' || mapPoints.length === 0) return null;
+    if (source !== 'tectonic') return null;
     const lats = mapPoints.map(p => p.lat);
     const lons = mapPoints.map(p => p.lon);
+    if (!lats.length) return null;
     return [
       [Math.min(...lats), Math.min(...lons)],
       [Math.max(...lats), Math.max(...lons)],
@@ -445,23 +509,24 @@ export function Explorer({ onLoadRealData }: Props) {
   }, []);
 
   const handleMapSelect = useCallback((id: string) => {
-    // En tectónico los marcadores son estaciones (id 'station-XX'): solo informativos.
-    if (source === 'tectonic') return;
+    // En volcánico solo hay cráter/estación (informativos). En tectónico, las
+    // estaciones son informativas también: la selección se hace desde la lista.
+    if (id === 'crater' || id.startsWith('station-')) return;
     const idx = filteredGaleras.findIndex(e => e.id === id);
     if (idx >= 0) setPage(Math.floor(idx / PAGE_SIZE) + 1);
     const ev = filteredGaleras.find(e => e.id === id);
     if (ev) loadGalerasWave(ev);
-  }, [source, filteredGaleras, loadGalerasWave]);
+  }, [filteredGaleras, loadGalerasWave]);
 
   const clearFilters = () => { setSearch(''); setSubtype('all'); setRegion('all'); setMinMag(''); };
   const hasFilters = search || subtype !== 'all' || region !== 'all' || minMag;
 
-  // ─── Conteos por subtipo (para chips) ───
+  // ─── Conteos por subtipo (para chips). "Sin clasificar" = sin subtipo. ───
   const subtypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = { none: 0 };
     for (const e of galeras) {
-      const k = e.volcanic_subtype ?? 'other';
-      counts[k] = (counts[k] || 0) + 1;
+      if (!e.volcanic_subtype) counts.none += 1;
+      else counts[e.volcanic_subtype] = (counts[e.volcanic_subtype] || 0) + 1;
     }
     return counts;
   }, [galeras]);
@@ -474,8 +539,7 @@ export function Explorer({ onLoadRealData }: Props) {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
             <Database size={20} className="text-[#C4553A]" />
-            Explorador de Registros Sísmicos
-            {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+            Explorador de registros sísmicos
             <Tooltip content="Ver guía" hoverOnly>
               <button
                 type="button"
@@ -488,8 +552,7 @@ export function Explorer({ onLoadRealData }: Props) {
             </Tooltip>
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">
-            Sismogramas triaxiales reales de Nariño · Volcán Galeras (OVSP) y Red Sismológica Nacional (SGC)
-            {user && <span className="text-stone-300"> · Sesión: {user.full_name || user.email} ({ROLE_LABELS[user.role]})</span>}
+            Sismogramas triaxiales reales de Nariño del Volcán Galeras (OVSP) y la Red Sismológica Nacional (SGC)
           </p>
         </div>
       </div>
@@ -510,8 +573,8 @@ export function Explorer({ onLoadRealData }: Props) {
               <Flame size={20} />
             </div>
             <div>
-              <div className="font-bold text-[#1A1A2E] text-sm">Sismos Volcánicos</div>
-              <div className="text-[11px] text-stone-400">Volcán Galeras · {galeras.length} eventos · 4 tipos</div>
+              <div className="font-bold text-[#1A1A2E] text-sm">Sismos volcánicos</div>
+              <div className="text-[11px] text-stone-400">Volcán Galeras · {galeras.length} eventos</div>
             </div>
           </button>
 
@@ -528,7 +591,7 @@ export function Explorer({ onLoadRealData }: Props) {
               <Mountain size={20} />
             </div>
             <div>
-              <div className="font-bold text-[#1A1A2E] text-sm">Sismos Tectónicos</div>
+              <div className="font-bold text-[#1A1A2E] text-sm">Sismos tectónicos</div>
               <div className="text-[11px] text-stone-400">Red Sismológica Nacional · {cm.length} eventos</div>
             </div>
           </button>
@@ -539,11 +602,11 @@ export function Explorer({ onLoadRealData }: Props) {
               onClick={() => setSource('upload')}
               className={`flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
                 source === 'upload'
-                  ? 'border-[#6B5B95] bg-[#6B5B95]/5 shadow-sm'
-                  : 'border-stone-200/60 bg-white hover:border-[#6B5B95]/40'
+                  ? 'border-[#1A1A2E] bg-[#1A1A2E]/5 shadow-sm'
+                  : 'border-stone-200/60 bg-white hover:border-[#1A1A2E]/30'
               }`}
             >
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${source === 'upload' ? 'bg-[#6B5B95] text-white' : 'bg-[#6B5B95]/10 text-[#6B5B95]'}`}>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${source === 'upload' ? 'bg-[#1A1A2E] text-white' : 'bg-[#1A1A2E]/10 text-[#1A1A2E]'}`}>
                 <Upload size={20} />
               </div>
               <div>
@@ -565,7 +628,7 @@ export function Explorer({ onLoadRealData }: Props) {
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
-              placeholder={source === 'volcanic' ? 'Buscar por fecha o estación...' : 'Buscar por fecha o estación...'}
+              placeholder="Buscar por fecha o estación…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-2 text-xs border border-stone-200 rounded-lg bg-stone-50 text-stone-700 focus:outline-none focus:border-[#C4553A]"
@@ -614,29 +677,20 @@ export function Explorer({ onLoadRealData }: Props) {
             </button>
           )}
         </div>
-
         )}
 
         {/* ═══ LAYOUT: LISTA + MAPA ═══ */}
         {source !== 'upload' && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4">
-          {/* Lista */}
-          <div data-tour="exp-lista" className="bg-white rounded-xl border border-stone-200/60 p-3">
+          {/* Lista (en móvil va PRIMERO; el mapa queda debajo) */}
+          <div data-tour="exp-lista" className="bg-white rounded-xl border border-stone-200/60 p-3 order-1">
             {loading ? (
               <div className="py-16"><VolcanoLoader size={44} label="Cargando registros…" /></div>
             ) : activeList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 {source === 'volcanic' ? <Flame size={36} className="text-stone-300 mb-3" /> : <Radio size={36} className="text-stone-300 mb-3" />}
-                <p className="text-sm font-semibold text-stone-500">
-                  {source === 'tectonic' && cm.length === 0
-                    ? 'Los sismos tectónicos aún no están disponibles'
-                    : 'Ningún evento coincide con los filtros'}
-                </p>
-                <p className="text-xs text-stone-400 mt-1">
-                  {source === 'tectonic' && cm.length === 0
-                    ? 'Se cargarán al procesar los datos de la Red Sismológica Nacional'
-                    : 'Prueba ajustando la búsqueda o los filtros'}
-                </p>
+                <p className="text-sm font-semibold text-stone-500">Ningún evento coincide con los filtros</p>
+                <p className="text-xs text-stone-400 mt-1">Prueba ajustando la búsqueda o los filtros</p>
                 {hasFilters && (
                   <button onClick={clearFilters} className="mt-3 text-xs font-semibold text-[#C4553A]">Limpiar filtros</button>
                 )}
@@ -665,15 +719,12 @@ export function Explorer({ onLoadRealData }: Props) {
                               <span className="text-xs font-bold text-[#1A1A2E]">{isGal ? g.event_date : c.date}</span>
                               <span className="text-[10px] text-stone-400">{isGal ? g.event_time : c.time} UTC</span>
                               {isGal ? (
-                                g.volcanic_subtype_label && (
-                                  <span className="text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#6B5B95]/10 text-[#6B5B95]">
-                                    {g.volcanic_subtype_label}
-                                  </span>
-                                )
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#1A1A2E]/[0.07] text-[#1A1A2E]">
+                                  {g.volcanic_subtype_label ?? 'Sin clasificar'}
+                                </span>
                               ) : (
                                 <>
-                                  <span className={`font-bold font-mono text-xs ${c.magnitude >= 5 ? 'text-[#C4553A]' : 'text-stone-700'}`}>M{c.magnitude.toFixed(1)}</span>
-                                  <Badge label="Tectónico" variant="tectonic" />
+                                  <span className={`font-bold font-mono text-xs ${c.magnitude >= 5 ? 'text-[#C4553A]' : 'text-stone-700'}`}>ML {c.magnitude.toFixed(1)}</span>
                                   <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">{c.folder}</span>
                                 </>
                               )}
@@ -681,8 +732,8 @@ export function Explorer({ onLoadRealData }: Props) {
                             <div className="flex items-center gap-3 text-[10px] text-stone-400 mt-0.5">
                               {isGal ? (
                                 <>
-                                  <span className="flex items-center gap-1"><Waves size={9} /> {g.components.join(', ')}</span>
-                                  <span className="flex items-center gap-1"><Clock size={9} /> {g.duration}s</span>
+                                  <span className="flex items-center gap-1"><Radio size={9} /> Est. {g.station}</span>
+                                  <span className="flex items-center gap-1"><Clock size={9} /> {fmtDuration(g.duration)}</span>
                                   <span>{g.num_samples} muestras · {g.sampling_rate.toFixed(0)} Hz</span>
                                 </>
                               ) : (
@@ -690,7 +741,7 @@ export function Explorer({ onLoadRealData }: Props) {
                               )}
                             </div>
                           </div>
-                          <span className="text-[10px] font-semibold whitespace-nowrap" style={{ color: accent }}>
+                          <span className="text-[10px] font-semibold whitespace-nowrap" style={{ color: COLOR_VOLCANIC }}>
                             {isOpen ? 'Ocultar' : (isGal ? 'Ver sismograma' : 'Ver estaciones')}
                           </span>
                         </button>
@@ -701,13 +752,11 @@ export function Explorer({ onLoadRealData }: Props) {
                             {loadingWave ? (
                               <div className="py-6"><VolcanoLoader size={34} label="Cargando forma de onda…" /></div>
                             ) : galerasWave ? (
-                              <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
-                                <WaveTrace data={galerasWave.north} label="Norte (N)" color="#2D6A4F" />
-                                <WaveTrace data={galerasWave.east} label="Este (E)" color="#C4553A" />
-                                <WaveTrace data={galerasWave.vertical} label="Vertical (Z)" color="#D4A853" />
+                              <div className="space-y-2">
+                                <TriaxialPreview wave={galerasWave} duration={g.duration} physical="velocidad" />
                                 <button
-                                  onClick={() => galerasWave && onLoadRealData?.(galerasWave, `Galeras ${g.event_date} — ${g.volcanic_subtype_label ?? ''}`.trim(), { date: g.event_date, duration: g.duration, sourceType: 'volcanic' })}
-                                  className="mt-2 w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
+                                  onClick={() => galerasWave && onLoadRealData?.(galerasWave, `Galeras ${g.event_date} — ${g.volcanic_subtype_label ?? 'Sin clasificar'}`.trim(), { date: g.event_date, duration: g.duration, sourceType: 'volcanic' })}
+                                  className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
                                 >
                                   <Activity size={14} /> Cargar en Simulador
                                 </button>
@@ -722,7 +771,7 @@ export function Explorer({ onLoadRealData }: Props) {
                         {isOpen && !isGal && (
                           <div className="px-2 pb-4 animate-fade-in">
                             <div className="bg-stone-50/50 rounded-xl p-3 border border-stone-100">
-                              <div className="text-[10px] font-bold text-stone-500 mb-2 uppercase tracking-wide">Estaciones — elige una para ver el sismograma</div>
+                              <div className="text-[11px] font-semibold text-stone-500 mb-2">Elige una estación para ver su sismograma</div>
                               <div className="grid grid-cols-2 gap-2">
                                 {c.stations.map(st => (
                                   <button
@@ -734,9 +783,9 @@ export function Explorer({ onLoadRealData }: Props) {
                                   >
                                     <div className="flex items-center justify-between">
                                       <span className="text-xs font-bold text-[#1A1A2E]">{st.station}</span>
-                                      <span className="text-[9px] text-stone-400">{st.sampling_rate} Hz</span>
+                                      <span className="text-[9px] text-stone-400">{(st.original_sampling_rate ?? st.sampling_rate).toFixed(0)} Hz</span>
                                     </div>
-                                    <div className="text-[10px] text-stone-500 mt-0.5">{st.instrument_type}</div>
+                                    <div className="text-[10px] text-stone-500 mt-0.5">{instrumentLabelEs(st.instrument_type)}</div>
                                   </button>
                                 ))}
                               </div>
@@ -746,16 +795,14 @@ export function Explorer({ onLoadRealData }: Props) {
                                     <div className="py-5"><VolcanoLoader size={32} label="Cargando forma de onda…" /></div>
                                   ) : (cmWave && cmWave.event_id === c.id && cmWave.station === selectedStation.station) ? (
                                     <div className="space-y-2">
-                                      <WaveTrace data={cmWave.waveData.north} label="Norte (N)" color="#2D6A4F" />
-                                      <WaveTrace data={cmWave.waveData.east} label="Este (E)" color="#C4553A" />
-                                      <WaveTrace data={cmWave.waveData.vertical} label="Vertical (Z)" color="#D4A853" />
+                                      <TriaxialPreview wave={cmWave.waveData} duration={cmWave.duration} physical={cmWave.physical_quantity} />
                                       <button
                                         onClick={() => onLoadRealData?.(
                                           cmWave.waveData,
-                                          `CM ${c.date} M${c.magnitude} — Est. ${cmWave.station}`,
+                                          `CM ${c.date} ML ${c.magnitude.toFixed(1)} — Est. ${cmWave.station}`,
                                           { date: c.date, duration: cmWave.duration, sourceType: 'tectonic', magnitude: c.magnitude, depth: 15, lat: c.latitude, lon: c.longitude },
                                         )}
-                                        className="mt-2 w-full flex items-center justify-center gap-2 bg-[#2D6A4F] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
+                                        className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
                                       >
                                         <Activity size={14} /> Cargar en Simulador
                                       </button>
@@ -777,35 +824,28 @@ export function Explorer({ onLoadRealData }: Props) {
             )}
           </div>
 
-          {/* Mapa */}
-          <div data-tour="exp-mapa" className="lg:sticky lg:top-20 h-[380px] lg:h-[calc(100vh-140px)]">
+          {/* Mapa (en móvil va DEBAJO de la lista) */}
+          <div data-tour="exp-mapa" className="order-2 lg:sticky lg:top-20 h-[320px] lg:h-[calc(100vh-140px)]">
             <div className="bg-white rounded-xl border border-stone-200/60 p-2 h-full flex flex-col">
               <div className="flex items-center gap-1.5 px-2 py-1.5">
                 <MapPin size={13} className={source === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
                 <span className="text-xs font-bold text-[#1A1A2E]">
-                  {source === 'volcanic' ? 'Mapa · Volcán Galeras' : 'Mapa · Estaciones sismológicas'}
+                  {source === 'volcanic' ? 'Mapa del Volcán Galeras' : 'Mapa de estaciones'}
                 </span>
                 <span className="text-[10px] text-stone-400 ml-auto">
-                  {source === 'volcanic' ? 'Epicentros' : 'Ubicación aprox. de estaciones'}
+                  {source === 'volcanic' ? 'Zona de origen' : 'Red del SGC en Nariño'}
                 </span>
               </div>
               <div className="flex-1 rounded-xl overflow-hidden">
-                {source === 'tectonic' && mapPoints.length === 0 ? (
-                  <div className="h-full flex items-center justify-center bg-stone-50 rounded-xl">
-                    <p className="text-xs text-stone-400 text-center px-4">
-                      Sin coordenadas de epicentro disponibles todavía
-                    </p>
-                  </div>
-                ) : (
-                  <SeismicMap
-                    points={mapPoints}
-                    selectedId={source === 'volcanic' ? selectedId : null}
-                    onSelect={handleMapSelect}
-                    center={mapView.center}
-                    zoom={mapView.zoom}
-                    bounds={mapBounds}
-                  />
-                )}
+                <SeismicMap
+                  points={mapPoints}
+                  selectedId={source === 'volcanic' ? selectedId : null}
+                  onSelect={handleMapSelect}
+                  center={mapView.center}
+                  zoom={mapView.zoom}
+                  bounds={mapBounds}
+                  area={mapArea}
+                />
               </div>
             </div>
           </div>

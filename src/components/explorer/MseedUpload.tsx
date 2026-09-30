@@ -5,13 +5,16 @@
  * previsualizar las tres componentes y enviarlas al simulador.
  */
 import { useRef, useState, ChangeEvent } from 'react';
-import { Upload, Activity, FileAudio, RefreshCw, AlertTriangle, Info } from '../../lib/icons';
+import { Upload, Activity, FileAudio, RefreshCw, AlertTriangle, Info, Waves } from '../../lib/icons';
 import { uploadMseed, MseedUploadResult } from '../../lib/mseedUpload';
 import type { WaveData } from '../../lib/types';
 
 interface Props {
   onLoadRealData?: (waveData: WaveData, label: string, meta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic' }) => void;
 }
+
+/** Colores de las componentes, iguales que en el Simulador. */
+const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
 
 function WaveTrace({ data, label, color }: { data: number[]; label: string; color: string }) {
   if (!data || data.length === 0) return null;
@@ -87,11 +90,11 @@ export function MseedUpload({ onLoadRealData }: Props) {
         <div
           onClick={() => inputRef.current?.click()}
           className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-            file ? 'border-[#6B5B95]/40 bg-[#6B5B95]/5' : 'border-stone-200 hover:border-[#6B5B95]/40 hover:bg-stone-50'
+            file ? 'border-[#C4553A]/40 bg-[#C4553A]/5' : 'border-stone-200 hover:border-[#C4553A]/40 hover:bg-stone-50'
           }`}
         >
           <input ref={inputRef} type="file" accept=".mseed,.msd,.seed,.miniseed,application/octet-stream" className="hidden" onChange={onFile} />
-          <Upload size={26} className="mx-auto text-[#6B5B95] mb-2" />
+          <Upload size={26} className="mx-auto text-[#C4553A] mb-2" />
           {file ? (
             <>
               <div className="text-sm font-bold text-[#1A1A2E] flex items-center justify-center gap-2"><FileAudio size={14} /> {file.name}</div>
@@ -107,13 +110,26 @@ export function MseedUpload({ onLoadRealData }: Props) {
 
         {loading && (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-stone-400">
-            <div className="w-5 h-5 rounded-full border-[3px] border-stone-200 border-t-[#6B5B95] animate-spin" /> Procesando con ObsPy…
+            <div className="w-5 h-5 rounded-full border-[3px] border-stone-200 border-t-[#C4553A] animate-spin" /> Procesando con ObsPy…
           </div>
         )}
 
         {error && (
           <div className="flex items-start gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
             <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {error}
+          </div>
+        )}
+
+        {/* Estado vacío: explica qué aparecerá cuando se cargue un archivo. */}
+        {!file && !loading && !error && (
+          <div className="flex flex-col items-center justify-center text-center py-10 px-4">
+            <div className="w-14 h-14 rounded-2xl bg-stone-100 flex items-center justify-center mb-3">
+              <Waves size={26} className="text-stone-300" />
+            </div>
+            <p className="text-sm font-semibold text-stone-500">Aquí verás tu registro</p>
+            <p className="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+              Al cargar un MiniSEED se mostrarán sus tres componentes (Norte, Este y Vertical) y un botón para llevarlas al Simulador.
+            </p>
           </div>
         )}
 
@@ -128,9 +144,9 @@ export function MseedUpload({ onLoadRealData }: Props) {
               {result.filtro && <span>Pasabanda {result.filtro.freqmin}–{result.filtro.freqmax} Hz</span>}
             </div>
             <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
-              <WaveTrace data={result.waveData.north} label="Norte (N)" color="#2D6A4F" />
-              <WaveTrace data={result.waveData.east} label="Este (E)" color="#C4553A" />
-              <WaveTrace data={result.waveData.vertical} label="Vertical (Z)" color="#D4A853" />
+              <WaveTrace data={result.waveData.north} label="Norte (N)" color={WAVE_COLORS.north} />
+              <WaveTrace data={result.waveData.east} label="Este (E)" color={WAVE_COLORS.east} />
+              <WaveTrace data={result.waveData.vertical} label="Vertical (Z)" color={WAVE_COLORS.vertical} />
             </div>
             <button
               onClick={() => onLoadRealData?.(
@@ -138,7 +154,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
                 `${result.filename} — ${result.network}.${result.station}`,
                 { date: result.starttime_utc.slice(0, 10), duration: result.duration, sourceType },
               )}
-              className="w-full flex items-center justify-center gap-2 bg-[#6B5B95] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
+              className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
             >
               <Activity size={14} /> Cargar en Simulador
             </button>
@@ -148,7 +164,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
 
       {/* Opciones */}
       <div className="bg-white rounded-xl border border-stone-200/60 p-4 space-y-4 h-fit">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A2E]">Opciones de procesamiento</h3>
+        <h3 className="text-xs font-bold text-[#1A1A2E]">Opciones de procesamiento</h3>
 
         <label className="block text-xs text-stone-500">
           Estación
@@ -156,7 +172,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
             value={station}
             disabled={!result}
             onChange={e => { setStation(e.target.value); if (file) process(file, e.target.value); }}
-            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#6B5B95] disabled:opacity-50"
+            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A] disabled:opacity-50"
           >
             {!result && <option value="">Carga un archivo primero</option>}
             {result?.stations.map(s => (
@@ -169,7 +185,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
 
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-xs text-stone-600">
-            <input type="checkbox" checked={useFilter} onChange={e => setUseFilter(e.target.checked)} /> Aplicar filtro pasabanda
+            <input type="checkbox" checked={useFilter} onChange={e => setUseFilter(e.target.checked)} className="accent-[#C4553A]" /> Aplicar filtro pasabanda
           </label>
           <div className={`grid grid-cols-2 gap-2 ${useFilter ? '' : 'opacity-40 pointer-events-none'}`}>
             <label className="text-[11px] text-stone-500">Mín. (Hz)
@@ -184,7 +200,7 @@ export function MseedUpload({ onLoadRealData }: Props) {
         <label className="block text-xs text-stone-500">
           Tipo de fuente para el simulador
           <select value={sourceType} onChange={e => setSourceType(e.target.value as 'tectonic' | 'volcanic')}
-            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#6B5B95]">
+            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A]">
             <option value="volcanic">Volcánica (isótropa)</option>
             <option value="tectonic">Tectónica (doble par)</option>
           </select>
@@ -193,14 +209,14 @@ export function MseedUpload({ onLoadRealData }: Props) {
         <button
           disabled={!file || loading}
           onClick={() => file && process(file, station)}
-          className="w-full flex items-center justify-center gap-2 border border-[#6B5B95]/30 text-[#6B5B95] text-xs font-bold py-2 rounded-lg disabled:opacity-40"
+          className="w-full flex items-center justify-center gap-2 border border-[#C4553A]/30 text-[#C4553A] text-xs font-bold py-2 rounded-lg disabled:opacity-40"
         >
           <RefreshCw size={13} /> Reprocesar con estas opciones
         </button>
 
         <p className="text-[10px] text-stone-400 leading-relaxed flex gap-1.5">
           <Info size={12} className="flex-shrink-0 mt-0.5" />
-          Se eliminan la media y la tendencia lineal, se normaliza a [−1, 1] con la misma escala en las tres componentes y se decima a máx. 3000 muestras.
+          Se elimina la media y la tendencia lineal, y se normaliza a [−1, 1] con la misma escala en las tres componentes. El registro se dibuja submuestreado (máx. 3000 puntos) solo para la vista previa.
         </p>
       </div>
     </div>

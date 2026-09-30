@@ -315,3 +315,19 @@ input[type='range']::-moz-range-thumb {
 .text-\[10px\]   { font-size: 11px; }
 .text-\[10\.5px\] { font-size: 11.5px; }
 .text-\[11px\]   { font-size: 12px; }
+
+/* ─── Etiqueta fija (sigla) sobre los marcadores del mapa del Explorador ─── */
+/* Chip sobrio en azul noche, sin la flecha ni el borde por defecto de Leaflet. */
+.leaflet-tooltip.sismo-station-badge {
+  background: #1a1a2e;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font: 700 10px Inter, system-ui, sans-serif;
+  box-shadow: 0 2px 6px rgba(26, 26, 46, 0.25);
+  white-space: nowrap;
+}
+.leaflet-tooltip.sismo-station-badge::before {
+  display: none; /* quita la flechita del tooltip de Leaflet */
+}
