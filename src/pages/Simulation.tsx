@@ -14,7 +14,6 @@ import { ParticleMotion } from '../components/simulation/ParticleMotion';
 import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, HelpCircle, Maximize, Minimize } from '../lib/icons';
 import { useAuth } from '../lib/auth';
 import { Tooltip } from '../components/ui/Tooltip';
-import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { startTour, refreshActiveTour } from '../tours/useTour';
 import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
 
@@ -48,15 +47,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // Grid submuestreado del mapa de calor (llega del backend junto al resultado).
   const [heatmapGrid, setHeatmapGrid] = useState<GridInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  // Simulación de APOYO en segundo plano (al cargar un registro real): prepara
-  // el mapa de calor y la propagación sin barra de progreso. Mientras corre,
-  // las pestañas "Mapa de calor" y "Partícula" muestran un aviso de que se está
-  // generando, en vez de quedar en blanco.
-  const [bgSimRunning, setBgSimRunning] = useState(false);
-  // Falló la simulación de apoyo del registro real (backend caído, timeout…).
-  // Guardamos los params para poder reintentar sin repetir el flujo de carga.
-  const [bgSimError, setBgSimError] = useState<string | null>(null);
-  const bgSimParamsRef = useRef<SimulationParams | null>(null);
   const [progress, setProgress] = useState<SimProgress | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
@@ -145,6 +135,9 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   }, [user, launchTour]);
   // Datos reales del Galeras/CM cargados desde el Explorador (si los hay).
   const [realData, setRealData] = useState<{ waveData: WaveData; label: string } | null>(null);
+  // Parámetros del evento real (tipo de fuente, magnitud, epicentro…) para el
+  // reporte del registro real. No se editan (los reales no se cambian).
+  const [realParams, setRealParams] = useState<SimulationParams | null>(null);
   // Escala de amplitud de los sismogramas: 'common' normaliza las tres
   // componentes contra el máximo de las tres (se ve la P dominante en vertical y
   // la S en horizontales); 'component' normaliza cada traza contra su propio
@@ -168,10 +161,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     return () => clearTimeout(id);
   }, [vizExpanded]);
 
-  // Ref a la última versión de runSimulation para poder llamarla desde el
-  // efecto de datos reales sin meterla en sus dependencias (evita re-lanzar).
-  const runSimulationRef = useRef<(p?: SimulationParams, to3D?: boolean) => void>(() => {});
-
   // ── Reproducción 2D (declarada antes del efecto de carga real, que la usa
   //    para arrancar la animación automáticamente) ──
   const [wave2dPlaying, setWave2dPlaying] = useState(false);
@@ -193,117 +182,114 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     // viaja junto en realLoad, así siempre es consistente (no depende de que
     // otro efecto haya aplicado initialParams antes).
     setRealData({ waveData: realLoad.waveData, label: realLoad.label });
+    setRealParams({ ...defaultParams(), ...realLoad.params });
     setParams({ ...defaultParams(), ...realLoad.params });
+    // Un registro real NO tiene mapa de calor ni movimiento de partícula (esos
+    // viven en el laboratorio de simulación): la única vista es el sismograma.
     setViewMode('2d');
+    // El registro real se analiza tal cual: NO se corre ninguna simulación FDM
+    // de apoyo. Las métricas y la interpretación se calculan sobre la señal.
+    setResult(null);
     // Arranca la REPRODUCCIÓN del sismograma real automáticamente al cargarlo
-    // (desde el inicio), igual que cuando se genera una simulación: así el
-    // registro "empieza a correr" solo, sin tener que pulsar play.
+    // (desde el inicio): así el registro "empieza a correr" solo, sin pulsar play.
     setWave2dRatio(0);
     setWave2dPlaying(true);
 
-    const runParams: SimulationParams = { ...defaultParams(), ...realLoad.params };
-
-    // El FDM corre en segundo plano (background=true) para preparar el mapa de
-    // calor SIN ocultar el sismograma real ni cambiar de pestaña. La vista se
-    // queda en el registro real (2D).
-    const timer = setTimeout(() => {
-      runSimulationRef.current(runParams, true);
-      // Ya consumido: App limpia realLoad para que al volver a entrar al
-      // simulador NO se relance esta simulación (era el "predeterminado").
-      onRealLoadUsed?.();
-    }, 100);
-
-    return () => clearTimeout(timer);
+    // Ya consumido: App limpia realLoad para que al volver a entrar al
+    // simulador NO se relance nada.
+    onRealLoadUsed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realLoad?.nonce]);
 
 
 
-  // Ejecuta el FDM. Acepta params explícitos (para el auto-run de datos reales,
-  // que debe usar los del evento y no el estado `params` que puede ir desfasado).
-  // `background=true` (auto-run de datos reales): el FDM corre en silencio para
-  // preparar el mapa de calor, SIN mostrar barra de progreso ni ocultar el
-  // sismograma real, y sin cambiar de pestaña. La vista se queda en el registro
-  // real (2D) hasta que el usuario abra "Mapa de calor".
-  const runSimulation = useCallback((overrideParams?: SimulationParams, background = false) => {
-    const runParams = overrideParams ?? params;
-    if (!background) {
-      setLoading(true);
-      setResult(null);
-      setSimError(null);
-      setProgress({ step: 0, totalSteps: 100, percent: 0 });
-    } else {
-      // Simulación de apoyo (registro real): marca que se está generando el
-      // mapa de calor para avisar en esas pestañas mientras llega el resultado.
-      setBgSimRunning(true);
-      setBgSimError(null);
-      bgSimParamsRef.current = runParams;
-    }
+  // Ejecuta el FDM en el laboratorio de simulación. El cómputo ocurre en el
+  // backend (FastAPI). Como la respuesta es una sola petición sin streaming de
+  // progreso, animamos una barra "optimista" que avanza hacia ~90% mientras
+  // esperamos y salta a 100% al llegar.
+  const runSimulation = useCallback(() => {
+    const runParams = params;
+    setLoading(true);
+    setResult(null);
+    setSimError(null);
+    setProgress({ step: 0, totalSteps: 100, percent: 0 });
 
-    // El cómputo ocurre en el backend (FastAPI). Como la respuesta es una sola
-    // petición sin streaming de progreso, animamos una barra "optimista" que
-    // avanza suavemente hacia ~90% mientras esperamos y salta a 100% al llegar.
     let fakePct = 0;
-    let progTimer: ReturnType<typeof setInterval> | null = null;
-    if (!background) {
-      progTimer = setInterval(() => {
-        fakePct = Math.min(90, fakePct + Math.max(1, (90 - fakePct) * 0.08));
-        setProgress({ step: Math.round(fakePct), totalSteps: 100, percent: Math.round(fakePct) });
-      }, 200);
-    }
+    let progTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+      fakePct = Math.min(90, fakePct + Math.max(1, (90 - fakePct) * 0.08));
+      setProgress({ step: Math.round(fakePct), totalSteps: 100, percent: Math.round(fakePct) });
+    }, 200);
     const stopProg = () => { if (progTimer) { clearInterval(progTimer); progTimer = null; } };
 
     fetchSimulationFull(runParams)
       .then(({ result: r, heatmapGrid: hg }) => {
         setResult(r);
         setHeatmapGrid(hg);
-        setBgSimRunning(false);
         stopProg();
-        if (!background) {
-          setProgress({ step: 100, totalSteps: 100, percent: 100 });
-          setLoading(false);
-          setProgress(null);
-          setWave2dRatio(0);
-          setWave2dPlaying(true);
-        }
+        setProgress({ step: 100, totalSteps: 100, percent: 100 });
+        setLoading(false);
+        setProgress(null);
+        setWave2dRatio(0);
+        setWave2dPlaying(true);
       })
       .catch((err) => {
         stopProg();
-        setBgSimRunning(false);
         console.error('Error en la simulación:', err);
         // En cualquier fallo (conexión, reinicio del servidor, tiempo de espera
         // agotado o error del backend) mostramos un mensaje claro y devolvemos
         // el control: setLoading(false) rehabilita el botón "Generar" y quita la
         // pantalla de carga, nunca se queda congelada.
-        if (!background) {
-          setLoading(false);
-          setProgress(null);
-          setSimError('No pudimos completar la simulación. Revisa tu conexión e inténtalo de nuevo.');
-        } else {
-          // Registro real: la simulación de apoyo falló. Guardamos el error para
-          // que el panel muestre un aviso con "Reintentar" en vez de quedarse
-          // con el volcán cargando indefinidamente.
-          setBgSimError('No pudimos preparar el análisis del registro. Revisa tu conexión e inténtalo de nuevo.');
-        }
+        setLoading(false);
+        setProgress(null);
+        setSimError('No pudimos completar la simulación. Revisa tu conexión e inténtalo de nuevo.');
       });
   }, [params]);
 
-  // Mantener la ref del auto-run apuntando a la última versión.
-  useEffect(() => {
-    runSimulationRef.current = runSimulation;
-  }, [runSimulation]);
-
-  // Botón manual "Generar": siempre con barra de progreso (background=false).
+  // Botón manual "Generar": siempre con barra de progreso.
   const handleRun = useCallback(() => {
-    runSimulation(undefined, false);
+    runSimulation();
   }, [runSimulation]);
 
-  // Reintenta la simulación de apoyo del registro real tras un fallo, con los
-  // mismos parámetros que se usaron al cargarlo.
-  const retryBackgroundSim = useCallback(() => {
-    const p = bgSimParamsRef.current;
-    if (p) runSimulationRef.current(p, true);
+  // ── Bloqueo de parámetros con un registro real cargado ──
+  // Los registros reales no se modifican: sus parámetros son fijos. Si el
+  // usuario intenta cambiar un parámetro (o generar) estando en un registro
+  // real, se le pregunta si quiere SALIR del registro real para pasar al
+  // laboratorio de simulación (donde sí puede ajustar el modelo). Guardamos la
+  // edición pendiente para aplicarla si confirma.
+  const [exitRealPrompt, setExitRealPrompt] = useState(false);
+  const pendingParamsRef = useRef<SimulationParams | null>(null);
+
+  const handleParamsChange = useCallback((next: SimulationParams) => {
+    if (realData) {
+      // En modo registro real: no se aplica el cambio; se ofrece salir al lab.
+      pendingParamsRef.current = next;
+      setExitRealPrompt(true);
+      return;
+    }
+    setParams(next);
+  }, [realData]);
+
+  const handleRunGuarded = useCallback(() => {
+    if (realData) { setExitRealPrompt(true); return; }
+    handleRun();
+  }, [realData, handleRun]);
+
+  // Confirma salir del registro real: descarta el registro y pasa al laboratorio
+  // con los parámetros del evento como punto de partida (editables).
+  const confirmExitReal = useCallback(() => {
+    setRealData(null);
+    setRealParams(null);
+    setResult(null);
+    setWave2dPlaying(false);
+    setViewMode('2d');
+    if (pendingParamsRef.current) {
+      setParams(pendingParamsRef.current);
+      pendingParamsRef.current = null;
+    }
+    setExitRealPrompt(false);
   }, []);
+
+
 
   // 2D waveform playback animation. Solo corre en la pestaña de sismogramas;
   // en el corte del subsuelo el reproductor del propio componente avanza el
@@ -373,6 +359,25 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
+      {/* Confirmación para salir del registro real hacia el laboratorio. */}
+      {exitRealPrompt && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={() => setExitRealPrompt(false)}>
+          <div className="bg-white rounded-2xl shadow-xl border border-stone-200 w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-[#1A1A2E] text-sm mb-1">¿Salir del registro real?</h3>
+            <p className="text-xs text-stone-500 leading-relaxed mb-4">
+              Estás viendo un registro real, cuyos datos no se modifican. Si quieres ajustar el modelo (velocidades, magnitud, profundidad…), pasas al laboratorio de simulación y se cierra el registro real. Podrás volver a cargarlo desde el Explorador.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setExitRealPrompt(false)} className="flex-1 py-2 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">
+                Seguir en el registro real
+              </button>
+              <button onClick={confirmExitReal} className="flex-1 py-2 rounded-xl bg-[#C4553A] text-white text-sm font-bold shadow-md shadow-[#C4553A]/20">
+                Ir al laboratorio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-white border-b border-stone-200/60 px-6 py-2.5">
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div>
@@ -406,7 +411,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               Con acordeón exclusivo el contenido es corto; si una sección larga
               excede la altura, hay scroll interno suave (nunca corte). */}
           <div className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
-            <ParametersPanel params={params} onChange={setParams} onRun={handleRun} loading={loading} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} firstBounceP={result?.gridInfo.firstBounceP ?? null} />
+            <ParametersPanel params={params} onChange={handleParamsChange} onRun={handleRunGuarded} loading={loading} locked={Boolean(realData)} forceSection={tourParam} firstBounceS={result?.gridInfo.firstBounceS ?? null} firstBounceP={result?.gridInfo.firstBounceP ?? null} />
           </div>
 
           <div className="flex flex-col gap-4 lg:pr-1">
@@ -444,24 +449,31 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   >
                     <Waves size={13} /> <Tooltip content="Sismogramas triaxiales (Norte, Este, Vertical)">Sismogramas</Tooltip>
                   </button>
-                  <button
-                    data-tour="tab-triaxial"
-                    onClick={() => setViewMode('triaxial')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                      viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
-                    }`}
-                  >
-                    <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)">Mapa de calor</Tooltip>
-                  </button>
-                  <button
-                    data-tour="tab-particle"
-                    onClick={() => setViewMode('particle')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                      viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
-                    }`}
-                  >
-                    <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)">Partícula</Tooltip>
-                  </button>
+                  {/* El mapa de calor y el movimiento de partícula solo aplican
+                      a una simulación del laboratorio. Con un registro real
+                      cargado se ocultan: solo se muestra el sismograma real. */}
+                  {!realData && (
+                    <>
+                      <button
+                        data-tour="tab-triaxial"
+                        onClick={() => setViewMode('triaxial')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                          viewMode === 'triaxial' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
+                        }`}
+                      >
+                        <Grid3X3 size={13} /> <Tooltip content="Mapa de calor del subsuelo (corte vertical)">Mapa de calor</Tooltip>
+                      </button>
+                      <button
+                        data-tour="tab-particle"
+                        onClick={() => setViewMode('particle')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                          viewMode === 'particle' ? 'bg-white text-[#C4553A] shadow-sm' : 'text-stone-400'
+                        }`}
+                      >
+                        <Box size={13} /> <Tooltip content="Movimiento de partícula (trayectoria 3D del suelo)">Partícula</Tooltip>
+                      </button>
+                    </>
+                  )}
                   {/* Ampliar/Reducir: abre la Visualización casi a pantalla
                       completa (sin scroll de la página) y vuelve al tamaño normal. */}
                   <button
@@ -514,7 +526,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                         {' '}El mapa de calor del subsuelo con la propagación (parámetros equivalentes) se genera automáticamente; véalo en la pestaña "Mapa de calor del subsuelo".
                       </p>
                     </div>
-                    <button onClick={() => setRealData(null)} className="text-[10px] text-stone-400 px-2 py-1 rounded bg-white border border-stone-200">
+                    <button onClick={() => { setRealData(null); setRealParams(null); setWave2dPlaying(false); }} className="text-[10px] text-stone-400 px-2 py-1 rounded bg-white border border-stone-200">
                       Cerrar
                     </button>
                   </div>
@@ -651,33 +663,8 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                 </div>
               )}
 
-              {/* Corte del subsuelo */}
-              {/* Mapa de calor / Partícula con registro real: la simulación de
-                  apoyo corre en segundo plano. Mientras llega el resultado, se
-                  avisa que se está generando (antes quedaba en blanco). */}
-              {!loading && !result && bgSimRunning && (viewMode === 'triaxial' || viewMode === 'particle') && (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <VolcanoLoader size={40} label="Generando la propagación del subsuelo…" />
-                  <p className="text-stone-400 text-xs max-w-xs leading-relaxed mt-3">
-                    Con el registro real cargado, el mapa de calor y el movimiento de partícula se calculan a partir de una simulación equivalente. Tarda unos segundos.
-                  </p>
-                </div>
-              )}
-
-              {/* La simulación de apoyo falló: en vez de dejar la pestaña en
-                  blanco, se avisa y se ofrece reintentar (mismo params). */}
-              {!loading && !result && !bgSimRunning && realData && bgSimError && (viewMode === 'triaxial' || viewMode === 'particle') && (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
-                    <Info size={22} className="text-[#C4553A]" />
-                  </div>
-                  <p className="text-stone-500 text-xs max-w-xs leading-relaxed mb-4">{bgSimError}</p>
-                  <button onClick={retryBackgroundSim} className="text-xs font-bold px-4 py-2 rounded-lg bg-[#C4553A] text-white btn-hover">
-                    Reintentar
-                  </button>
-                </div>
-              )}
-
+              {/* Corte del subsuelo (solo para simulaciones del laboratorio: un
+                  registro real no tiene estas pestañas). */}
               {!loading && result && viewMode === 'triaxial' && (
                 <TriaxialPlane
                   snapshots={result.snapshots}
@@ -698,11 +685,8 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   reales que ve el usuario: el registro real si está cargado, o
                   el pseudo-sismograma FDM en una simulación pura. Los arribos P/S
                   vienen de la simulación (result). */}
-              {/* Partícula: si hay registro real pero la simulación de apoyo aún
-                  corre (sin result), se muestra el aviso de arriba en vez del
-                  hodograma con arribos P/S en cero. */}
-              {!loading && (result || (realData && !bgSimRunning && !bgSimError)) && viewMode === 'particle' && (() => {
-                const pmWave = realData ? realData.waveData : result!.waveData;
+              {!loading && result && viewMode === 'particle' && (() => {
+                const pmWave = result.waveData;
                 const pmLastT = pmWave.time[pmWave.time.length - 1] ?? 0;
                 return (
                   <div className="space-y-3">
@@ -750,7 +734,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               DENTRO de ResultsPanel (zona de acordeones), para que los botones
               de exportación queden fijos abajo, siempre visibles. */}
           <div data-tour="results-panel" className="lg:h-[calc(100dvh-132px)] lg:sticky lg:top-16">
-            <ResultsPanel result={result} realRecord={realData} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} bgSimError={bgSimError} onRetryBackground={retryBackgroundSim} />
+            <ResultsPanel result={result} realRecord={realData} realParams={realParams} forceSection={tourResult} ampScale={ampScale} heatmapGrid={heatmapGrid} />
           </div>
         </div>
       </div>

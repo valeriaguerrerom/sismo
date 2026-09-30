@@ -90,7 +90,9 @@ function interpretRealRecord(input: InterpretationInput): string {
     ? 'la Red Sismológica Nacional de Colombia (SGC)'
     : 'el Observatorio Vulcanológico y Sismológico de Pasto (SGC-OVSP)';
   const deRed = red.startsWith('el ') ? 'del ' + red.slice(3) : 'de ' + red;
-  const tipo = params.sourceType === 'volcanic' ? 'volcánico' : 'tectónico';
+
+  // gridInfo no se usa en registros reales (no hay simulación de apoyo).
+  void gridInfo;
 
   let text = `Registro sísmico REAL${realLabel ? ` (${realLabel})` : ''} ${deRed}. `;
   if (typeof realDuration === 'number' && realDuration > 0) {
@@ -99,11 +101,7 @@ function interpretRealRecord(input: InterpretationInput): string {
     text += 'Es una señal medida por un sismómetro triaxial (componentes Norte, Este y Vertical), decimada para su visualización. ';
   }
   text += 'Las trazas muestran el movimiento real del suelo en la estación; no son un pseudo-sismograma simulado, así que no se marcan arribos P/S teóricos sobre ellas. ';
-  text += `El mapa de calor del subsuelo y el movimiento de partícula que acompañan a este registro se generan con una simulación FDM de un evento ${tipo} equivalente `;
-  if (gridInfo) {
-    text += `(malla ${gridInfo.nx}×${gridInfo.nz}) `;
-  }
-  text += 'con parámetros representativos del evento (velocidades, profundidad y epicentro), no con la señal real: sirven para ilustrar cómo se propagaría la energía, no para medir sobre el registro. ';
+  text += 'Para explorar cómo se propaga la energía en el subsuelo (mapa de calor y movimiento de partícula) usa el laboratorio de simulación, donde puedes ajustar el modelo. ';
   text += params.sourceType === 'volcanic'
     ? 'En eventos volcánicos del Galeras (fuente esencialmente isótropa) domina la onda P y la componente transversal es débil, algo típico de la sismicidad volcánica somera.'
     : 'En eventos tectónicos la onda S suele ser fuerte en las componentes horizontales, con una diferencia S−P que crece con la distancia al foco.';

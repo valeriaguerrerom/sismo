@@ -24,6 +24,13 @@ interface Props {
   onChange: (p: SimulationParams) => void;
   onRun: () => void;
   loading: boolean;
+  /**
+   * Panel bloqueado: hay un REGISTRO REAL cargado, cuyos parámetros son fijos.
+   * Los controles se muestran atenuados y cualquier intento de cambio lo maneja
+   * el contenedor (pregunta si se quiere salir al laboratorio). Aquí solo se usa
+   * para el aviso visual y para no dejar “generar” como acción normal.
+   */
+  locked?: boolean;
   /** Sección que el tour guiado quiere abrir (cambia por paso). */
   forceSection?: ParamSection | null;
   /**
@@ -88,7 +95,7 @@ function SliderRow({
   );
 }
 
-export function ParametersPanel({ params, onChange, onRun, loading, forceSection, firstBounceS, firstBounceP }: Props) {
+export function ParametersPanel({ params, onChange, onRun, loading, locked = false, forceSection, firstBounceS, firstBounceP }: Props) {
   // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
   // cierran las demás). Así el contenido siempre cabe sin scroll. Al inicio
   // solo "Variables elásticas" está abierta.
@@ -151,11 +158,19 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
+      {/* Aviso cuando hay un registro real: los parámetros son fijos (no se
+          editan). Cualquier intento de cambio pregunta si se quiere pasar al
+          laboratorio. Se atenúan los controles para dejarlo claro. */}
+      {locked && (
+        <div className="bg-[#6B5B95]/10 border border-[#6B5B95]/25 rounded-xl p-3 text-[11px] text-[#4A3F6B] leading-relaxed">
+          <span className="font-bold text-[#4A3F6B]">Registro real cargado.</span> Sus parámetros son fijos; los datos reales no se modifican. Para ajustar el modelo, cámbialos y te preguntaré si quieres pasar al laboratorio de simulación.
+        </div>
+      )}
       {/* Cada acordeón ocupa el alto de su contenido (sin scroll interno). Si el
           conjunto (secciones + botón) no cabe en la columna, es ESTA zona la que
           scrollea suavemente; con el acordeón exclusivo el contenido suele caber
           y no aparece scroll. El botón Generar va justo debajo de las secciones. */}
-      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
+      <div className={`flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5 ${locked ? 'opacity-50 pointer-events-none' : ''}`}>
       <AccordionSection title="Variables elásticas" dataTour="params-elasticas" headerDataTour="params-elasticas-h" open={openSections.has('elasticas')} onToggle={() => toggle('elasticas')}>
         <div className="space-y-3">
           <SliderRow
@@ -545,7 +560,9 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
         </div>
       )}
 
-      {/* Botón Generar: justo debajo de Configuración. */}
+      {/* Botón Generar: justo debajo de Configuración. Con un registro real
+          cargado no se genera nada (los reales no se simulan): el botón invita
+          a pasar al laboratorio, y el contenedor pide confirmación. */}
       <button
         data-tour="btn-generar"
         onClick={onRun}
@@ -556,6 +573,11 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
           <>
             <Loader size={16} className="animate-spin" />
             Procesando...
+          </>
+        ) : locked ? (
+          <>
+            <Play size={16} />
+            Ir al laboratorio de simulación
           </>
         ) : (
           <>

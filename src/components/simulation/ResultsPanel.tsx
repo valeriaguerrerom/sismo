@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
 import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from '../../lib/icons';
 import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
+import { computeRealRecordMetrics } from '../../lib/realRecordMetrics';
 import { computeEventWindow } from '../../lib/waveWindow';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
@@ -30,10 +31,8 @@ interface Props {
   ampScale?: 'common' | 'component';
   /** Grid submuestreado del corte (posiciones fuente/receptor reescaladas). */
   heatmapGrid?: GridInfo | null;
-  /** Falló la simulación de apoyo del registro real (para avisar + reintentar). */
-  bgSimError?: string | null;
-  /** Reintenta la simulación de apoyo del registro real. */
-  onRetryBackground?: () => void;
+  /** Parámetros del evento real (tipo de fuente, magnitud…) para el reporte. */
+  realParams?: SimulationParams | null;
 }
 
 function exportCSV(result: SimulationResult) {
@@ -192,7 +191,231 @@ async function exportPDF(
   }, 'sismograma_narino');
 }
 
-export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid, bgSimError, onRetryBackground }: Props) {
+/**
+ * Panel de resultados para un REGISTRO REAL (SGC/OVSP). Es autónomo: no depende
+ * de ninguna simulación FDM. Muestra solo lo medible sobre la señal real
+ * (amplitud, frecuencia dominante, duración, muestreo), la interpretación
+ * honesta y permite guardar el reporte y exportarlo (PDF con el sismograma
+ * real, sin corte del subsuelo ni hodograma).
+ */
+function RealRecordResultsPanel({
+  realRecord, realParams, ampScale,
+}: {
+  realRecord: RealRecordInfo;
+  realParams: SimulationParams;
+  ampScale: 'common' | 'component';
+}) {
+  const { user } = useAuth();
+  const [openSections, setOpenSections] = useState<Set<ResultSection>>(new Set(['metricas']));
+  const toggle = (s: ResultSection) => setOpenSections(prev => (
+    prev.has(s) ? new Set<ResultSection>() : new Set<ResultSection>([s])
+  ));
+  const [reportTitle, setReportTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  // Al cambiar de registro real, se vuelve a exigir guardar antes de exportar.
+  useEffect(() => {
+    setHasSaved(false);
+    setSaveMsg(null);
+    setReportTitle('');
+  }, [realRecord.label]);
+
+  const metrics = computeRealRecordMetrics(realRecord.waveData);
+  const interp = interpretSimulation({
+    params: realParams,
+    dominantFrequency: metrics.dominantFrequency,
+    isRealRecord: true,
+    realLabel: realRecord.label,
+    realDuration: metrics.duration,
+  });
+
+  const defaultTitle = `Registro real ${realRecord.label}`;
+
+  const handleSave = async () => {
+    if (!supabase || !user) return;
+    setSaving(true);
+    setSaveMsg(null);
+    const { error } = await supabase.from('simulation_reports').insert({
+      user_id: user.id,
+      title: reportTitle.trim() || defaultTitle,
+      params: realParams,
+      results: {
+        maxAmplitude: metrics.maxAmplitude,
+        duration: metrics.duration,
+        dominantFrequency: metrics.dominantFrequency,
+        // Registro real: sin arribos ni malla; se marcan como no detectados.
+        pArrival: 0,
+        sArrival: 0,
+        pArrivalDetected: false,
+        sArrivalDetected: false,
+        waveData: downsampleWave(realRecord.waveData, 600),
+        isRealRecord: true,
+        realLabel: realRecord.label,
+        ampScale,
+      },
+    });
+    if (error) {
+      setSaveMsg({ type: 'error', text: 'No se pudo guardar el reporte. Inténtalo de nuevo.' });
+      console.error('Error guardando reporte:', error.message);
+    } else {
+      setSaveMsg({ type: 'ok', text: '¡Guardado! Ya puedes descargar y verlo en "Mis Reportes".' });
+      setHasSaved(true);
+    }
+    setSaving(false);
+  };
+
+  const exportCsvReal = () => {
+    const { waveData } = realRecord;
+    const rows = ['time_s,north_rel,east_rel,vertical_rel'];
+    for (let i = 0; i < waveData.time.length; i++) {
+      rows.push(`${waveData.time[i].toFixed(4)},${waveData.north[i].toExponential(6)},${waveData.east[i].toExponential(6)},${waveData.vertical[i].toExponential(6)}`);
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'registro_real_narino.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdfReal = async () => {
+    setPdfBusy(true);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      await downloadReportPdf({
+        title: reportTitle.trim() || defaultTitle,
+        author: user?.full_name ?? undefined,
+        params: realParams,
+        // Registro real: solo parámetros del evento, métricas, sismogramas e
+        // interpretación. Sin corte del subsuelo ni movimiento de partícula.
+        sections: { params: true, metrics: true, seismograms: true, crossSection: false, particleMotion: false, interpretation: true },
+        results: {
+          maxAmplitude: metrics.maxAmplitude,
+          duration: metrics.duration,
+          dominantFrequency: metrics.dominantFrequency,
+          pArrival: 0,
+          sArrival: 0,
+          pArrivalDetected: false,
+          sArrivalDetected: false,
+          waveData: downsampleWave(realRecord.waveData, 1200),
+          isRealRecord: true,
+          realLabel: realRecord.label,
+          ampScale,
+        },
+      }, 'registro_real_narino');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const red = realRecord.label.startsWith('CM')
+    ? 'Red Sismológica Nacional (SGC)'
+    : 'Observatorio Vulcanológico y Sismológico de Pasto (OVSP)';
+
+  return (
+    <div className="flex flex-col gap-3 h-full min-h-0">
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
+        {/* Aviso: es un registro real, no una simulación */}
+        <div className="bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-3">
+          <p className="text-[11px] font-bold text-[#1A1A2E]">Registro real — {realRecord.label}</p>
+          <p className="text-[10px] text-stone-500 mt-0.5 leading-relaxed">
+            Señal medida por {red}. Aquí se analiza el registro tal cual; el mapa de calor y el movimiento de partícula viven en el laboratorio de simulación.
+          </p>
+        </div>
+
+        {/* Métricas medibles sobre la señal real */}
+        <AccordionSection title="Métricas del registro" open={openSections.has('metricas')} onToggle={() => toggle('metricas')}>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Amplitud máx.', value: formatAmplitude(metrics.maxAmplitude), tip: 'Pico de amplitud en unidades arbitrarias (la señal no está calibrada). Las trazas se muestran normalizadas a este pico (±1).' },
+              { label: 'Duración', value: `${metrics.duration.toFixed(0)} s`, tip: 'Duración total del registro real (tras recortarlo a la ventana del evento).' },
+              { label: 'Frecuencia dominante', value: `${metrics.dominantFrequency.toFixed(1)} Hz`, tip: 'Frecuencia con mayor energía en el espectro de la magnitud del movimiento del suelo.' },
+              { label: 'Muestreo', value: `${metrics.sampleRate.toFixed(0)} Hz`, tip: 'Frecuencia de muestreo del registro decimado para su visualización.' },
+              { label: 'Muestras', value: `${metrics.numSamples}`, tip: 'Número de muestras por componente (Norte, Este, Vertical).' },
+              { label: 'Pico de energía', value: `${metrics.peakTime.toFixed(1)} s`, tip: 'Instante en que la magnitud del movimiento |u| alcanza su máximo.' },
+            ].map(m => (
+              <div key={m.label} className="bg-stone-50 rounded-lg p-2 border border-stone-100">
+                <div className="text-[10px] text-stone-500 mb-0.5 leading-tight">
+                  <Tooltip content={m.tip} showIcon>{m.label}</Tooltip>
+                </div>
+                <div className="text-sm font-bold text-[#1A1A2E]">{m.value}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-stone-500 mt-1.5 italic">
+            Un registro real no trae arribos P/S teóricos ni malla FDM: esas magnitudes solo aplican a las simulaciones del laboratorio.
+          </p>
+        </AccordionSection>
+
+        {/* Interpretación honesta del registro real */}
+        <AccordionSection title="Interpretación" icon={<FileText size={12} />} open={openSections.has('interpretacion')} onToggle={() => toggle('interpretacion')}>
+          <p className="text-xs text-stone-600 leading-relaxed">{interp}</p>
+        </AccordionSection>
+      </div>
+
+      {/* Guardar + exportar (fijos abajo). */}
+      <div className="shrink-0 space-y-2 pt-1">
+        {user ? (
+          <>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={reportTitle}
+                onChange={e => setReportTitle(e.target.value)}
+                placeholder={defaultTitle}
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
+              />
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center justify-center gap-2 bg-[#2D6A4F] text-white px-3 py-2 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 shrink-0"
+              >
+                {saving ? 'Guardando…' : hasSaved ? <><Check size={14} /> Guardado</> : <><Save size={14} /> Guardar</>}
+              </button>
+            </div>
+            {saveMsg && (
+              <p className={`text-xs rounded-lg p-2 border flex items-center gap-1.5 ${
+                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-500 bg-red-50 border-red-100'
+              }`}>
+                {saveMsg.type === 'ok' && <Check size={13} />}
+                {saveMsg.text}
+              </p>
+            )}
+            {!hasSaved && (
+              <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                <Info size={12} /> Guarda el reporte para habilitar las descargas.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={exportCsvReal} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <Download size={14} /> CSV
+              </button>
+              <button onClick={() => exportPNG()} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <Image size={14} /> PNG
+              </button>
+              <button onClick={exportPdfReal} disabled={!hasSaved || pdfBusy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <FileDown size={14} /> {pdfBusy ? '…' : 'PDF'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-stone-400 bg-stone-50 border border-stone-200/60 rounded-xl p-3">
+            <Info size={14} className="shrink-0" />
+            Inicia sesión para guardar el registro como reporte y descargarlo.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid, realParams }: Props) {
+  // Registro real cargado: panel autónomo (sin simulación FDM de apoyo).
+  if (realRecord && realParams) {
+    return <RealRecordResultsPanel realRecord={realRecord} realParams={realParams} ampScale={ampScale} />;
+  }
   // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
   // cierran las demás), para que siempre quepa sin scroll. Al inicio solo
   // "Métricas" está abierta.
@@ -283,39 +506,6 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   }, [forceSection]);
 
   if (!result) {
-    // Con un registro real cargado, la simulación de apoyo (métricas, malla,
-    // interpretación y reporte) aún se está calculando: se avisa con el volcán
-    // cargando en vez del empty state de "3 pasos" (que no aplica aquí).
-    if (realRecord) {
-      // Si la simulación de apoyo falló (backend caído, timeout…), no dejamos el
-      // volcán girando para siempre: mostramos el error y un botón para reintentar.
-      if (bgSimError) {
-        return (
-          <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
-              <Info size={22} className="text-[#C4553A]" />
-            </div>
-            <p className="text-xs text-stone-600 max-w-xs leading-relaxed mb-4">{bgSimError}</p>
-            {onRetryBackground && (
-              <button
-                onClick={onRetryBackground}
-                className="text-xs font-bold px-4 py-2 rounded-lg bg-[#C4553A] text-white btn-hover"
-              >
-                Reintentar
-              </button>
-            )}
-          </div>
-        );
-      }
-      return (
-        <div className="bg-white rounded-xl border border-stone-200/60 shadow-sm p-5 h-full flex flex-col items-center justify-center text-center">
-          <VolcanoLoader size={44} label="Preparando el análisis del registro…" />
-          <p className="text-[11px] text-stone-400 mt-3 max-w-xs leading-relaxed">
-            Con el registro real cargado, se calcula una simulación equivalente para las métricas, el mapa de calor y la interpretación. Tarda unos segundos; el sismograma ya se reproduce a la izquierda.
-          </p>
-        </div>
-      );
-    }
     const steps = [
       { n: 1, title: 'Elige un escenario o ajusta el subsuelo', text: 'Parte de un caso listo (sismo andino, volcánico del Galeras…) o mueve las velocidades y la densidad en "Variables elásticas".' },
       { n: 2, title: 'Revisa la fuente', text: 'Define el tipo de fuente, la magnitud, la profundidad y la distancia de la estación en "Fuente sísmica".' },

@@ -300,15 +300,24 @@ export function buildReportPdf(input: ReportInput): jsPDF {
 
   if (sec.metrics) {
   section('Métricas del resultado');
-  const metricRows: [string, string][] = [
-    ['Amplitud máxima', `${results.maxAmplitude.toExponential(2)} u.a.`],
-    ['Frecuencia dominante', `${results.dominantFrequency.toFixed(2)} Hz`],
-    ['Arribo onda P', `${results.pArrival.toFixed(2)} s${results.pArrivalDetected === false ? ' (teórico)' : ''}`],
-    ['Arribo onda S', `${results.sArrival.toFixed(2)} s${results.sArrivalDetected === false ? ' (teórico)' : ''}`],
-    ['Diferencia S − P', `${(results.sArrival - results.pArrival).toFixed(2)} s`],
-    ['Duración registrada', `${results.duration.toFixed(0)} s`],
-  ];
-  if (results.gridInfo) {
+  const isReal = results.isRealRecord === true;
+  // En un REGISTRO REAL no hay arribos P/S teóricos ni malla: solo se reportan
+  // las magnitudes medibles sobre la señal (amplitud, frecuencia, duración).
+  const metricRows: [string, string][] = isReal
+    ? [
+        ['Amplitud máxima', `${results.maxAmplitude.toExponential(2)} u.a.`],
+        ['Frecuencia dominante', `${results.dominantFrequency.toFixed(2)} Hz`],
+        ['Duración del registro', `${results.duration.toFixed(0)} s`],
+      ]
+    : [
+        ['Amplitud máxima', `${results.maxAmplitude.toExponential(2)} u.a.`],
+        ['Frecuencia dominante', `${results.dominantFrequency.toFixed(2)} Hz`],
+        ['Arribo onda P', `${results.pArrival.toFixed(2)} s${results.pArrivalDetected === false ? ' (teórico)' : ''}`],
+        ['Arribo onda S', `${results.sArrival.toFixed(2)} s${results.sArrivalDetected === false ? ' (teórico)' : ''}`],
+        ['Diferencia S − P', `${(results.sArrival - results.pArrival).toFixed(2)} s`],
+        ['Duración registrada', `${results.duration.toFixed(0)} s`],
+      ];
+  if (!isReal && results.gridInfo) {
     metricRows.push(['Malla FDM', `${results.gridInfo.nx} × ${results.gridInfo.nz}`]);
     // Enteros grandes: agrupados con espacio (no punto ni coma; en español
     // "6.000" se leería como seis). Espacio normal para no depender de glifos.
