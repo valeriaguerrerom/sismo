@@ -650,9 +650,9 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # que ese primer rebote quede fuera de la ventana útil (el cómputo sigue
     # < 15 s gracias al kernel Numba). En medio homogéneo se mantiene el dominio
     # canónico para no alterar los presets existentes.
-    NX_MAX = 1200 if two_layer else 820
+    NX_MAX = 1200 if two_layer else 1100
     NZ_MAX = 700
-    domain_span_m = 48000 if two_layer else 34000
+    domain_span_m = 48000 if two_layer else 44000
 
     nx = min(NX_MAX, max(80, int(domain_span_m / dx)))
 

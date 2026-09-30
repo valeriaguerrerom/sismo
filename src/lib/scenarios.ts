@@ -31,85 +31,98 @@ function build(p: Omit<SimulationParams, 'lambda' | 'mu'>): SimulationParams {
 }
 
 /**
- * Lista de escenarios. El primero es el que se carga al abrir el Simulador
- * (el más didáctico: P y S bien separadas).
+ * Lista de escenarios. El primero es el que se carga al abrir el Simulador.
+ *
+ * Todos los valores de velocidades y densidades son REPRESENTATIVOS con fines
+ * educativos (no un estudio de sitio calibrado). Los parámetros se eligieron
+ * midiendo criterios objetivos en el motor real (ver docs/escenarios-simulador.md):
+ * cola tras la S mayor que en el mismo caso homogéneo (en los de capa), P
+ * visible (≥15 % de la S en escala común), las tres componentes con señal
+ * (la menor ≥25 % de la mayor, salvo la transversal del volcánico que es casi
+ * nula por ser fuente isótropa), el pulso llenando la ventana del evento, sin
+ * rebotes de borde (P ni S) dentro de la duración, ≥10 nodos por longitud de
+ * onda y cómputo < 15 s.
  */
 export const SCENARIOS: Scenario[] = [
   {
-    id: 'superficial-didactico',
-    name: 'Cortical didáctico (P y S separadas)',
+    id: 'pasto-deposito-volcanico',
+    name: 'Pasto sobre depósitos volcánicos (dos capas)',
     expectation:
-      'Fuente somera de mecanismo inverso: la P llega primero y, bien separada, un tren de onda S fuerte. Domina la componente Norte.',
+      'Capa blanda de depósitos volcánicos sobre roca: la onda S se amplifica y la sacudida se prolonga después de su llegada. Compárala con un modelo homogéneo.',
     params: build({
-      vp: 3200, vs: 1850, density: 2500, sourceType: 'tectonic',
+      vp: 4000, vs: 2300, density: 2600, sourceType: 'tectonic',
       magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 8, dx: 20, dt: 0.004,
-      strike: 20, dip: 35, rake: 90, stationAzimuth: 30, epicentralDistanceKm: 4,
+      // dx 25 y duración 6.5 s: el primer rebote de borde (P) llega a ~8.5 s,
+      // fuera de la ventana; cómputo ~11 s. Mecanismo (dip 45, rake 60, az 45)
+      // equilibra las tres componentes.
+      duration: 6.5, dx: 25, dt: 0.0039,
+      strike: 30, dip: 45, rake: 60, stationAzimuth: 45, epicentralDistanceKm: 4,
       sourceCycles: 1,
+      subsurfaceModel: 'twoLayer',
+      layerThickness: 0.5, layerVp: 1800, layerVs: 600, layerDensity: 1900,
     }),
   },
   {
     id: 'cortical-superficial-narino',
-    name: 'Cortical andino (Nariño)',
+    name: 'Cortical andino (Nariño, dos capas)',
     expectation:
-      'Sismo cortical del suroccidente andino, algo más fuerte: P y S bien marcadas con un buen tren de ondas en las tres componentes.',
+      'Sismo cortical andino con una capa de sedimentos moderadamente blanda sobre roca: P y S bien marcadas y una cola algo prolongada por la capa.',
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
-      magnitude: 5.0, depth: 4, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 9, dx: 24, dt: 0.0045,
-      strike: 30, dip: 50, rake: 60, stationAzimuth: 60, epicentralDistanceKm: 4,
+      magnitude: 5.0, depth: 3, epicenterLat: 1.2136, epicenterLon: -77.2811,
+      duration: 6.5, dx: 25, dt: 0.0045,
+      strike: 30, dip: 45, rake: 60, stationAzimuth: 45, epicentralDistanceKm: 4,
       sourceCycles: 1,
+      // Sedimentos moderadamente blandos sobre la roca (contraste moderado).
+      subsurfaceModel: 'twoLayer',
+      layerThickness: 0.6, layerVp: 2600, layerVs: 1000, layerDensity: 2100,
+    }),
+  },
+  {
+    id: 'volcano-tectonico-galeras',
+    name: 'Volcano-tectónico del Galeras (dos capas)',
+    expectation:
+      'Evento volcánico (fuente isótropa) con depósitos piroclásticos sobre roca volcánica: domina la P, la transversal es casi nula (no hay cizalla) y la capa prolonga la sacudida.',
+    params: build({
+      vp: 3000, vs: 1700, density: 2500, sourceType: 'volcanic',
+      magnitude: 3.5, depth: 2.5, epicenterLat: 1.2216, epicenterLon: -77.3742,
+      duration: 6, dx: 25, dt: 0.0053,
+      strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 3,
+      sourceCycles: 1,
+      // Depósitos piroclásticos blandos sobre roca volcánica.
+      subsurfaceModel: 'twoLayer',
+      layerThickness: 0.4, layerVp: 1900, layerVs: 700, layerDensity: 1800,
     }),
   },
   {
     id: 'cortical-profundo',
-    name: 'Cortical más profundo (P y S más separadas)',
+    name: 'Cortical más profundo (homogéneo)',
     expectation:
-      'La misma corteza con la fuente más profunda: la P y la S llegan más separadas entre sí, con energía en las tres componentes. Compáralo con el somero.',
+      'Corteza homogénea con la fuente más profunda: la P y la S llegan bien separadas, con energía en las tres componentes. Comparación sin capa.',
     params: build({
       vp: 3600, vs: 2050, density: 2700, sourceType: 'tectonic',
       magnitude: 5.5, depth: 5, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 7.5, dx: 20, dt: 0.004,
+      duration: 6, dx: 20, dt: 0.004,
       strike: 30, dip: 45, rake: 80, stationAzimuth: 45, epicentralDistanceKm: 6,
       sourceCycles: 1,
     }),
   },
   {
-    id: 'volcano-tectonico-galeras',
-    name: 'Volcano-tectónico del Galeras',
+    id: 'superficial-didactico',
+    name: 'Cortical didáctico (homogéneo)',
     expectation:
-      'Evento volcánico somero (fuente isótropa): domina la onda P, la vertical es pequeña y la transversal casi nula (no hay cizalla). Tren de ondas corto y rápido.',
+      'Corteza homogénea somera: la P llega primero y, bien separada, un tren de onda S fuerte, con energía en las tres componentes. Comparación sin capa.',
     params: build({
-      vp: 3000, vs: 1700, density: 2500, sourceType: 'volcanic',
-      magnitude: 3.5, depth: 3, epicenterLat: 1.2216, epicenterLon: -77.3742,
-      duration: 9, dx: 20, dt: 0.005,
-      strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 4,
-      sourceCycles: 1,
-    }),
-  },
-  {
-    id: 'pasto-deposito-volcanico',
-    name: 'Pasto sobre depósitos volcánicos (dos capas)',
-    expectation:
-      'Observa cómo la capa blanda amplifica la onda S y prolonga la sacudida después de su llegada. Compárala con un modelo homogéneo.',
-    params: build({
-      vp: 4000, vs: 2300, density: 2600, sourceType: 'tectonic',
+      vp: 3200, vs: 1850, density: 2500, sourceType: 'tectonic',
       magnitude: 4.5, depth: 2, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      // Duración 6.5 s: termina antes del primer rebote de borde de la P
-      // (~6.8 s con el dominio ampliado del modo dos capas) y deja ver la
-      // coda amplificada de la capa (verificado con la resta capas−homogéneo).
-      duration: 6.5, dx: 20, dt: 0.0035,
-      strike: 30, dip: 45, rake: 90, stationAzimuth: 45, epicentralDistanceKm: 4,
+      duration: 6, dx: 20, dt: 0.004,
+      strike: 20, dip: 45, rake: 60, stationAzimuth: 35, epicentralDistanceKm: 4,
       sourceCycles: 1,
-      // Capa superficial blanda (valores REPRESENTATIVOS con fines educativos,
-      // no un estudio de sitio calibrado; ver docs/modelo-capas.md).
-      subsurfaceModel: 'twoLayer',
-      layerThickness: 0.5, layerVp: 1800, layerVs: 600, layerDensity: 1900,
     }),
   },
 ];
 
-/** Escenario por defecto al abrir el Simulador (el más didáctico). */
+/** Escenario por defecto al abrir el Simulador (Pasto sobre depósitos). */
 export function defaultScenario(): Scenario {
   return SCENARIOS[0];
 }

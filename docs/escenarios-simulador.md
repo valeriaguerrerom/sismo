@@ -1,135 +1,143 @@
 # Escenarios predeterminados del Simulador
 
 Documento de apoyo para la tesis. Describe los escenarios que trae el Simulador,
-sus valores, el mecanismo focal de cada uno y el acimut de la estación.
+sus valores y cómo se eligieron.
 
-El motor es de diferencias finitas 2D (P-SV + SH) en un **medio homogéneo**
-(Vp, Vs y densidad constantes). Los escenarios se eligieron para que sean
-didácticos **dentro de los límites del motor**: sin rebotes de borde dentro de la
-ventana útil, al menos 10 nodos por longitud de onda mínima y cómputo por debajo
-de 15 s. Todos los valores se validaron ejecutando el motor real.
+El motor es de diferencias finitas 2D (P-SV + SH). Admite un **medio homogéneo**
+o un **modelo de dos capas** (capa superficial blanda sobre un semiespacio de
+roca; ver `docs/modelo-capas.md`). Todos los valores de velocidades y densidades
+son **representativos con fines educativos** (no un estudio de sitio calibrado)
+y no se atribuyen a una fuente puntual que no podamos respaldar.
 
-## Distancia epicentral como parámetro
+## Cómo se eligieron los parámetros
 
-La **distancia epicentral** (`epicentralDistanceKm`) es un parámetro del
-Simulador. A mayor distancia, la llegada de la P y la de la S se separan más en
-el tiempo; pero el receptor se acerca al borde y el primer rebote llega antes,
-así que los escenarios equilibran ambos efectos. El rango del control depende del
-tamaño de malla (dx) elegido: el máximo alcanzable es la mayor distancia que
-mantiene fuente y receptor lejos de las zonas absorbentes. Si se pide una
-distancia mayor, el valor se ajusta al máximo alcanzable y el Simulador muestra
-el motivo.
+Cada escenario se optimizó **midiendo criterios objetivos** en el motor real
+(no a ojo). Un candidato se acepta si cumple, medido en la señal simulada:
 
-## Acimut de la estación
+1. **Cola tras la S** (solo escenarios con capa): la energía RMS de la coda
+   (después del paquete S directo) es claramente mayor que en el **mismo caso
+   homogéneo con la misma frecuencia** de fuente. Se mide restando/comparando
+   ambas corridas.
+2. **P visible**: la amplitud máxima de la P es ≥ 15 % de la de la S en escala
+   común (el máximo de las tres componentes).
+3. **Tres componentes con señal**: la menor de las tres es ≥ 25 % de la mayor.
+   Excepción: en el **volcánico** la fuente es isótropa y **no excita la
+   transversal (SH = 0)**; ahí el criterio se aplica a la radial y la vertical.
+4. **El pulso llena la ventana del evento** (la misma ventana "Ajustar al
+   evento" que muestra la pantalla por defecto).
+5. **Sin rebotes de borde** (P ni S; se toma el **menor** de los dos) dentro de
+   la duración.
+6. **≥ 10 nodos por longitud de onda** mínima y **cómputo < 15 s**.
 
-El acimut por defecto es **45° (NE)**. Se eligió así porque con el mecanismo de
-doble par, un acimut intermedio (ni 0° ni 90°) hace que **tanto la componente
-radial como la transversal aporten a Norte y a Este**, de modo que las tres
-componentes (N, E, Z) se ven distintas y didácticas. Con acimut 0° o 90° una de
-las dos horizontales quedaría dominada por una sola de las fases y el carácter
-triaxial se apreciaría menos. Cada escenario ajusta ligeramente el acimut para
-resaltar las diferencias entre componentes.
+En el modo dos capas la frecuencia de la fuente se baja automáticamente si hace
+falta para cumplir el criterio 6 (se avisa al usuario).
 
 ## Los escenarios
 
-### 1. Cortical didáctico (escenario por defecto)
+El **escenario por defecto** al abrir el Simulador es **"Pasto sobre depósitos
+volcánicos"**. Los tres primeros usan el modelo de dos capas; los dos últimos
+son homogéneos, como comparación.
+
+### 1. Pasto sobre depósitos volcánicos (dos capas) — por defecto
+
+Capa blanda de depósitos volcánicos sobre roca. La onda S se amplifica y la
+sacudida se prolonga tras su llegada.
 
 | Parámetro | Valor |
 |-----------|-------|
 | Tipo | Tectónico (doble par) |
-| Magnitud | Mw 4.0 |
-| Profundidad focal | 2 km |
-| Vp / Vs / ρ | 3200 m/s / 1850 m/s / 2500 kg/m³ |
-| Distancia epicentral | 6 km |
-| Acimut estación | 40° |
-| Mecanismo (strike/dip/rake) | 20° / 35° / 60° |
-| dx / dt / duración | 20 m / 0.0045 s / 7 s |
+| Semiespacio (roca) | Vp 4000, Vs 2300, ρ 2600 |
+| Capa superficial | espesor 0.5 km, Vp 1800, Vs 600, ρ 1900 |
+| Magnitud / profundidad | Mw 4.5 / 2 km |
+| Mecanismo / acimut | strike 30, dip 45, rake 60 / az 45 |
+| Distancia estación | 4 km |
+| Malla / duración | dx 25 m, duración 6.5 s |
 
-**Qué se observa:** la llegada de la P (~2.4 s) y, después, la de la S (~3.6 s),
-bien separadas en las tres componentes. Es el más didáctico y por eso es el que
-se carga al abrir el Simulador.
+### 2. Cortical andino (Nariño, dos capas)
 
-### 2. Cortical superficial andino (Nariño)
+Sedimentos moderadamente blandos sobre roca; P y S bien marcadas y cola algo
+prolongada por la capa.
 
 | Parámetro | Valor |
 |-----------|-------|
 | Tipo | Tectónico (doble par) |
-| Magnitud | Mw 5.0 |
-| Profundidad focal | 5 km |
-| Vp / Vs / ρ | 3500 m/s / 2000 m/s / 2600 kg/m³ |
-| Distancia epicentral | 6 km |
-| Acimut estación | 45° |
-| Mecanismo (strike/dip/rake) | 30° / 40° / 80° |
-| dx / dt / duración | 22 m / 0.004 s / 7 s |
+| Semiespacio (roca) | Vp 3500, Vs 2000, ρ 2600 |
+| Capa (sedimentos) | espesor 0.6 km, Vp 2600, Vs 1000, ρ 2100 |
+| Magnitud / profundidad | Mw 5.0 / 3 km |
+| Mecanismo / acimut | strike 30, dip 45, rake 60 / az 45 |
+| Distancia estación | 4 km |
+| Malla / duración | dx 25 m, duración 6.5 s |
 
-**Qué se observa:** P (~2.5 s) y S (~4.1 s) separadas, con energía en las tres
-componentes; la transversal muestra el aporte del SH del mecanismo.
+### 3. Volcano-tectónico del Galeras (dos capas)
 
-### 3. Cortical más profundo (comparación)
-
-| Parámetro | Valor |
-|-----------|-------|
-| Tipo | Tectónico (doble par) |
-| Magnitud | Mw 5.5 |
-| Profundidad focal | 9 km |
-| Vp / Vs / ρ | 3500 m/s / 2000 m/s / 2600 kg/m³ |
-| Distancia epicentral | 5 km |
-| Acimut estación | 45° |
-| Mecanismo (strike/dip/rake) | 30° / 40° / 80° |
-| dx / dt / duración | 22 m / 0.004 s / 8 s |
-
-**Qué se observa:** P (~3.1 s) y S (~5.3 s) más tardías y más separadas entre sí
-que en el escenario superficial. Sirve para **comparar** el efecto de la
-profundidad focal. (La profundidad máxima que mantiene ≥ 10 nodos/λ con este dx
-es ~9 km; más profundo obligaría a subir dx y dispararía la advertencia de
-dispersión.)
-
-### 4. Volcano-tectónico del Galeras
+Fuente isótropa (volcánica) con depósitos piroclásticos sobre roca volcánica.
+Domina la P, la transversal es casi nula (no hay cizalla) y la capa prolonga la
+sacudida.
 
 | Parámetro | Valor |
 |-----------|-------|
 | Tipo | Volcánico (isótropo) |
-| Magnitud | Mw 2.5 |
-| Profundidad focal | 3 km |
-| Vp / Vs / ρ | 3000 m/s / 1700 m/s / 2500 kg/m³ |
-| Distancia epicentral | 5 km |
-| Acimut estación | 45° |
-| Mecanismo | No aplica (fuente isótropa) |
-| dx / dt / duración | 28 m / 0.0055 s / 7 s |
+| Semiespacio (roca volcánica) | Vp 3000, Vs 1700, ρ 2500 |
+| Capa (piroclásticos) | espesor 0.4 km, Vp 1900, Vs 700, ρ 1800 |
+| Magnitud / profundidad | Mw 3.5 / 2.5 km |
+| Distancia estación | 3 km |
+| Malla / duración | dx 25 m, duración 6 s |
 
-**Qué se observa:** domina la onda P y la componente transversal es
-**prácticamente nula** (la explosión isótropa no genera cizalla / SH). La señal
-decae rápido a la calma del medio homogéneo. Al ser isótropo, este escenario no
-usa mecanismo focal (strike/dip/rake).
+### 4. Cortical más profundo (homogéneo)
 
-## Origen de los valores
+Corteza homogénea con la fuente más profunda: P y S bien separadas. Comparación
+sin capa.
 
-Los valores de cada escenario son **representativos**, no la solución de un
-evento puntual:
+| Parámetro | Valor |
+|-----------|-------|
+| Tipo | Tectónico (doble par) |
+| Medio | Vp 3600, Vs 2050, ρ 2700 |
+| Magnitud / profundidad | Mw 5.5 / 5 km |
+| Mecanismo / acimut | strike 30, dip 45, rake 80 / az 45 |
+| Distancia estación | 6 km |
+| Malla / duración | dx 20 m, duración 6 s |
 
-- **Escenarios tectónicos.** Las velocidades (Vp 3200–3500 m/s, Vs 1850–2000
-  m/s), la densidad (2500–2600 kg/m³) y las profundidades son **valores
-  representativos de la corteza andina somera** del suroccidente de Colombia. La
-  razón Vp/Vs ≈ 1.75 corresponde a un cociente de Poisson típico de la corteza.
-  Los mecanismos focales (rumbo andino ~20–30°, buzamiento moderado, rake inverso
-  a inverso-desgarre 60–80°) son **representativos del régimen compresivo
-  inverso-desgarre** de la zona (subducción de Nazca y sistema de fallas de
-  Romeral); pueden compararse con las soluciones del catálogo del SGC.
+### 5. Cortical didáctico (homogéneo)
 
-- **Escenario volcánico.** Las velocidades y la profundidad (3 km) son valores
-  **representativos del edificio volcánico del Galeras** y de su sismicidad
-  volcano-tectónica somera (típicamente pocos kilómetros bajo el cráter, eventos
-  de baja magnitud). Se modela como **fuente isótropa (volcánica)**, que no
-  requiere strike/dip/rake, por lo que no se asignó un mecanismo focal.
+Corteza homogénea somera: P clara y un tren de onda S fuerte, con energía en las
+tres componentes. Comparación sin capa.
 
-## Enlaces de referencia
+| Parámetro | Valor |
+|-----------|-------|
+| Tipo | Tectónico (doble par) |
+| Medio | Vp 3200, Vs 1850, ρ 2500 |
+| Magnitud / profundidad | Mw 4.5 / 2 km |
+| Mecanismo / acimut | strike 20, dip 45, rake 60 / az 35 |
+| Distancia estación | 4 km |
+| Malla / duración | dx 20 m, duración 6 s |
 
-- **Catálogo de Mecanismo Focal y Tensor Momento del SGC** — Servicio Geológico
-  Colombiano. Soluciones de mecanismos focales para eventos en Colombia y
-  regiones fronterizas, útil para comparar los mecanismos de los escenarios
-  tectónicos con soluciones reales del suroccidente colombiano.
-  <https://bdrsnc.sgc.gov.co/sismologia1/sismologia/focal_seiscomp_3/index.html>
+## Métricas medidas (motor real)
 
-- **Global Volcanism Program (Smithsonian) — Galeras** — ficha del volcán con su
-  historia eruptiva y actividad sísmica.
-  <https://volcano.si.edu/volcano.cfm?vn=351080>
+Valores medidos con los criterios de arriba. `cola` = RMS coda capa / homogéneo
+(— = homogéneo, no aplica). `P/S` = amplitud P / S en escala común. `comp` =
+menor componente / mayor. `ventana` = fracción de la duración que ocupa la
+ventana del evento. `rebote/dur` = primer rebote de borde (menor P/S) frente a
+la duración (debe ser mayor que la duración).
+
+| Escenario | cola | P/S | comp | ventana | nodos/λ | rebote/dur | cómputo | f0 |
+|-----------|------|-----|------|---------|---------|------------|---------|-----|
+| Pasto (defecto) | 242× | 0.74 | 0.29 | 0.70 | 10.0 | 8.5 / 6.5 s | 10.5 s | 0.96 Hz |
+| Cortical andino | 726× | 0.82 | 0.29 | 0.74 | 10.0 | 8.9 / 6.5 s | 9.8 s | 1.60 Hz |
+| Galeras VT | 96× | 3.13 | 1.00* | 0.71 | 10.0 | 10.6 / 6.0 s | 7.6 s | 1.12 Hz |
+| Cortical profundo | — | 0.29 | 0.31 | 0.52 | 11.7 | 6.2 / 6.0 s | 10.4 s | 3.50 Hz |
+| Cortical didáctico | — | 0.57 | 0.52 | 0.43 | 10.6 | 6.8 / 6.0 s | 9.1 s | 3.50 Hz |
+
+*Galeras: al ser fuente isótropa, Norte y Este provienen de la misma radial
+(por eso `comp = 1.00`) y la **transversal medida es 0** (SH no excitado);
+la vertical es ~32 % de la horizontal. Las colas altas de los escenarios con
+capa se deben a que la coda del caso homogéneo con la misma frecuencia es casi
+nula, de modo que el contraste es grande.
+
+## Distancia epicentral y acimut
+
+- **Distancia epicentral** (`epicentralDistanceKm`): a mayor distancia, P y S se
+  separan más, pero el receptor se acerca al borde. El máximo del control depende
+  de dx; si se pide más, se ajusta al máximo alcanzable y se avisa el motivo.
+- **Acimut de la estación**: un valor intermedio (≈45°) reparte la energía entre
+  Norte y Este, así las tres componentes se ven distintas. En el volcánico no
+  hay transversal, así que el acimut solo reparte la radial entre N y E.
