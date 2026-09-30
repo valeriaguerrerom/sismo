@@ -181,13 +181,13 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
    * acordeón (que se desplaza sola a la vista). Evita tener que buscar y hacer
    * scroll hasta el encabezado de la próxima tarjeta.
    */
-  const NextSectionButton = ({ to, label }: { to: ParamSection; label: string }) => (
+  const NextSectionButton = ({ to }: { to: ParamSection }) => (
     <button
       type="button"
       onClick={() => toggle(to)}
-      className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#2D6A4F]/30 text-[#2D6A4F] text-xs font-bold hover:bg-[#2D6A4F]/5 transition-colors"
+      className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#2D6A4F] text-white text-xs font-bold shadow-md shadow-[#2D6A4F]/20 hover:bg-[#255a43] btn-hover"
     >
-      Siguiente: {label}
+      Siguiente
       <ChevronRight size={13} />
     </button>
   );
@@ -343,7 +343,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
               )}
             </div>
           )}
-          <NextSectionButton to="fuente" label="Fuente sísmica" />
+          <NextSectionButton to="fuente" />
         </div>
       </AccordionSection>
 
@@ -438,7 +438,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
               />
             </div>
           </div>
-          <NextSectionButton to="config" label="Estación y malla" />
+          <NextSectionButton to="config" />
         </div>
       </AccordionSection>
 

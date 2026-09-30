@@ -65,7 +65,11 @@ export function AccordionSection({ title, icon, open, onToggle, dataTour, header
           si su contenido excede la ventana (caso extremo en pantallas muy
           bajas). En pantallas normales no aparece; evita que scrollee toda la
           columna y mantiene visibles los encabezados y los botones de abajo. */}
-      {open && <div className="px-4 pb-3 max-h-[calc(100dvh-230px)] overflow-y-auto scrollbar-thin">{children}</div>}
+      {open && (
+        <div className="animate-soft-in px-4 pb-3 max-h-[calc(100dvh-230px)] overflow-y-auto scrollbar-thin">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
