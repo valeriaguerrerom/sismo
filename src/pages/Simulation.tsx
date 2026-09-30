@@ -519,7 +519,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                         {realData.label.startsWith('CM')
                           ? 'Sismograma triaxial real de la Red Sismológica Nacional (SGC).'
                           : 'Sismograma triaxial real del Volcán Galeras (OVSP).'}
-                        {' '}El mapa de calor del subsuelo con la propagación (parámetros equivalentes) se genera automáticamente; véalo en la pestaña "Mapa de calor del subsuelo".
+                        {' '}Se muestra el registro tal cual; el análisis está a la derecha.
                       </p>
                     </div>
                     <button onClick={() => { setRealData(null); setRealParams(null); setWave2dPlaying(false); }} className="text-[10px] text-stone-400 px-2 py-1 rounded bg-white border border-stone-200">

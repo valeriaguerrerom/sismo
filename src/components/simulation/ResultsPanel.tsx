@@ -319,9 +319,9 @@ function RealRecordResultsPanel({
       <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
         {/* Aviso: es un registro real, no una simulación */}
         <div className="bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-3">
-          <p className="text-[11px] font-bold text-[#1A1A2E]">Registro real — {realRecord.label}</p>
+          <p className="text-[11px] font-bold text-[#1A1A2E]">Análisis del registro real</p>
           <p className="text-[10px] text-stone-500 mt-0.5 leading-relaxed">
-            Señal medida por {red}. Aquí se analiza el registro tal cual; el mapa de calor y el movimiento de partícula viven en el laboratorio de simulación.
+            Señal medida por {red}. Se analiza el registro tal cual; el mapa de calor y el movimiento de partícula viven en el laboratorio de simulación.
           </p>
         </div>
 
