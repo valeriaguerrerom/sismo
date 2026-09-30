@@ -381,7 +381,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               <Activity size={18} className="text-[#C4553A]" />
               Módulo de Simulación Triaxial
               {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
-              <Tooltip content="Ver guía">
+              <Tooltip content="Ver guía" hoverOnly>
                 <button
                   type="button"
                   onClick={() => launchTour()}

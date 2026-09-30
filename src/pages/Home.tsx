@@ -897,7 +897,7 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
                 Universidad Mariana, Pasto, Nariño
                 {/* Botón de ayuda: repite el tour de bienvenida (solo con sesión). */}
                 {user && (
-                  <Tooltip content="Ver guía">
+                  <Tooltip content="Ver guía" hoverOnly>
                     <button
                       type="button"
                       onClick={launchHomeTour}

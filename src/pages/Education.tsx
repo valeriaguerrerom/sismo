@@ -605,7 +605,7 @@ export function Education() {
             <BookOpen size={20} className="text-[#C4553A]" />
             Centro de Aprendizaje Sísmico
             {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
-            <Tooltip content="Ver guía">
+            <Tooltip content="Ver guía" hoverOnly>
               <button
                 type="button"
                 onClick={launchTour}

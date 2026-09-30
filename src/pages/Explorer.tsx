@@ -476,7 +476,7 @@ export function Explorer({ onLoadRealData }: Props) {
             <Database size={20} className="text-[#C4553A]" />
             Explorador de Registros Sísmicos
             {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
-            <Tooltip content="Ver guía">
+            <Tooltip content="Ver guía" hoverOnly>
               <button
                 type="button"
                 onClick={launchTour}

@@ -636,7 +636,7 @@ export function Map3D() {
           <div className="flex items-center gap-3">
             <span className="font-mono text-[11px] text-stone-400 hidden md:inline">{currentEventTitle}</span>
             {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
-            <Tooltip content="Ver guía">
+            <Tooltip content="Ver guía" hoverOnly>
               <button
                 type="button"
                 onClick={launchTour}
