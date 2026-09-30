@@ -52,8 +52,16 @@ function formatAmplitude(maxAmplitude: number): string {
   return maxAmplitude.toExponential(2) + ' u.a.';
 }
 
-function interpretResult(result: SimulationResult): string {
-  return interpretSimulation(result);
+function interpretResult(result: SimulationResult, realRecord?: RealRecordInfo | null): string {
+  const realDuration = realRecord?.waveData.time.length
+    ? (realRecord.waveData.time[realRecord.waveData.time.length - 1] ?? undefined)
+    : undefined;
+  return interpretSimulation({
+    ...result,
+    isRealRecord: Boolean(realRecord),
+    realLabel: realRecord?.label,
+    realDuration,
+  });
 }
 
 /**
@@ -376,7 +384,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
 
       {/* Interpretation */}
       <AccordionSection title="Interpretación" icon={<FileText size={12} />} dataTour="sim-interpretacion" open={openSections.has('interpretacion')} onToggle={() => toggle('interpretacion')}>
-        <p className="text-xs text-stone-600 leading-relaxed">{interpretResult(result)}</p>
+        <p className="text-xs text-stone-600 leading-relaxed">{interpretResult(result, realRecord)}</p>
       </AccordionSection>
       </div>
 

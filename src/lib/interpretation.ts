@@ -25,6 +25,18 @@ export interface InterpretationInput {
     dx?: number;
     epicentralDistanceKm?: number;
   };
+  /**
+   * true cuando lo que se muestra es un REGISTRO REAL (SGC/OVSP) cargado desde
+   * el Explorador, no un pseudo-sismograma simulado. En ese caso la
+   * interpretación NO presenta los arribos P/S ni las velocidades como medidos
+   * en la señal (vienen del modelo de apoyo del mapa de calor): describe el
+   * registro real y aclara que la propagación es de un modelo equivalente.
+   */
+  isRealRecord?: boolean;
+  /** Etiqueta del registro real (p. ej. "Galeras 2006-12-24"). */
+  realLabel?: string;
+  /** Duración real del registro (s), para el texto del registro real. */
+  realDuration?: number;
 }
 
 /** Distancia epicentral (km) desde gridInfo, si hay datos suficientes. */
@@ -66,8 +78,43 @@ export function sourceFreqAdjustedNote(
   return `La frecuencia de la fuente se ajustó a ${dominantFrequency.toFixed(1)} Hz para representar bien la capa blanda sin dispersión numérica.`;
 }
 
+/**
+ * Interpretación para un REGISTRO REAL (SGC/OVSP). No presenta los arribos P/S
+ * ni las velocidades como medidos en la señal: describe el registro tal cual
+ * (red, estación, duración) y aclara que la propagación del mapa de calor es de
+ * un modelo FDM equivalente, no del registro.
+ */
+function interpretRealRecord(input: InterpretationInput): string {
+  const { params, realLabel, realDuration, gridInfo } = input;
+  const red = (realLabel ?? '').startsWith('CM')
+    ? 'la Red Sismológica Nacional de Colombia (SGC)'
+    : 'el Observatorio Vulcanológico y Sismológico de Pasto (SGC-OVSP)';
+  const deRed = red.startsWith('el ') ? 'del ' + red.slice(3) : 'de ' + red;
+  const tipo = params.sourceType === 'volcanic' ? 'volcánico' : 'tectónico';
+
+  let text = `Registro sísmico REAL${realLabel ? ` (${realLabel})` : ''} ${deRed}. `;
+  if (typeof realDuration === 'number' && realDuration > 0) {
+    text += `Es una señal medida por un sismómetro triaxial (componentes Norte, Este y Vertical), de ${realDuration.toFixed(0)} s de duración, decimada para su visualización. `;
+  } else {
+    text += 'Es una señal medida por un sismómetro triaxial (componentes Norte, Este y Vertical), decimada para su visualización. ';
+  }
+  text += 'Las trazas muestran el movimiento real del suelo en la estación; no son un pseudo-sismograma simulado, así que no se marcan arribos P/S teóricos sobre ellas. ';
+  text += `El mapa de calor del subsuelo y el movimiento de partícula que acompañan a este registro se generan con una simulación FDM de un evento ${tipo} equivalente `;
+  if (gridInfo) {
+    text += `(malla ${gridInfo.nx}×${gridInfo.nz}) `;
+  }
+  text += 'con parámetros representativos del evento (velocidades, profundidad y epicentro), no con la señal real: sirven para ilustrar cómo se propagaría la energía, no para medir sobre el registro. ';
+  text += params.sourceType === 'volcanic'
+    ? 'En eventos volcánicos del Galeras (fuente esencialmente isótropa) domina la onda P y la componente transversal es débil, algo típico de la sismicidad volcánica somera.'
+    : 'En eventos tectónicos la onda S suele ser fuerte en las componentes horizontales, con una diferencia S−P que crece con la distancia al foco.';
+  return text;
+}
+
 /** Genera el texto interpretativo de una simulación. */
 export function interpretSimulation(input: InterpretationInput): string {
+  // Un registro real tiene su propia interpretación (no describe una simulación).
+  if (input.isRealRecord) return interpretRealRecord(input);
+
   const { params, dominantFrequency, gridInfo, pArrival, sArrival } = input;
   const typeLabel = params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica';
   const depthDesc = depthClass(params.depth);

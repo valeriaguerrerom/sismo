@@ -14,6 +14,7 @@ import { ParticleMotion } from '../components/simulation/ParticleMotion';
 import { Activity, Info, Waves, Grid3X3, Box, Play, Pause, SkipBack, RotateCcw, Flame, HelpCircle, Maximize, Minimize } from '../lib/icons';
 import { useAuth } from '../lib/auth';
 import { Tooltip } from '../components/ui/Tooltip';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { startTour, refreshActiveTour } from '../tours/useTour';
 import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';
 
@@ -47,6 +48,11 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
   // Grid submuestreado del mapa de calor (llega del backend junto al resultado).
   const [heatmapGrid, setHeatmapGrid] = useState<GridInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  // Simulación de APOYO en segundo plano (al cargar un registro real): prepara
+  // el mapa de calor y la propagación sin barra de progreso. Mientras corre,
+  // las pestañas "Mapa de calor" y "Partícula" muestran un aviso de que se está
+  // generando, en vez de quedar en blanco.
+  const [bgSimRunning, setBgSimRunning] = useState(false);
   const [progress, setProgress] = useState<SimProgress | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('2d');
@@ -214,6 +220,10 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       setResult(null);
       setSimError(null);
       setProgress({ step: 0, totalSteps: 100, percent: 0 });
+    } else {
+      // Simulación de apoyo (registro real): marca que se está generando el
+      // mapa de calor para avisar en esas pestañas mientras llega el resultado.
+      setBgSimRunning(true);
     }
 
     // El cómputo ocurre en el backend (FastAPI). Como la respuesta es una sola
@@ -233,6 +243,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       .then(({ result: r, heatmapGrid: hg }) => {
         setResult(r);
         setHeatmapGrid(hg);
+        setBgSimRunning(false);
         stopProg();
         if (!background) {
           setProgress({ step: 100, totalSteps: 100, percent: 100 });
@@ -244,6 +255,7 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       })
       .catch((err) => {
         stopProg();
+        setBgSimRunning(false);
         console.error('Error en la simulación:', err);
         // En cualquier fallo (conexión, reinicio del servidor, tiempo de espera
         // agotado o error del backend) mostramos un mensaje claro y devolvemos
@@ -614,6 +626,18 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
               )}
 
               {/* Corte del subsuelo */}
+              {/* Mapa de calor / Partícula con registro real: la simulación de
+                  apoyo corre en segundo plano. Mientras llega el resultado, se
+                  avisa que se está generando (antes quedaba en blanco). */}
+              {!loading && !result && bgSimRunning && (viewMode === 'triaxial' || viewMode === 'particle') && (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <VolcanoLoader size={40} label="Generando la propagación del subsuelo…" />
+                  <p className="text-stone-400 text-xs max-w-xs leading-relaxed mt-3">
+                    Con el registro real cargado, el mapa de calor y el movimiento de partícula se calculan a partir de una simulación equivalente. Tarda unos segundos.
+                  </p>
+                </div>
+              )}
+
               {!loading && result && viewMode === 'triaxial' && (
                 <TriaxialPlane
                   snapshots={result.snapshots}
@@ -634,7 +658,10 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                   reales que ve el usuario: el registro real si está cargado, o
                   el pseudo-sismograma FDM en una simulación pura. Los arribos P/S
                   vienen de la simulación (result). */}
-              {!loading && (result || realData) && viewMode === 'particle' && (() => {
+              {/* Partícula: si hay registro real pero la simulación de apoyo aún
+                  corre (sin result), se muestra el aviso de arriba en vez del
+                  hodograma con arribos P/S en cero. */}
+              {!loading && (result || (realData && !bgSimRunning)) && viewMode === 'particle' && (() => {
                 const pmWave = realData ? realData.waveData : result!.waveData;
                 const pmLastT = pmWave.time[pmWave.time.length - 1] ?? 0;
                 return (

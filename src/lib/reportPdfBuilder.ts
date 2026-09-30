@@ -548,6 +548,11 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     pArrival: results.pArrival,
     sArrival: results.sArrival,
     gridInfo: results.gridInfo,
+    // Con registro real, la interpretación describe el REGISTRO (no la
+    // simulación de apoyo) y no presenta arribos P/S teóricos como medidos.
+    isRealRecord: results.isRealRecord,
+    realLabel: results.realLabel,
+    realDuration: results.isRealRecord ? results.duration : undefined,
   }).replace(/⚠️/g, '(!)');
   const lines = doc.splitTextToSize(interp, CONTENT_W) as string[];
   doc.text(lines, MARGIN, y);
