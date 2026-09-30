@@ -129,6 +129,8 @@ export interface GridInfo {
   interfaceDepthKm?: number;
   /** Tiempo teórico de la reflexión P en la interfaz al receptor (s); 0 si homogéneo. */
   interfaceReflP?: number;
+  /** True si el backend acotó la duración al primer rebote de borde. */
+  durationCappedByBounce?: boolean;
 }
 
 /** Resultado completo de una simulación FDM con sismogramas y métricas. */

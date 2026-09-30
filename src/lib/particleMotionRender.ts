@@ -100,9 +100,41 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   );
   scene.add(origin);
 
+  // ── Encuadre a partir de la extensión REAL de la trayectoria ──
+  // Se proyectan todos los puntos (más las puntas de los ejes rotulados) a NDC
+  // y se aleja la cámara hasta que TODO quepa con un margen pequeño, así la
+  // trayectoria no se sale por los lados. Se itera un par de veces porque la
+  // proyección en perspectiva no es lineal.
+  const dir0 = camera.position.clone().normalize();
+  const AXLBL = AXIS + 0.14; // las etiquetas de eje viven un poco más lejos
+  const fitPts: THREE.Vector3[] = [];
+  for (let i = 0; i < positions.length; i += 3) {
+    fitPts.push(new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]));
+  }
+  fitPts.push(new THREE.Vector3(AXLBL, 0, 0), new THREE.Vector3(0, AXLBL, 0), new THREE.Vector3(0, 0, AXLBL));
+  const TARGET = 0.82; // deja ~18 % de margen alrededor
+  for (let iter = 0; iter < 4; iter++) {
+    camera.updateMatrixWorld();
+    camera.updateProjectionMatrix();
+    let maxNdc = 0;
+    for (const p of fitPts) {
+      const q = p.clone().project(camera);
+      maxNdc = Math.max(maxNdc, Math.abs(q.x), Math.abs(q.y));
+    }
+    if (maxNdc < 1e-6) break;
+    const ratio = maxNdc / TARGET;
+    // Si ya cabe con el margen deseado (ratio ≈ 1), no seguimos alejando.
+    if (ratio <= 1.02 && ratio >= 0.9) break;
+    const dist = camera.position.length() * ratio;
+    camera.position.copy(dir0).multiplyScalar(dist);
+    camera.lookAt(0, 0, 0);
+  }
+
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(sizePx, sizePx);
   renderer.setPixelRatio(1);
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
   renderer.render(scene, camera);
 
   // ── Composición 2D: sobre el render 3D dibujamos las etiquetas de los ejes

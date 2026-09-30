@@ -567,11 +567,24 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
                   {/* Aviso de reflexiones de borde: solo si la ventana supera el
                       primer rebote (el MENOR entre P y S). Con el dominio grande
-                      y la duración acotada normalmente NO aparece. */}
+                      y la duración acotada normalmente NO aparece. Si el rebote
+                      queda fuera de la ventana mostrada, no se menciona la línea
+                      punteada (no se ve) y se aclara "(fuera de la ventana
+                      mostrada)". */}
                   {firstBounce !== null && result.duration > firstBounce + 0.05 && (
                     <div className="flex items-start gap-2 bg-[#C4553A]/5 border border-[#C4553A]/20 rounded-xl p-2.5 text-[11px] text-[#C4553A]">
                       <Info size={14} className="mt-0.5 shrink-0" />
-                      <span>Después de {firstBounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (marcadas con la línea punteada).</span>
+                      {(!simWin || firstBounce <= simWin.end)
+                        ? <span>Después de {firstBounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (marcadas con la línea punteada).</span>
+                        : <span>Después de {firstBounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo (fuera de la ventana mostrada); no las interpretes como señal real.</span>}
+                    </div>
+                  )}
+                  {/* Aviso si el backend acotó la duración al primer rebote de
+                      borde (la duración pedida habría incluido reflexiones). */}
+                  {result.gridInfo.durationCappedByBounce && (
+                    <div className="flex items-start gap-2 bg-stone-100 border border-stone-200 rounded-xl p-2.5 text-[11px] text-stone-500">
+                      <Info size={14} className="mt-0.5 shrink-0" />
+                      <span>La duración se ajustó a {result.duration.toFixed(1)} s, antes del primer rebote de borde del modelo, para no incluir reflexiones artificiales.</span>
                     </div>
                   )}
 

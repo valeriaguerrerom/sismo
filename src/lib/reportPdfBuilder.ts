@@ -318,19 +318,8 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     }
   }
   kv(metricRows);
-  // Aviso de reflexiones si la ventana supera el primer rebote de borde.
-  {
-    const bounceMin = earliestBounce(results.gridInfo);
-    if (results.isRealRecord !== true && bounceMin !== null && results.duration > bounceMin + 0.05) {
-      y += 1;
-      doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
-      const note = `Después de ${bounceMin.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.`;
-      const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
-      doc.text(lines, MARGIN, y);
-      y += lines.length * 3.4 + 2;
-      doc.setTextColor(...COLORS.text);
-    }
-  }
+  // El aviso de reflexiones de borde va SOLO en la sección de sismogramas (no
+  // se duplica aquí en métricas).
   // Nota si la frecuencia de la fuente se ajustó por dispersión (dos capas).
   {
     const fnote = sourceFreqAdjustedNote(params, results.dominantFrequency);
@@ -382,7 +371,12 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const win = computeEventWindow(wd, real ? {} : { pArrival: results.pArrival, sArrival: results.sArrival });
     if (reflAfter !== undefined) {
       doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
-      const note = `Después de ${reflAfter.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (línea punteada terracota).`;
+      // Si el rebote queda FUERA de la ventana mostrada, la línea punteada no se
+      // ve; el aviso lo dice así en vez de mencionar la línea.
+      const bounceVisible = reflAfter <= win.end + 1e-6;
+      const note = bounceVisible
+        ? `Después de ${reflAfter.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real (línea punteada terracota).`
+        : `Después de ${reflAfter.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo (fuera de la ventana mostrada); no las interpretes como señal real.`;
       const lines = doc.splitTextToSize(note, CONTENT_W) as string[];
       doc.text(lines, MARGIN, y);
       y += lines.length * 3.4 + 2;

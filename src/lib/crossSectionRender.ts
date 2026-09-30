@@ -226,14 +226,34 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   // Etiquetas de fuente y estación (texto ≥13px). Se dibujan con un halo blanco
   // para leerse sobre el mapa de calor. "Estación" va DEBAJO del triángulo (la
   // estación está en la superficie, arriba) para no chocar con "Superficie libre".
-  ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
-  const labelHalo = (text: string, lx: number, ly: number) => {
-    ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.strokeText(text, lx, ly);
+  // Rótulo con CHIP blanco semitransparente detrás (no solo halo): así las
+  // líneas de la cuadrícula o de los frentes no cruzan el texto. Respeta el
+  // textAlign actual (center para Fuente/Estación, left para Superficie libre).
+  const labelChip = (text: string, lx: number, ly: number) => {
+    const fh = fs(13);
+    const tw = ctx.measureText(text).width;
+    const align = ctx.textAlign;
+    let bx = lx - tw / 2;
+    if (align === 'left' || align === 'start') bx = lx;
+    else if (align === 'right' || align === 'end') bx = lx - tw;
+    const padX = 3 * scale, padY = 2 * scale;
+    const rx0 = bx - padX, ry0 = ly - fh * 0.80 - padY;
+    const rw = tw + padX * 2, rh = fh * 1.05 + padY * 2, rr = 3 * scale;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.beginPath();
+    ctx.moveTo(rx0 + rr, ry0);
+    ctx.arcTo(rx0 + rw, ry0, rx0 + rw, ry0 + rh, rr);
+    ctx.arcTo(rx0 + rw, ry0 + rh, rx0, ry0 + rh, rr);
+    ctx.arcTo(rx0, ry0 + rh, rx0, ry0, rr);
+    ctx.arcTo(rx0, ry0, rx0 + rw, ry0, rr);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
     ctx.fillStyle = '#1A1A2E'; ctx.fillText(text, lx, ly);
   };
-  labelHalo('Fuente', sx, sz + 22 * scale);
-  labelHalo('Estación', rx, rz + 20 * scale);
+  ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
+  labelChip('Fuente', sx, sz + 22 * scale);
+  labelChip('Estación', rx, rz + 20 * scale);
   ctx.textAlign = 'start';
 
   // Ejes en km (texto ≥13px).
@@ -258,9 +278,7 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   ctx.restore();
   ctx.textAlign = 'left';
   ctx.font = `bold ${fs(13)}px sans-serif`;
-  ctx.lineWidth = 3 * scale; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.strokeText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
-  ctx.fillStyle = '#1A1A2E'; ctx.fillText('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
+  labelChip('Superficie libre', x0 + 5 * scale, y0 - 9 * scale);
 }
 
 /**

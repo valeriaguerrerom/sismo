@@ -207,6 +207,7 @@ class GridInfo(BaseModel):
     interfaceZ: int = Field(default=0, description="Índice Z de la interfaz entre capas (solo twoLayer); 0 si no aplica")
     interfaceDepthKm: float = Field(default=0.0, description="Profundidad de la interfaz entre capas (km); 0 si no aplica")
     interfaceReflP: float = Field(default=0.0, description="Tiempo teórico de la reflexión P en la interfaz al receptor (s); 0 si no aplica")
+    durationCappedByBounce: bool = Field(default=False, description="True si la duración se acotó al primer rebote de borde (el backend la redujo).")
 
 
 class WaveData(BaseModel):
@@ -685,14 +686,10 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # Tope de pasos por rendimiento. La duración EFECTIVA (la que se grafica y se
     # reporta) es total_steps · dt, que puede ser menor que la pedida si se
     # alcanza el tope. Todo el resultado usa eff_duration para ser coherente.
+    # NOTA: total_steps/eff_duration/snapshot_interval se calculan MÁS ABAJO,
+    # después de acotar `duration` por el primer rebote de borde (que necesita la
+    # geometría fuente/receptor y t0, definidos más adelante).
     MAX_STEPS = 8000
-    total_steps = min(MAX_STEPS, int(duration / dt))
-    eff_duration = total_steps * dt
-    # ~100 fotogramas del campo para animar el corte del subsuelo con fluidez.
-    # ceil garantiza que el nº de candidatos no supere 100 (evita que el tope
-    # SNAP_MAX_FRAMES active un submuestreo que dejaría solo ~50 fotogramas).
-    SNAP_TARGET_FRAMES = 100
-    snapshot_interval = max(1, math.ceil(total_steps / SNAP_TARGET_FRAMES))
 
     # Geometría simétrica respecto al centro del dominio: la fuente en X a −d/2
     # y el receptor a +d/2 (d = distancia epicentral pedida). Así ninguno queda
@@ -730,6 +727,43 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
 
     def source_at(tt: float) -> float:
         return gabor(tt, f0, t0, cycles) if use_gabor else ricker(tt, f0, t0)
+
+    # ── Tope de duración por el primer rebote de borde (garantía del backend) ──
+    # El primer rebote de borde (imagen especular en los bordes izq/der/inferior)
+    # marca el instante tras el cual la señal contiene reflexiones ARTIFICIALES
+    # de los límites de la malla. Se calcula ANTES del bucle con la geometría ya
+    # definida y se ACOTA la duración efectiva a ese tiempo, VENGAN DE DONDE
+    # VENGAN los parámetros (escenario, reporte guardado, edición manual o
+    # cliente externo). Así ninguna simulación incluye reflexiones de borde,
+    # aunque el control del panel no lo haya limitado. Se usa el MENOR entre el
+    # rebote de la P y el de la S (con roca rápida la P rebota antes).
+    # Imagen especular de la FUENTE en cada borde (izq/der/inferior) y distancia
+    # a la estación (misma fórmula verificada que el bloque de post-proceso).
+    _right_edge = nx - 1 - abs_thick
+    _left_edge = abs_thick
+    _bottom_edge = nz - 1 - abs_thick
+    _bounce_imgs = (
+        (2 * _right_edge - src_x, src_z),
+        (2 * _left_edge - src_x, src_z),
+        (src_x, 2 * _bottom_edge - src_z),
+    )
+    _bounce_pre = min(
+        math.hypot((ix - rec_x) * dx, (iz - rec_z) * dx) for ix, iz in _bounce_imgs
+    )
+    # Rebote más temprano: usa la velocidad MÁXIMA de la P en el dominio (roca).
+    first_bounce_min = _bounce_pre / vp_max + t0
+    # Duración pedida y su tope por rebote (con un pequeño margen de seguridad).
+    duration_capped_by_bounce = False
+    if first_bounce_min > t0 and duration > first_bounce_min:
+        duration = max(t0 + 1.0 / f0, first_bounce_min)  # nunca por debajo de 1 pulso
+        duration_capped_by_bounce = True
+
+    # Pasos temporales (tras acotar la duración). eff_duration = total_steps·dt.
+    total_steps = min(MAX_STEPS, int(duration / dt))
+    eff_duration = total_steps * dt
+    # ~100 fotogramas del campo para animar el corte del subsuelo con fluidez.
+    SNAP_TARGET_FRAMES = 100
+    snapshot_interval = max(1, math.ceil(total_steps / SNAP_TARGET_FRAMES))
 
     # Inicialización de campos de desplazamiento — arrays 2D (nx, nz)
     # P-SV (en el plano del corte): ux (radial), uz (vertical).
@@ -1101,6 +1135,9 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     result_params.dx = dx
     result_params.lambda_ = lam
     result_params.mu = mu
+    # Duración EFECTIVA (puede haberse acotado por el primer rebote de borde o
+    # por el tope de pasos); se reporta la realmente simulada.
+    result_params.duration = round(eff_duration, 4)
     # Distancia epicentral EFECTIVA: si la pedida no cabía en la malla, la
     # geometría la recortó; reportamos la realmente usada para que el panel y el
     # PDF muestren el valor correcto.
@@ -1122,6 +1159,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
             interfaceZ=interface_z,
             interfaceDepthKm=round(interface_depth_km, 4),
             interfaceReflP=round(interface_refl_p, 4),
+            durationCappedByBounce=duration_capped_by_bounce,
         ),
         pArrival=p_arrival,
         sArrival=s_arrival,

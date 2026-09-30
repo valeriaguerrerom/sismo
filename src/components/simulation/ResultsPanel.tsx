@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
 import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from '../../lib/icons';
 import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
+import { computeEventWindow } from '../../lib/waveWindow';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
 import { renderCrossSectionPng, computeGlobalPeak, fontScaleForPdf } from '../../lib/crossSectionRender';
@@ -324,9 +325,13 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
           );
           const bounce = bs.length ? Math.min(...bs) : null;
           if (bounce === null || duration <= bounce + 0.05) return null;
+          // Si el rebote queda fuera de la ventana del evento (la que se muestra
+          // por defecto), se aclara así en vez de sugerir que se ve la marca.
+          const win = computeEventWindow(result.waveData, { pArrival, sArrival });
+          const outside = bounce > win.end;
           return (
             <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-              Después de {bounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo; no las interpretes como señal real.
+              Después de {bounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo{outside ? ' (fuera de la ventana mostrada)' : ''}; no las interpretes como señal real.
             </p>
           );
         })()}
