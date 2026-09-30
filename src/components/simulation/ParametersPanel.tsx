@@ -364,7 +364,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, forceSection
               normaliza a punto. */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Tooltip content="Epicentro (lat/lon) dentro de Nariño y su entorno, incluida la red CM Colombia-Ecuador. En este modelo homogéneo 2D es solo una referencia geográfica: no cambia el cálculo. Lo que afecta el registro es la distancia y la dirección de la estación." showIcon>
+              <Tooltip content="Epicentro (lat/lon) dentro de Nariño y su entorno, incluida la red CM Colombia-Ecuador. En este modelo es solo una referencia geográfica: no cambia el cálculo. Lo que afecta el registro es la distancia y la dirección de la estación." showIcon>
                 <span className="text-xs font-medium text-stone-600">Latitud</span>
               </Tooltip>
               <input

@@ -92,7 +92,7 @@ export function interpretSimulation(input: InterpretationInput): string {
 
   text += params.sourceType === 'volcanic'
     ? 'El mecanismo isótropo (explosivo) irradia de forma uniforme y casi sin ondas de cizalla, por lo que la componente transversal es prácticamente nula: la energía se reparte entre la radial y la vertical, típico de sismicidad volcánica somera.'
-    : 'El registro triaxial se arma con dos simulaciones 2D en el plano del corte: P-SV (radial y vertical) y SH (transversal), excitadas por el tensor de momento del doble par; luego la radial y la transversal se rotan a Norte y Este según el acimut de la estación, así las tres componentes son independientes.';
+    : 'El registro triaxial combina el movimiento en el plano del corte, P-SV (radial y vertical), y el movimiento fuera del plano, SH (transversal), excitados por el tensor de momento del doble par; luego la radial y la transversal se rotan a Norte y Este según el acimut de la estación, así las tres componentes son independientes.';
 
   // Nota del modelo de dos capas: lo observable depende de dónde está la fuente
   // respecto a la interfaz. Solo con la fuente DENTRO de la capa hay una
