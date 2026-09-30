@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
-import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info } from '../../lib/icons';
+import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info, ChevronRight } from '../../lib/icons';
 import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
 import { computeRealRecordMetrics } from '../../lib/realRecordMetrics';
 import { computeEventWindow } from '../../lib/waveWindow';
@@ -420,9 +420,35 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   // cierran las demás), para que siempre quepa sin scroll. Al inicio solo
   // "Métricas" está abierta.
   const [openSections, setOpenSections] = useState<Set<ResultSection>>(new Set(['metricas']));
-  const toggle = (s: ResultSection) => setOpenSections(prev => (
-    prev.has(s) ? new Set<ResultSection>() : new Set<ResultSection>([s])
-  ));
+  // Contenedor con scroll de la columna (para desplazar la sección al abrirla).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionAnchor: Record<ResultSection, string> = {
+    metricas: 'sim-metricas', malla: 'sim-malla', interpretacion: 'sim-interpretacion',
+  };
+  const toggle = (s: ResultSection) => {
+    const willOpen = !openSections.has(s);
+    setOpenSections(prev => (prev.has(s) ? new Set<ResultSection>() : new Set<ResultSection>([s])));
+    // Al ABRIR una sección, la desplazamos a la vista para pasar limpio a la
+    // siguiente sin buscar el encabezado (igual que el panel de parámetros).
+    if (willOpen) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const el = scrollRef.current?.querySelector<HTMLElement>(`[data-tour="${sectionAnchor[s]}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+    }
+  };
+
+  /** Botón "Siguiente": abre la siguiente sección del acordeón de resultados. */
+  const NextSectionButton = ({ to }: { to: ResultSection }) => (
+    <button
+      type="button"
+      onClick={() => toggle(to)}
+      className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#2D6A4F] text-white text-xs font-bold shadow-md shadow-[#2D6A4F]/20 hover:bg-[#255a43] btn-hover"
+    >
+      Siguiente
+      <ChevronRight size={13} />
+    </button>
+  );
 
   // Diálogo de opciones del PDF: qué secciones incluir (todas por defecto).
   const [pdfDialog, setPdfDialog] = useState(false);
@@ -537,7 +563,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* Zona scrolleable: acordeones. Scrollbar sutil (scrollbar-thin) que en
           escritorio solo se hace notorio al interactuar. */}
-      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
+      <div ref={scrollRef} className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5">
       {/* Metrics */}
       <AccordionSection title="Métricas" dataTour="sim-metricas" open={openSections.has('metricas')} onToggle={() => toggle('metricas')}>
         <div className="grid grid-cols-2 gap-2">
@@ -587,6 +613,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
             {sourceFreqAdjustedNote(params, dominantFrequency)}
           </p>
         )}
+        <NextSectionButton to="malla" />
       </AccordionSection>
 
       {/* Grid info */}
@@ -608,6 +635,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
             </div>
           ))}
         </div>
+        <NextSectionButton to="interpretacion" />
       </AccordionSection>
 
       {/* Interpretation */}
