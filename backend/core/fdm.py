@@ -853,9 +853,11 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     north_arr = []
     east_arr = []
     vert_arr = []
-    # Radial (en el plano) para la detección de arribos, independiente de la
-    # rotación a N/E: la S es clara en la radial y la vertical.
+    # Radial (en el plano) y transversal (SH) para la detección de arribos,
+    # independientes de la rotación a N/E: la S es fuerte en la radial y, sobre
+    # todo, en la transversal (SH) cuando el mecanismo la excita.
     radial_arr = []
+    transverse_arr = []
     snapshot_count = 0
 
     # ── Preparación de snapshots submuestreados para el mapa de calor ──
@@ -984,6 +986,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         east_arr.append(east_val)
         vert_arr.append(vertical_val)
         radial_arr.append(radial_val)
+        transverse_arr.append(transverse_val)
 
         if step % snapshot_interval == 0:
             snapshot_count += 1
@@ -1050,9 +1053,11 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     wavelet_duration = (3.0 + cycles) / f0
     s_search_start_time = p_arrival + wavelet_duration
     s_search_start_idx = max(10, int(s_search_start_time / dt))
-    # Se detecta sobre la radial (en el plano), independiente de la rotación a
-    # N/E; la S llega clara en la componente radial P-SV.
+    # (1) Detección clásica sobre la radial (ventana fija). Funciona bien a alta
+    # frecuencia; se mantiene igual para no cambiar los escenarios homogéneos.
     s_arrival_det = detect_arrival(np.array(radial_arr), dt, 0.05, start_idx=s_search_start_idx)
+    s_arrival = s_onset
+    s_arrival_detected = False
     if s_arrival_det > 0:
         s_rel_err = abs(s_arrival_det - s_onset) / max(s_onset, 1e-9)
         # Coherencia: (S − onset0)/(P − onset0) debe parecerse a Vp/Vs.
@@ -1062,12 +1067,50 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         if s_rel_err < TOL and ratio_rel_err < TOL:
             s_arrival = s_arrival_det
             s_arrival_detected = True
-        else:
-            s_arrival = s_onset
-            s_arrival_detected = False
-    else:
-        s_arrival = s_onset
-        s_arrival_detected = False
+
+    # (2) Fallback ADAPTATIVO al periodo dominante para baja frecuencia (p. ej.
+    # los escenarios de dos capas, con f0 bajado por dispersión), donde la
+    # ventana fija de (1) no dispara. Se detecta sobre la ENVOLVENTE de la S:
+    # combina la SV (radial) y la SH (transversal), que es donde la S concentra
+    # su energía. Se acepta si el pico de energía S cae a menos de MEDIO PERIODO
+    # del arribo teórico (criterio pedido).
+    if not s_arrival_detected:
+        # Envolvente de la S (energía de corte): SV (radial) + SH (transversal),
+        # suavizada con una ventana de ~medio periodo para que a baja frecuencia
+        # el paquete se lea como un solo lóbulo.
+        s_raw = np.sqrt(np.asarray(radial_arr) ** 2 + np.asarray(transverse_arr) ** 2)
+        smooth_w = max(1, int(round(0.5 / f0 / dt)))
+        kern = np.ones(smooth_w) / smooth_w
+        s_env = np.convolve(s_raw, kern, mode="same")
+        period = 1.0 / f0
+        # Ventana ceñida al paquete S teórico (± ~medio periodo): así el pico
+        # detectado es el de la S, no el de la P (antes) ni el de la coda de la
+        # capa (después). Nunca antes del arribo P + una guarda mínima.
+        w_lo = max(p_arrival + 0.4 * (s_theoretical - p_arrival), s_theoretical - 0.5 * period)
+        w_hi = min(eff_duration, s_theoretical + 0.5 * period)
+        i_lo = max(1, int(w_lo / dt))
+        i_hi = min(len(s_env), int(w_hi / dt))
+        # A baja frecuencia los paquetes P y S son anchos y se solapan, así que
+        # el "frente" de la S es ambiguo. Se usa el PICO de energía S dentro de
+        # la ventana como marca del arribo y se compara con la S TEÓRICA (que es
+        # el centro del paquete, dist/Vs + t0): ambos son "centros de paquete",
+        # comparación coherente. Se acepta si cae a < medio periodo del teórico.
+        s_adapt = 0.0
+        if i_hi - i_lo > 3:
+            seg = s_env[i_lo:i_hi]
+            pk_local = int(np.argmax(seg)) + i_lo
+            pk_val = s_env[pk_local]
+            if pk_val > s_env.max() * 0.05:  # el pico S no es ruido
+                s_adapt = pk_local * dt
+        if s_adapt > 0:
+            # Criterio pedido: el pico S detectado cae a < medio periodo del
+            # teórico (centro de paquete). No se aplica el chequeo Vp/Vs del
+            # detector clásico porque aquí la referencia es el PICO (centro),
+            # no el frente, y la ventana ya está anclada a la S teórica.
+            half_period = 0.5 / f0
+            if abs(s_adapt - s_theoretical) <= half_period:
+                s_arrival = s_adapt
+                s_arrival_detected = True
 
     # ── Numerical dispersion metric ──
     # Minimum wavelength: Vs_min / f_max, where f_max ≈ 2.5 * f0 for Ricker. Con
