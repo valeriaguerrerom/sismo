@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SimulationParams } from '../../lib/types';
 import { computeLame, presetForSource } from '../../lib/simulation';
 import { SCENARIOS } from '../../lib/scenarios';
@@ -100,9 +100,29 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
   // cierran las demás). Así el contenido siempre cabe sin scroll. Al inicio
   // solo "Variables elásticas" está abierta.
   const [openSections, setOpenSections] = useState<Set<ParamSection>>(new Set(['elasticas']));
-  const toggle = (s: ParamSection) => setOpenSections(prev => (
-    prev.has(s) ? new Set<ParamSection>() : new Set<ParamSection>([s])
-  ));
+  // Contenedor con scroll de la columna (para desplazar la sección al abrirla).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // data-tour de cada sección, para localizarla y desplazarla a la vista.
+  const sectionAnchor: Record<ParamSection, string> = {
+    elasticas: 'params-elasticas',
+    fuente: 'params-fuente',
+    config: 'params-config',
+  };
+  const toggle = (s: ParamSection) => {
+    setOpenSections(prev => (prev.has(s) ? new Set<ParamSection>() : new Set<ParamSection>([s])));
+    // Al ABRIR una sección (no al cerrarla), la desplazamos al inicio del área
+    // visible para que se lea completa desde arriba: así pasar de "Variables
+    // elásticas" a "Fuente sísmica" (o a "Estación y malla") no deja la nueva
+    // sección cortada ni "perdida" tras el scroll de la anterior. Dos frames
+    // para que el acordeón ya haya crecido/colapsado antes de medir.
+    const willOpen = !openSections.has(s);
+    if (willOpen) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const el = scrollRef.current?.querySelector<HTMLElement>(`[data-tour="${sectionAnchor[s]}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+    }
+  };
   // Mensajes de autoajuste por campo (por qué se corrigió un valor).
   const [limitMsgs, setLimitMsgs] = useState<Record<string, string>>({});
   // Escenario seleccionado en el selector (para mostrar su descripción). Al
@@ -170,7 +190,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
           conjunto (secciones + botón) no cabe en la columna, es ESTA zona la que
           scrollea suavemente; con el acordeón exclusivo el contenido suele caber
           y no aparece scroll. El botón Generar va justo debajo de las secciones. */}
-      <div className={`flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5 ${locked ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div ref={scrollRef} className={`flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-0.5 ${locked ? 'opacity-50 pointer-events-none' : ''}`}>
       <AccordionSection title="Variables elásticas" dataTour="params-elasticas" headerDataTour="params-elasticas-h" open={openSections.has('elasticas')} onToggle={() => toggle('elasticas')}>
         <div className="space-y-3">
           <SliderRow
