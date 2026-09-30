@@ -182,6 +182,17 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     }
     if (iEnd - iStart < 2) { iStart = iWinStart; iEnd = nWin; } // salvaguarda
 
+    // Es un registro REAL si no hay arribos P/S de la simulación. El movimiento
+    // del suelo real es ruidoso: si se dibuja cada muestra, la trayectoria es un
+    // ovillo denso e ilegible. Se submuestrea a un máximo de puntos (stride
+    // entero) para que la línea lea como un camino y no como una maraña. La
+    // simulación FDM (con P/S) sí se dibuja a resolución completa.
+    const isRealRecord = !(sArrival > 0 && pArrival > 0);
+    const MAX_PM_POINTS = 320;
+    const drawStride = isRealRecord
+      ? Math.max(1, Math.ceil((iEnd - iStart) / MAX_PM_POINTS))
+      : 1;
+
     // Escala: en 'solo' se reescala SOLO con el pico de ese tramo, para que el
     // movimiento (pequeño en la P) llene la vista. La escala queda ampliada,
     // se avisa en el rótulo inferior.
@@ -190,13 +201,18 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       peak = Math.max(peak, Math.abs(north[i]), Math.abs(east[i]), Math.abs(vertical[i]));
     }
     const s = peak > 0 ? AXIS / peak : 1;
+    // Índices efectivamente dibujados (aplicando el submuestreo de registros
+    // reales). Siempre se incluye la última muestra para no cortar la cola.
+    const drawIdx: number[] = [];
+    for (let i = iStart; i < iEnd; i += drawStride) drawIdx.push(i);
+    if (drawIdx[drawIdx.length - 1] !== iEnd - 1) drawIdx.push(iEnd - 1);
     // Posiciones (x=Este, y=Vertical hacia arriba, z=Norte) y color por vértice
     // según el arribo (gris reposo, terracota P, verde S). Line2 interpola el
     // color entre vértices y permite un grosor real en píxeles, para que el
     // tramo P (pequeño frente a la S) se vea como una cinta clara, no un punto.
     const positions: number[] = [];
     const colors: number[] = [];
-    for (let i = iStart; i < iEnd; i++) {
+    for (const i of drawIdx) {
       positions.push(east[i] * s, vertical[i] * s, north[i] * s);
       const c = time[i] < pArrival ? COLOR_REST : time[i] < sArrival ? COLOR_P : COLOR_S;
       colors.push(c.r, c.g, c.b);
@@ -222,7 +238,7 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     );
     scene.add(head);
 
-    const nSeg = iEnd - iStart;        // nº de muestras dibujadas
+    const nSeg = drawIdx.length;       // nº de vértices dibujados
     const lastT = time[iEnd - 1] || 1; // fin del tramo mostrado
     const reduced = prefersReducedMotion();
 
@@ -231,12 +247,12 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     // la geometría (cada instancia es un segmento entre dos muestras). Los
     // índices se mapean al rango [iStart, iEnd) del modo actual.
     const setDrawCount = (t: number) => {
-      let idx = iStart;
-      while (idx < iEnd && time[idx] <= t) idx++;
-      const local = idx - iStart; // muestras dentro del tramo hasta t
+      // Cuántos vértices DIBUJADOS (de drawIdx) van hasta el tiempo t.
+      let local = 0;
+      while (local < drawIdx.length && time[drawIdx[local]] <= t) local++;
       const segs = Math.max(1, Math.min(local - 1, nSeg - 1));
       lineGeo.instanceCount = segs;
-      const j = Math.min(iEnd - 1, Math.max(iStart, idx - 1));
+      const j = drawIdx[Math.min(drawIdx.length - 1, Math.max(0, local - 1))];
       head.position.set(east[j] * s, vertical[j] * s, north[j] * s);
     };
     setDrawCount(dataRef.current.currentTime);

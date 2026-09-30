@@ -35,6 +35,7 @@ from obspy import read
 DATA_RAW = Path("data_raw")
 OUTPUT_DIR = Path("../public/data/cm")
 MIN_SR_AFTER_DECIMATE = 40.0  # Hz — no diezmar por debajo de esto
+MAX_SAMPLES = 4000  # tope de muestras por componente en el JSON exportado
 
 # Orden de preferencia de instrumento
 INSTRUMENT_PREFERENCE = ["HH", "EH", "BH", "HN"]
@@ -226,6 +227,19 @@ def process_file(filepath: Path, subfolder: str) -> tuple[list[dict], list[str]]
             discard_reasons.append(f"{station}: muy pocas muestras ({min_npts})")
             continue
 
+        # ── 4b. Quitar offset/tendencia y aplicar taper ANTES de diezmar ──
+        # El filtro antialias de decimate() sobre una señal con offset o
+        # tendencia genera un transitorio enorme en los bordes (pico artificial
+        # en t=0 que domina la normalización y aplasta el evento real). Se
+        # remueve la media y la tendencia lineal y se aplica un taper coseno
+        # corto en los extremos para que el filtro no "vea" un escalón.
+        for tr in (tr_e, tr_n, tr_z):
+            tr.detrend("demean")
+            tr.detrend("linear")
+            # Taper del 1% en cada extremo (o 2 s máx), suficiente para matar el
+            # transitorio sin comerse el evento.
+            tr.taper(max_percentage=0.01, type="cosine", max_length=2.0)
+
         # ── 5. Decimate: keep ≥ 40 Hz ──
         decimation_factor = int(math.floor(original_sr / MIN_SR_AFTER_DECIMATE))
         if decimation_factor < 2:
@@ -265,6 +279,57 @@ def process_file(filepath: Path, subfolder: str) -> tuple[list[dict], list[str]]
         data_e /= max_global
         data_n /= max_global
         data_z /= max_global
+
+        # ── 6b. Recorte a la ventana del evento ──
+        # Los registros CM duran ~6 min, casi todo ruido antes y después del
+        # sismo. Se recorta a la ventana energética (un poco antes de la primera
+        # llegada hasta que la energía decae), así el sismograma y el movimiento
+        # de partícula muestran el evento y no minutos de ruido plano. También
+        # reduce mucho el tamaño de los JSON que se despliegan.
+        dt = 1.0 / effective_sr
+        # Envolvente de energía suavizada (media móvil ~1 s) para que ráfagas de
+        # ruido de alta frecuencia no disparen el detector.
+        env = data_e ** 2 + data_n ** 2 + data_z ** 2
+        win = max(1, int(round(1.0 / dt)))
+        if win > 1 and env.size > win:
+            kernel = np.ones(win) / win
+            env = np.convolve(env, kernel, mode="same")
+        peak = float(np.max(env)) if env.size else 0.0
+        if peak > 0 and npts_final > 20:
+            # Ventana energética robusta: el evento es donde la envolvente
+            # suavizada supera el 10 % del pico. Centramos en el pico principal
+            # y tomamos el tramo contiguo alrededor de él (no el primer y último
+            # cruce del registro entero, que el ruido disperso ensancharía).
+            thr = 0.10 * peak
+            i_peak = int(np.argmax(env))
+            i_onset = i_peak
+            while i_onset > 0 and env[i_onset] >= thr:
+                i_onset -= 1
+            i_end = i_peak
+            while i_end < npts_final - 1 and env[i_end] >= thr:
+                i_end += 1
+            pad_before = int(round(5.0 / dt))   # 5 s antes de la llegada
+            pad_after = int(round(15.0 / dt))   # 15 s de coda tras el final
+            i0 = max(0, i_onset - pad_before)
+            i1 = min(npts_final, i_end + pad_after)
+            # Solo recorta si vale la pena (deja al menos 20 s y quita algo).
+            if (i1 - i0) * dt >= 20.0 and (i1 - i0) < npts_final:
+                data_e = data_e[i0:i1]
+                data_n = data_n[i0:i1]
+                data_z = data_z[i0:i1]
+                npts_final = i1 - i0
+
+        # ── 6c. Tope de muestras (≤ MAX_SAMPLES) para JSON ligeros ──
+        # Tras el recorte, si aún hay demasiadas muestras se submuestrea por un
+        # factor entero (sin re-filtrar: ya está limitado en banda por el
+        # antialias del diezmado previo).
+        if npts_final > MAX_SAMPLES:
+            stride = int(math.ceil(npts_final / MAX_SAMPLES))
+            data_e = data_e[::stride]
+            data_n = data_n[::stride]
+            data_z = data_z[::stride]
+            effective_sr = effective_sr / stride
+            npts_final = len(data_z)
 
         # ── 7. Build output ──
         dt = 1.0 / effective_sr

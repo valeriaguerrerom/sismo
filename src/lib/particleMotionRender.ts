@@ -91,9 +91,16 @@ export function renderParticleMotionPng(opts: ParticleMotionRenderOpts): string 
   }
   const s = peak > 0 ? AXIS / peak : 1;
 
+  // Registro REAL (sin arribos P/S): el movimiento del suelo es ruidoso; se
+  // submuestrea la trayectoria a un máximo de puntos para que la línea lea como
+  // un camino y no como una maraña (igual que en pantalla, ParticleMotion.tsx).
+  const isRealRecord = !(sArrival > 0 && pArrival > 0);
+  const MAX_PM_POINTS = 320;
+  const drawStride = isRealRecord ? Math.max(1, Math.ceil((n - iStart) / MAX_PM_POINTS)) : 1;
+
   const positions: number[] = [];
   const colors: number[] = [];
-  for (let i = iStart; i < n; i++) {
+  for (let i = iStart; i < n; i += drawStride) {
     positions.push(east[i] * s, vertical[i] * s, north[i] * s);
     const c = time[i] < pArrival ? COLOR_REST : time[i] < sArrival ? COLOR_P : COLOR_S;
     colors.push(c.r, c.g, c.b);
