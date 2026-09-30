@@ -5,7 +5,7 @@ import { SCENARIOS } from '../../lib/scenarios';
 import { formatBigInt } from '../../lib/format';
 import { validateParams, maxEpicentralDistanceKm } from '../../lib/paramLimits';
 import { Tooltip } from '../ui/Tooltip';
-import { Play, Loader } from '../../lib/icons';
+import { Play, Loader, ChevronRight } from '../../lib/icons';
 import { AccordionSection } from './AccordionSection';
 
 /** Identificadores de las secciones del panel de parámetros. */
@@ -176,6 +176,22 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
     onChange({ ...sc.params });
   };
 
+  /**
+   * Botón "Siguiente sección": al terminar una sección, abre la siguiente del
+   * acordeón (que se desplaza sola a la vista). Evita tener que buscar y hacer
+   * scroll hasta el encabezado de la próxima tarjeta.
+   */
+  const NextSectionButton = ({ to, label }: { to: ParamSection; label: string }) => (
+    <button
+      type="button"
+      onClick={() => toggle(to)}
+      className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#2D6A4F]/30 text-[#2D6A4F] text-xs font-bold hover:bg-[#2D6A4F]/5 transition-colors"
+    >
+      Siguiente: {label}
+      <ChevronRight size={13} />
+    </button>
+  );
+
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* Aviso cuando hay un registro real: los parámetros son fijos (no se
@@ -327,6 +343,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
               )}
             </div>
           )}
+          <NextSectionButton to="fuente" label="Fuente sísmica" />
         </div>
       </AccordionSection>
 
@@ -421,6 +438,7 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
               />
             </div>
           </div>
+          <NextSectionButton to="config" label="Estación y malla" />
         </div>
       </AccordionSection>
 
