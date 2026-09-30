@@ -236,7 +236,15 @@ function AppContent() {
       }
     >
       <Navbar currentPage={page} authMode={authMode} onNavigate={navigate} />
-      <main className={`flex-1 flex flex-col transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
+      {/* `main` ocupa AL MENOS una pantalla física completa (compensando el zoom
+          de pantallas anchas): así el contenido de cada página llena el alto
+          visible y el footer queda SIEMPRE por debajo del pliegue, visible solo
+          al hacer scroll. Sin esto, la altura mínima del contenedor incluía al
+          footer y este asomaba al pie del simulador. */}
+      <main
+        className={`flex-1 flex flex-col transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}
+        style={{ minHeight: wideZoom !== 1 ? `calc(100vh / ${wideZoom})` : '100vh' }}
+      >
         {renderPage()}
       </main>
       <Footer onNavigate={navigate} />

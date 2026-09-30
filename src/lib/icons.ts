@@ -52,6 +52,7 @@ export {
   Image,
   InfoCircle as Info,
   Layers,
+  Bezier2 as Orbit,
   JournalText as Library,
   ListUl as List,
   ArrowRepeat as Loader,
