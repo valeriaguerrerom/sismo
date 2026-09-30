@@ -317,19 +317,15 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
     return () => cancelAnimationFrame(wave2dRef.current);
   }, [wave2dPlaying, result, realData, wave2dSpeed, viewMode]);
 
-  // Ventana "del evento" (B1) para recortar los sismogramas al pulso. Se calcula
-  // una para el resultado simulado y otra para el registro real. Cuando el
-  // usuario desactiva "Ajustar al evento", se pasa undefined (duración completa).
+  // Ventana "del evento" (B1) para recortar los sismogramas de la SIMULACIÓN al
+  // pulso. El registro real ya viene recortado a su ventana desde el backend,
+  // así que se muestra completo (sin toggle). Cuando el usuario desactiva
+  // "Ajustar al evento" en el laboratorio, se pasa undefined (duración completa).
   const simWindow = useMemo(
     () => (result ? computeEventWindow(result.waveData, { pArrival: result.pArrival, sArrival: result.sArrival }) : null),
     [result],
   );
-  const realWindow = useMemo(
-    () => (realData ? computeEventWindow(realData.waveData) : null),
-    [realData],
-  );
   const simWin = fitToEvent ? simWindow : null;
-  const realWin = fitToEvent ? realWindow : null;
 
   // Primer rebote de borde = el MENOR entre el de la P y el de la S (con roca
   // rápida, p. ej. el semiespacio de dos capas, la P rebota antes). Es el
@@ -559,7 +555,6 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                           className={`text-[10px] px-2.5 py-1.5 rounded-lg font-bold ${wave2dSpeed === s ? 'bg-[#C4553A] text-white' : 'bg-white border border-stone-200 text-stone-400'}`}>{s}x</button>
                       ))}
                     </div>
-                    <FitToggle />
                   </div>
 
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
@@ -568,13 +563,13 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#2D6A4F] inline-block" /> Este</span>
                       <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-[#D4A853] inline-block" /> Vertical</span>
                     </div>
-                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
+                    <WaveChart data={realData.waveData} label="Norte (N)" component="north" color="#C4553A" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
+                    <WaveChart data={realData.waveData} label="Este (E)" component="east" color="#2D6A4F" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                   <div className="bg-stone-50 rounded-lg p-3 border border-stone-100">
-                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} robustScale windowStart={realWin?.start} windowEnd={realWin?.end} />
+                    <WaveChart data={realData.waveData} label="Vertical (Z)" component="vertical" color="#D4A853" height={76} visibleRatio={wave2dRatio} robustScale />
                   </div>
                 </div>
               )}

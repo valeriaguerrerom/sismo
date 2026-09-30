@@ -375,9 +375,12 @@ export function buildReportPdf(input: ReportInput): jsPDF {
     const bounceMin = earliestBounce(results.gridInfo);
     const reflAfter = (!real && bounceMin !== null && results.duration > bounceMin + 0.05)
       ? bounceMin : undefined;
-    // Encuadre "del evento" (B1): el PDF muestra el tramo del pulso, no toda la
-    // duración, para que el sismograma se lea. Mismo criterio que la pantalla.
-    const win = computeEventWindow(wd, real ? {} : { pArrival: results.pArrival, sArrival: results.sArrival });
+    // Encuadre "del evento" (B1): en la SIMULACIÓN el PDF muestra el tramo del
+    // pulso (no toda la duración) para que se lea. El REGISTRO REAL ya viene
+    // recortado a su ventana, así que se muestra completo (igual que la pantalla).
+    const win = real
+      ? { start: wd.time[0] ?? 0, end: wd.time[wd.time.length - 1] ?? 0 }
+      : computeEventWindow(wd, { pArrival: results.pArrival, sArrival: results.sArrival });
     if (reflAfter !== undefined) {
       doc.setFontSize(7.5); doc.setTextColor(196, 85, 58);
       // Si el rebote queda FUERA de la ventana mostrada, la línea punteada no se

@@ -100,7 +100,7 @@ function interpretRealRecord(input: InterpretationInput): string {
   } else {
     text += 'Es una señal medida por un sismómetro triaxial (componentes Norte, Este y Vertical), decimada para su visualización. ';
   }
-  text += 'Las trazas muestran el movimiento real del suelo en la estación; no son un pseudo-sismograma simulado, así que no se marcan arribos P/S teóricos sobre ellas. ';
+  text += 'Las trazas muestran el movimiento real del suelo en la estación. ';
   text += 'Para explorar cómo se propaga la energía en el subsuelo (mapa de calor y movimiento de partícula) usa el laboratorio de simulación, donde puedes ajustar el modelo. ';
   text += params.sourceType === 'volcanic'
     ? 'En eventos volcánicos del Galeras (fuente esencialmente isótropa) domina la onda P y la componente transversal es débil, algo típico de la sismicidad volcánica somera.'
