@@ -149,13 +149,19 @@ async function exportPDF(
       };
     }
   }
+  // Con registro real, la "duración registrada" y los ejes son los del REGISTRO
+  // REAL (no los de la simulación de apoyo del mapa de calor, que se acota al
+  // primer rebote). Así el PDF es coherente con la señal mostrada.
+  const realDur = realRecord?.waveData.time.length
+    ? (realRecord.waveData.time[realRecord.waveData.time.length - 1] ?? result.duration)
+    : result.duration;
   await downloadReportPdf({
     title,
     params,
     sections,
     results: {
       maxAmplitude: result.maxAmplitude,
-      duration: result.duration,
+      duration: realRecord ? realDur : result.duration,
       dominantFrequency: result.dominantFrequency,
       pArrival: result.pArrival,
       sArrival: result.sArrival,
@@ -217,7 +223,11 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
       params: result.params as SimulationParams,
       results: {
         maxAmplitude: result.maxAmplitude,
-        duration: result.duration,
+        // Con registro real, la duración guardada es la del REGISTRO (no la de
+        // la simulación de apoyo, acotada al primer rebote).
+        duration: realRecord?.waveData.time.length
+          ? (realRecord.waveData.time[realRecord.waveData.time.length - 1] ?? result.duration)
+          : result.duration,
         dominantFrequency: result.dominantFrequency,
         pArrival: result.pArrival,
         sArrival: result.sArrival,
