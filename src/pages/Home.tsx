@@ -1016,7 +1016,7 @@ export function Home({ onNavigate, replayNonce = 0, notice = null, onNoticeSeen 
                 </p>
                 <RealSeis record={record} animate={animate} replay={replayNonce} />
                 <p className="text-[9px] mt-2" style={{ color: C.muted }}>
-                  BHN (Norte), BHE (Este), BHZ (Vertical). Las líneas P y S marcan las llegadas de las ondas primaria y secundaria medidas sobre la señal.
+                  BHN (Norte), BHE (Este), BHZ (Vertical): las tres componentes del movimiento real del suelo registrado por la estación.
                 </p>
               </div>
 
