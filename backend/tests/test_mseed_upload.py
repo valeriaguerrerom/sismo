@@ -215,3 +215,28 @@ def test_endpoint_upload_mseed_demasiado_grande_rechazado():
     )
     assert r.status_code == 400
     assert "50 MB" in r.json().get("detail", "")
+
+
+def test_endpoint_example_mseed_por_tipo():
+    # Los dos ejemplos (tectónico CUM y volcánico Galeras/CUFP) se descargan y
+    # son MiniSEED legibles con la estación esperada.
+    from obspy import read as _read
+    client = TestClient(app)
+
+    r = client.get("/api/examples/mseed/tectonico")
+    assert r.status_code == 200, r.text
+    assert "ejemplo_CUM_tectonico.mseed" in r.headers.get("content-disposition", "")
+    st = _read(io.BytesIO(r.content))
+    assert {tr.stats.station for tr in st} == {"CUM"}
+
+    r = client.get("/api/examples/mseed/volcanico")
+    assert r.status_code == 200, r.text
+    assert "ejemplo_CUFP_volcanico.mseed" in r.headers.get("content-disposition", "")
+    st = _read(io.BytesIO(r.content))
+    assert {tr.stats.station for tr in st} == {"CUFP"}
+
+
+def test_endpoint_example_mseed_tipo_desconocido_es_404():
+    client = TestClient(app)
+    r = client.get("/api/examples/mseed/nosoyuntipo")
+    assert r.status_code == 404

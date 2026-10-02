@@ -25,9 +25,16 @@ from pydantic import BaseModel, Field
 from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
 
-# Archivo MiniSEED de ejemplo servido por el backend (se incluye en la imagen
+# Archivos MiniSEED de ejemplo servidos por el backend (se incluyen en la imagen
 # Docker; ver backend/Dockerfile: COPY . . y .dockerignore no excluye example_data).
-EXAMPLE_MSEED_PATH = Path(__file__).resolve().parent.parent / "example_data" / "ejemplo_CUM_tectonico.mseed"
+_EXAMPLE_DIR = Path(__file__).resolve().parent.parent / "example_data"
+EXAMPLE_MSEED_PATH = _EXAMPLE_DIR / "ejemplo_CUM_tectonico.mseed"  # compat: endpoint antiguo
+# Ejemplos por tipo de fuente: tectónico (estación CUM, red SGC) y volcánico
+# (estación CUFP del Galeras, OVSP).
+EXAMPLE_MSEED = {
+    "tectonico": (_EXAMPLE_DIR / "ejemplo_CUM_tectonico.mseed", "ejemplo_CUM_tectonico.mseed"),
+    "volcanico": (_EXAMPLE_DIR / "ejemplo_CUFP_volcanico.mseed", "ejemplo_CUFP_volcanico.mseed"),
+}
 
 router = APIRouter(tags=["Importación"])
 
@@ -409,5 +416,31 @@ def download_example_mseed():
         EXAMPLE_MSEED_PATH,
         media_type="application/vnd.fdsn.mseed",
         filename="ejemplo_CUM_tectonico.mseed",
+        content_disposition_type="attachment",
+    )
+
+
+@router.get("/api/examples/mseed/{kind}", summary="Descargar un MiniSEED de ejemplo por tipo")
+def download_example_mseed_by_kind(kind: str):
+    """Sirve un MiniSEED de ejemplo según el tipo de fuente.
+
+    Args:
+        kind: 'tectonico' (estación CUM, red del SGC) o 'volcanico' (estación
+            CUFP del Volcán Galeras, OVSP). Ambos son registros reales cortos y
+            triaxiales para probar la carga.
+
+    Raises:
+        HTTPException 404: tipo desconocido o archivo no disponible.
+    """
+    entry = EXAMPLE_MSEED.get(kind.lower())
+    if not entry:
+        raise HTTPException(status_code=404, detail="Tipo de ejemplo desconocido (usa 'tectonico' o 'volcanico').")
+    path, filename = entry
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="El archivo de ejemplo no está disponible.")
+    return FileResponse(
+        path,
+        media_type="application/vnd.fdsn.mseed",
+        filename=filename,
         content_disposition_type="attachment",
     )

@@ -15,7 +15,10 @@ import type { WaveData } from '../../lib/types';
  * no depende de Supabase Storage. En desarrollo Vite hace proxy de /api a :8000;
  * en producción se usa VITE_API_URL o el proxy de Nginx.
  */
-const EXAMPLE_MSEED_URL = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api/examples/mseed`;
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+/** Ejemplos descargables por tipo de fuente (los sirve el backend). */
+const EXAMPLE_TECTONICO_URL = `${API_BASE}/api/examples/mseed/tectonico`;
+const EXAMPLE_VOLCANICO_URL = `${API_BASE}/api/examples/mseed/volcanico`;
 
 interface Props {
   onLoadRealData?: (waveData: WaveData, label: string, meta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic' }) => void;
@@ -26,6 +29,17 @@ const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
 
 /** Estaciones aceptadas (deben coincidir con el backend core/stations.py). */
 const ACCEPTED_STATIONS = ['TUM', 'TUM3C', 'CRU', 'CUM', 'PAS2', 'BBAC', 'CPOP2', 'Galeras'];
+
+/**
+ * Infiere el tipo de fuente a partir de la estación de origen. La estación del
+ * Galeras (CUFP, del OVSP) registra sismicidad VOLCÁNICA; el resto de la red del
+ * SGC registra sismicidad TECTÓNICA. Es una sugerencia editable, no un dato del
+ * MiniSEED (el archivo no indica el tipo de sismo).
+ */
+function inferSourceType(station: string): 'tectonic' | 'volcanic' {
+  const s = (station || '').toUpperCase();
+  return s === 'CUFP' || s.includes('GALERAS') ? 'volcanic' : 'tectonic';
+}
 
 function WaveTrace({ data, label, color }: { data: number[]; label: string; color: string }) {
   if (!data || data.length === 0) return null;
@@ -104,17 +118,26 @@ function HowToGetMseed() {
             </li>
             <li>Sube aquí el archivo descargado y SismoNariño lo procesa para explorarlo y simularlo.</li>
           </ol>
-          {EXAMPLE_MSEED_URL && (
+          <div className="flex flex-wrap gap-2">
             <a
-              href={EXAMPLE_MSEED_URL}
+              href={EXAMPLE_TECTONICO_URL}
+              download
+              className="inline-flex items-center gap-2 bg-[#2D6A4F] text-white text-xs font-bold px-4 py-2.5 rounded-lg btn-hover"
+            >
+              <Download size={14} /> Ejemplo tectónico (CUM)
+            </a>
+            <a
+              href={EXAMPLE_VOLCANICO_URL}
               download
               className="inline-flex items-center gap-2 bg-[#C4553A] text-white text-xs font-bold px-4 py-2.5 rounded-lg btn-hover"
             >
-              <Download size={14} /> Descargar archivo de ejemplo
+              <Download size={14} /> Ejemplo volcánico (Galeras)
             </a>
-          )}
+          </div>
           <p className="text-[11px] text-stone-400">
-            El ejemplo es un registro real corto de la estación CUM (Cumbal, Nariño) de la red del SGC.
+            Dos registros reales cortos y triaxiales: uno <b>tectónico</b> de la estación CUM
+            (Cumbal, red del SGC) y uno <b>volcánico</b> de la estación CUFP del Volcán Galeras (OVSP).
+            Al cargarlos, la plataforma sugiere el tipo de fuente según la estación.
           </p>
         </div>
       )}
@@ -133,6 +156,10 @@ export function MseedUpload({ onLoadRealData }: Props) {
   const [freqmin, setFreqmin] = useState(1);
   const [freqmax, setFreqmax] = useState(10);
   const [sourceType, setSourceType] = useState<'tectonic' | 'volcanic'>('volcanic');
+  // true mientras el tipo de fuente lo decidió la inferencia por estación (no el
+  // usuario a mano). Al reconocer la estación se preselecciona; si el usuario lo
+  // cambia, deja de ser "sugerido".
+  const [sourceAuto, setSourceAuto] = useState(true);
 
   const process = async (f: File, st?: string) => {
     setLoading(true);
@@ -145,6 +172,12 @@ export function MseedUpload({ onLoadRealData }: Props) {
       });
       setResult(res);
       setStation(res.station);
+      // Sugerencia de tipo de fuente según la estación de origen: la estación del
+      // Galeras (CUFP, OVSP) registra sismicidad VOLCÁNICA; el resto de la red del
+      // SGC, sismicidad TECTÓNICA. Solo se auto-asigna si el usuario no lo fijó.
+      if (sourceAuto) {
+        setSourceType(inferSourceType(res.station));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error procesando el archivo');
       setResult(null);
@@ -303,12 +336,29 @@ export function MseedUpload({ onLoadRealData }: Props) {
         </div>
 
         <label className="block text-xs text-stone-500">
-          Tipo de fuente para el simulador
-          <select value={sourceType} onChange={e => setSourceType(e.target.value as 'tectonic' | 'volcanic')}
-            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A]">
+          <span className="flex items-center gap-1.5">
+            Tipo de fuente para el simulador
+            {result && sourceAuto && (
+              <span className="text-[9px] font-bold uppercase tracking-wide text-[#2D6A4F] bg-[#2D6A4F]/10 px-1.5 py-0.5 rounded">
+                sugerido
+              </span>
+            )}
+          </span>
+          <select
+            value={sourceType}
+            onChange={e => { setSourceType(e.target.value as 'tectonic' | 'volcanic'); setSourceAuto(false); }}
+            className="mt-1 w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A]"
+          >
             <option value="volcanic">Volcánica (isótropa)</option>
             <option value="tectonic">Tectónica (doble par)</option>
           </select>
+          {result && (
+            <span className="block text-[10px] text-stone-400 mt-1 leading-snug">
+              {sourceAuto
+                ? `Sugerido por la estación ${result.station}: ${sourceType === 'volcanic' ? 'el Galeras registra sismicidad volcánica' : 'la red del SGC registra sismicidad tectónica'}. Puedes cambiarlo.`
+                : 'Lo elegiste manualmente. El archivo MiniSEED no indica el tipo de sismo; es tu decisión de modelado.'}
+            </span>
+          )}
         </label>
 
         <button
