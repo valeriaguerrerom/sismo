@@ -31,7 +31,13 @@ function translateError(message: string): string {
   if (m.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.';
   if (m.includes('email not confirmed')) return 'Aún no has confirmado tu correo. Revisa tu bandeja de entrada y confírmalo antes de iniciar sesión.';
   if (m.includes('user already registered') || m.includes('already registered')) return 'Ese correo ya está registrado. Inicia sesión o usa otro correo.';
-  if (m.includes('password should contain') || m.includes('weak') || m.includes('pwned')) return 'La contraseña no cumple los requisitos de seguridad (mínimo 8 caracteres con letra, número y símbolo).';
+  // Contraseña filtrada/comprometida: Supabase la rechaza aunque cumpla el
+  // formato (opción "leaked password protection", base HaveIBeenPwned). NO es
+  // un problema de formato, así que el mensaje debe decir la verdad.
+  if (m.includes('pwned') || m.includes('leaked') || m.includes('compromis') || m.includes('data breach')) {
+    return 'Esta contraseña apareció en filtraciones de datos conocidas y no es segura. Elige otra contraseña distinta.';
+  }
+  if (m.includes('password should contain') || m.includes('weak')) return 'La contraseña no cumple los requisitos de seguridad (mínimo 8 caracteres con letra, número y símbolo).';
   if (m.includes('password should be at least')) return 'La contraseña debe tener al menos 8 caracteres.';
   if (m.includes('unable to validate email') || m.includes('invalid email')) return 'El correo electrónico no es válido.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.';
