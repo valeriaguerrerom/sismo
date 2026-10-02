@@ -460,7 +460,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const updatePassword = useCallback(async (password: string): Promise<string | null> => {
+  const updatePassword = useCallback(async (password: string, currentPassword?: string): Promise<string | null> => {
     if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
     // Política mínima sobre la contraseña ORIGINAL antes de derivar.
     if (!isPasswordStrong(password)) {
@@ -473,6 +473,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: sess } = await withTimeout(supabase.auth.getSession(), 8000, 'sesión');
       const email = sess.session?.user?.email;
       if (!email) return 'EXPIRED';
+
+      // Cambio desde el perfil: verificar la CONTRASEÑA ACTUAL antes de cambiarla.
+      // Se reautentica iniciando sesión con la actual derivada (misma cuenta);
+      // si falla, la actual es incorrecta y no se toca la contraseña.
+      if (currentPassword !== undefined) {
+        if (currentPassword === password) {
+          return 'La nueva contraseña debe ser distinta de la actual.';
+        }
+        let currentSecret = await deriveAuthSecret(email, currentPassword);
+        const { error: reauthErr } = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password: currentSecret }), 12000, 'verificación',
+        );
+        currentSecret = '';
+        if (reauthErr) {
+          return 'La contraseña actual no es correcta.';
+        }
+      }
 
       let secret = await deriveAuthSecret(email, password);
       const { error } = await withTimeout(

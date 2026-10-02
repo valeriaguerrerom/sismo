@@ -71,6 +71,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
 
   // Cambio de contraseña
   const [pwOpen, setPwOpen] = useState(false);
+  const [currentPw, setCurrentPw] = useState(''); // contraseña actual (verificación)
   const [pw, setPw] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [pwError, setPwError] = useState('');
@@ -130,18 +131,21 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
   const changePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwError('');
+    if (!currentPw) { setPwError('Escribe tu contraseña actual.'); return; }
     if (!isPasswordStrong(pw)) { setPwError('La contraseña no cumple los requisitos.'); return; }
     setPwSaving(true);
     try {
-      const err = await updatePassword(pw);
+      // Se pasa la contraseña actual para verificarla antes de cambiarla.
+      const err = await updatePassword(pw, currentPw);
       if (err === 'EXPIRED') { setPwError('Tu sesión expiró. Vuelve a iniciar sesión para cambiar la contraseña.'); return; }
       if (err) { setPwError(err); return; }
       setPwOpen(false);
       setToast('Contraseña actualizada');
       setTimeout(() => setToast(''), 3000);
     } finally {
-      // La contraseña original se limpia del estado tras cada intento.
+      // Las contraseñas originales se limpian del estado tras cada intento.
       setPw('');
+      setCurrentPw('');
       setPwSaving(false);
     }
   };
@@ -251,16 +255,29 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               <Lock size={15} className="text-[#C4553A]" /> Seguridad
             </h2>
             {isGoogle ? (
-              <p className="text-sm" style={{ color: C.muted }}>
-                Tu cuenta usa Google para iniciar sesión.
+              <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
+                Tu cuenta inicia sesión con Google, así que no tiene una contraseña aquí.
+                Para cambiarla, hazlo desde tu cuenta de Google.
               </p>
             ) : !pwOpen ? (
-              <button onClick={() => { setPw(''); setPwError(''); setPwOpen(true); }}
+              <button onClick={() => { setPw(''); setCurrentPw(''); setPwError(''); setPwOpen(true); }}
                 className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:border-[#C4553A]/40 hover:text-[#C4553A] transition-colors">
                 <Lock size={13} /> Cambiar contraseña
               </button>
             ) : (
               <form onSubmit={changePassword} className="space-y-3">
+                {/* Contraseña ACTUAL (se verifica antes de permitir el cambio). */}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"><Lock size={16} /></span>
+                  <input
+                    type="password"
+                    value={currentPw}
+                    onChange={e => setCurrentPw(e.target.value)}
+                    placeholder="Contraseña actual"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#C4553A] bg-stone-50"
+                  />
+                </div>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"><Lock size={16} /></span>
                   <input
@@ -289,11 +306,11 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
                 </ul>
                 {pwError && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{pwError}</p>}
                 <div className="flex gap-2">
-                  <button type="submit" disabled={pwSaving || !pwStrong}
+                  <button type="submit" disabled={pwSaving || !pwStrong || !currentPw}
                     className="flex items-center gap-2 bg-[#C4553A] text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
                     {pwSaving ? 'Guardando…' : 'Guardar contraseña'} <Check size={14} />
                   </button>
-                  <button type="button" onClick={() => { setPwOpen(false); setPw(''); setPwError(''); }} disabled={pwSaving}
+                  <button type="button" onClick={() => { setPwOpen(false); setPw(''); setCurrentPw(''); setPwError(''); }} disabled={pwSaving}
                     className="px-3 py-2 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold disabled:opacity-50">
                     Cancelar
                   </button>
@@ -308,7 +325,9 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               <ShieldCheck size={15} className="text-[#2D6A4F]" /> Privacidad
             </h2>
             <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
-              Autorizaste el tratamiento de tus datos el <b style={{ color: C.ink }}>{longDate(user.data_authorization_at)}</b>.
+              {user.data_authorization_at
+                ? <>Autorizaste el tratamiento de tus datos el <b style={{ color: C.ink }}>{longDate(user.data_authorization_at)}</b>.</>
+                : <>Al usar la plataforma aceptaste el tratamiento de tus datos conforme a la Ley 1581 de 2012.</>}
             </p>
             <a href={DATA_POLICY_URL} target="_blank" rel="noopener noreferrer"
               className="inline-block text-xs font-semibold text-[#2D6A4F] hover:underline mt-2">

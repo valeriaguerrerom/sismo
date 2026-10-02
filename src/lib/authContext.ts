@@ -34,8 +34,13 @@ export interface AuthContextType {
   updateProfile: (data: ResearcherSignUp, recordConsent?: boolean) => Promise<string | null>;
   /** Envía el correo con el enlace para restablecer la contraseña. */
   sendPasswordReset: (email: string) => Promise<string | null>;
-  /** Fija la nueva contraseña del usuario en sesión de recuperación. */
-  updatePassword: (password: string) => Promise<string | null>;
+  /**
+   * Fija la nueva contraseña del usuario. En el cambio desde el perfil se pasa
+   * `currentPassword` para verificar primero la contraseña actual (reautentica
+   * contra Supabase). En el flujo de recuperación por correo no se pasa (la
+   * sesión temporal del enlace ya acredita al usuario).
+   */
+  updatePassword: (password: string, currentPassword?: string) => Promise<string | null>;
   /** Cierra el modo recuperación (tras guardar o cancelar). */
   clearRecovery: () => void;
   /** Marca un tour como visto guardando su versión (persiste en profiles). */
