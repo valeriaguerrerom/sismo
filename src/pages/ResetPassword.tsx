@@ -6,7 +6,7 @@
  * muestra un aviso claro y un botón para pedir uno nuevo.
  */
 import { useState } from 'react';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { ArrowRight, Check, AlertTriangle } from '../lib/icons';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { PasswordField } from '../components/auth/PasswordField';

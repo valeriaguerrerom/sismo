@@ -684,7 +684,6 @@ export function Scene3D({
       st.scene.add(mesh);
       st.stationMeshes.set(station.code, mesh);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stations, sceneGeometry]);
 
   // ── Actualizar epicentro/hipocentro cuando cambia ──
@@ -770,7 +769,6 @@ export function Scene3D({
       sphere.position.set(hc.x, hc.y, hc.z);
       group.add(sphere);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hypocenters]);
 
   // ── Plano de corte + rayo (epicentro → estación seleccionada) ──

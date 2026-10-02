@@ -8,7 +8,8 @@
  */
 import { useState } from 'react';
 import { ClipboardList, ArrowRight, ShieldCheck } from '../lib/icons';
-import { useAuth, ResearcherSignUp } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
+import type { ResearcherSignUp } from '../lib/authTypes';
 import { ResearcherFields } from '../components/auth/ResearcherFields';
 import { ConsentCheckbox } from '../components/auth/ConsentCheckbox';
 

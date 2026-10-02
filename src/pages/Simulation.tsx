@@ -12,7 +12,7 @@ import { TriaxialPlane } from '../components/simulation/TriaxialPlane';
 import { ProgressBar } from '../components/simulation/ProgressBar';
 import { ParticleMotion } from '../components/simulation/ParticleMotion';
 import { Activity, Info, Layers, Orbit, Play, Pause, SkipBack, RotateCcw, Flame, HelpCircle, Maximize, Minimize } from '../lib/icons';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { Tooltip } from '../components/ui/Tooltip';
 import { startTour, refreshActiveTour } from '../tours/useTour';
 import { buildSimulacionSteps, SIMULACION_TOUR_VERSION, type ParamSectionId, type ResultSectionId } from '../tours/simulacion';

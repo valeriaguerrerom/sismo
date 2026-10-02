@@ -10,7 +10,7 @@ import { Glossary } from '../components/education/Glossary';
 import { References } from '../components/education/References';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { startTour } from '../tours/useTour';
 import { buildEducacionSteps } from '../tours/educacion';
 

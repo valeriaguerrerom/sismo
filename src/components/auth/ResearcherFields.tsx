@@ -3,14 +3,8 @@
  * por el paso "Completar perfil" (registro con Google o perfiles antiguos).
  */
 import { User, Building, Briefcase, FlaskConical, MapPin, Globe, MessageSquare } from '../../lib/icons';
-import type { ResearcherSignUp } from '../../lib/auth';
-
-export const OCCUPATIONS = [
-  'Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador(a)',
-  'Profesional (geociencias / ingeniería)', 'Funcionario(a) de entidad pública', 'Otro',
-];
-
-export const inputCls = 'w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#C4553A] bg-stone-50';
+import type { ResearcherSignUp } from '../../lib/authTypes';
+import { OCCUPATIONS, inputCls } from './researcherFieldsConstants';
 
 export function Field({ icon, label, children, optional }: { icon: React.ReactNode; label: string; children: React.ReactNode; optional?: boolean }) {
   return (

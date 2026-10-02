@@ -308,7 +308,6 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     };
     // Recrea la escena si cambian los datos, los arribos (nueva simulación) o
     // el modo de vista (completo / solo P / solo S).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waveData, pArrival, sArrival, mode]);
 
   // ¿Hay tramos P/S disponibles para ofrecer los botones? (arribos válidos).

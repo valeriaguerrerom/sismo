@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { Activity, ChevronRight, LogIn, UserPlus, Database, BookOpen, HelpCircle } from '../lib/icons';
 import { Page } from '../lib/types';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { Tooltip } from '../components/ui/Tooltip';
 import { startTour } from '../tours/useTour';
 import { buildHomeSteps } from '../tours/home';

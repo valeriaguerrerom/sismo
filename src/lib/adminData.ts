@@ -10,7 +10,7 @@
  */
 import { supabase } from './supabase';
 import type { SeismicEvent } from './types';
-import type { UserRole } from './auth';
+import type { UserRole } from './authTypes';
 
 // ─── Tipos ───
 

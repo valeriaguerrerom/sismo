@@ -28,7 +28,7 @@ import {
 } from '../lib/api3d';
 import { loadCatalog } from '../lib/catalog';
 import { LOADER_FACTS, randomFactIndex } from '../lib/loaderFacts';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { supabase } from '../lib/supabase';
 import { startTour } from '../tours/useTour';
 import { buildMapa3dSteps } from '../tours/mapa3d';

@@ -12,7 +12,7 @@ import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
 import { VolcanoLoader } from '../ui/VolcanoLoader';
-import { useAuth } from '../../lib/auth';
+import { useAuth } from '../../lib/authContext';
 import { supabase } from '../../lib/supabase';
 
 /** Identificadores de las secciones del panel de resultados. */

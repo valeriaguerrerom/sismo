@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Page, SimulationParams, WaveData } from './lib/types';
 import { defaultParams } from './lib/simulation';
-import { AuthProvider, useAuth } from './lib/auth';
+import { AuthProvider } from './lib/auth';
+import { useAuth } from './lib/authContext';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { VolcanoLoader } from './components/ui/VolcanoLoader';

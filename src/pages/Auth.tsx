@@ -7,10 +7,11 @@
  * el flujo de Google). El rol Administrador solo se asigna desde el panel.
  */
 import { useEffect, useState } from 'react';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { Mail, User, ArrowRight, Check } from '../lib/icons';
 import { AuthLayout } from '../components/auth/AuthLayout';
-import { Field, inputCls } from '../components/auth/ResearcherFields';
+import { Field } from '../components/auth/ResearcherFields';
+import { inputCls } from '../components/auth/researcherFieldsConstants';
 import { PasswordField } from '../components/auth/PasswordField';
 import { ConsentCheckbox } from '../components/auth/ConsentCheckbox';
 import { PASSWORD_RULES, isPasswordStrong } from '../lib/authConsent';

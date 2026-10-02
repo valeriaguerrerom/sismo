@@ -6,7 +6,7 @@
  *   correo de contacto del proyecto.
  */
 import { useState } from 'react';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { CONTACT_EMAIL } from '../lib/authConsent';
 import { ArrowRight, AlertTriangle, RotateCcw } from '../lib/icons';
 import { Logo } from '../components/ui/Logo';

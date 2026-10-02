@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Activity, Database, BookOpen, Home, LogIn, Settings, FileText, LogOut, Box, Info, UserPlus, List, X } from '../../lib/icons';
 import { Logo } from '../ui/Logo';
 import { Page } from '../../lib/types';
-import { useAuth, ROLE_LABELS } from '../../lib/auth';
+import { useAuth } from '../../lib/authContext';
+import { ROLE_LABELS } from '../../lib/authTypes';
 
 interface NavbarProps {
   currentPage: Page;

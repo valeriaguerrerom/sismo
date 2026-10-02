@@ -7,7 +7,7 @@ import {
 import { MseedUpload } from '../components/explorer/MseedUpload';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { loadCatalog } from '../lib/catalog';
 import { getStations, Station } from '../lib/api3d';
 import { startTour } from '../tours/useTour';

@@ -7,7 +7,8 @@
  * (gestión de contenido educativo).
  */
 import { useState, useEffect, useCallback, useMemo, useRef, ChangeEvent } from 'react';
-import { useAuth, ROLE_LABELS } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
+import { ROLE_LABELS } from '../lib/authTypes';
 import { supabase } from '../lib/supabase';
 import {
   Users, Database, FileText, Settings, Trash2, Shield, BarChart3, Plus, Pencil, Upload,

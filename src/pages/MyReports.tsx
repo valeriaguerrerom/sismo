@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { supabase } from '../lib/supabase';
 import { FileText, Trash2, Download, Calendar, FileDown } from '../lib/icons';
 import { downloadReportPdf, SavedResults } from '../lib/reportPdf';

@@ -16,7 +16,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Page } from '../lib/types';
-import { useAuth } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
 import { DATA_POLICY_URL, CONTACT_EMAIL } from '../lib/authConsent';
 import {
   submitFeedback, FEEDBACK_TYPE_LABELS, FEEDBACK_MAX_LENGTH,

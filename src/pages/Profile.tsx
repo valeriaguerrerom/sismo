@@ -10,7 +10,9 @@ import {
   ShieldCheck, Pencil, Check, X, Lock, Trash2, AlertTriangle, ArrowRight,
   Calendar, Mail, Eye, EyeSlash, UserX,
 } from '../lib/icons';
-import { useAuth, ResearcherSignUp, ROLE_LABELS } from '../lib/auth';
+import { useAuth } from '../lib/authContext';
+import { ROLE_LABELS } from '../lib/authTypes';
+import type { ResearcherSignUp } from '../lib/authTypes';
 import { ResearcherFields } from '../components/auth/ResearcherFields';
 import { PASSWORD_RULES, isPasswordStrong, DATA_POLICY_URL } from '../lib/authConsent';
 import { deleteOwnAccount } from '../lib/account';
