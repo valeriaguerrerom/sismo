@@ -19,7 +19,10 @@ export function Field({ icon, label, children, optional }: { icon: React.ReactNo
     <div>
       <label className="text-xs font-semibold text-stone-500 mb-1 block">{label}{optional && <span className="text-stone-400 font-normal"> (opcional)</span>}</label>
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none">{icon}</span>
+        {/* El icono se ancla a la altura del PRIMER control (una fila de ~44px),
+            no al centro del bloque. Así no "baja" cuando debajo aparece el
+            input de texto libre de la opción "Otro/Otra". */}
+        <span className="absolute left-3 top-[22px] -translate-y-1/2 text-stone-400 pointer-events-none">{icon}</span>
         {children}
       </div>
     </div>
@@ -105,10 +108,14 @@ export function ResearcherFields({ form, onChange, showName = true }: Props) {
         />
       </Field>
       <Field icon={<Briefcase size={16} />} label="Ocupación">
-        <select value={form.occupation} onChange={e => onChange('occupation', e.target.value)} required className={inputCls}>
-          <option value="">Selecciona…</option>
-          {OCCUPATIONS.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <SelectOrOther
+          value={form.occupation}
+          onChange={v => onChange('occupation', v)}
+          options={OCCUPATIONS}
+          otherLabel="Otro"
+          placeholder="Escribe tu ocupación"
+          required
+        />
       </Field>
       <Field icon={<FlaskConical size={16} />} label="Área de investigación o interés">
         <SelectOrOther
