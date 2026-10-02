@@ -300,7 +300,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
                 <ShieldCheck size={12} className="shrink-0" /> {ROLE_LABELS[user.role]}
               </span>
               <span className="inline-flex items-center gap-1.5 text-xs text-stone-400 whitespace-nowrap">
-                <Calendar size={12} className="shrink-0" /> Usuaria desde {monthYear(user.created_at)}
+                <Calendar size={12} className="shrink-0" /> Miembro desde {monthYear(user.created_at)}
               </span>
               {user.avatar && (
                 <button
