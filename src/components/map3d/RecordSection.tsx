@@ -54,7 +54,10 @@ export function RecordSection({
     const measure = () => {
       const w = el.clientWidth || 320;
       const h = el.clientHeight || 520;
-      setSize({ width: Math.max(160, w), height: Math.max(260, h) });
+      // Acotar la altura: así el SVG no se estira "gigante" cuando el panel
+      // hereda una altura muy grande de la escena 3D, pero sigue aprovechando
+      // el alto disponible (ResizeObserver) hasta un tope razonable.
+      setSize({ width: Math.max(160, w), height: Math.min(640, Math.max(300, h)) });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -92,8 +95,10 @@ export function RecordSection({
   }
 
   return (
-    <div ref={hostRef} className="w-full h-full min-h-[320px]">
-      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ fontFamily: LABEL_FONT }}>
+    <div ref={hostRef} className="w-full h-full min-h-[320px] overflow-hidden">
+      {/* El SVG usa una altura en píxeles (acotada) para que no se deforme ni
+          se desborde sobre la escena 3D. */}
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMin meet" style={{ fontFamily: LABEL_FONT, display: 'block' }}>
         {/* Eje de tiempo (etiquetas cada 5 s) */}
         {maxTime > 0 && Array.from({ length: Math.floor(maxTime / 5) + 1 }, (_, k) => k * 5).map(sec => {
           const y = PAD_TOP + sec * tScale;

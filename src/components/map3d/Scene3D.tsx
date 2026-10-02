@@ -116,10 +116,10 @@ export function Scene3D({
     scene.background = new THREE.Color(0x0a0e1a);
 
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
-    // Cámara alejada, sobre el lado SUR (+Z) y en ángulo desde arriba, para que
-    // el NORTE (−Z) quede arriba en pantalla y el Pacífico (−X) a la izquierda.
-    // Queda margen alrededor para que las ondas P/S crezcan sin cortarse.
-    camera.position.set(0, 34, 40);
+    // Cámara en 3/4 (oblicua), elevada pero NO cenital, sobre el lado SUR (+Z)
+    // mirando al norte: así el bloque se ve de frente (no de canto), con el
+    // NORTE (−Z) hacia el fondo/arriba y el Pacífico (−X) a la izquierda.
+    camera.position.set(0, 20, 44);
 
     // preserveDrawingBuffer permite capturar el canvas con toDataURL() para el
     // reporte PDF (sin él, la captura sale en negro). Costo de rendimiento
@@ -931,16 +931,16 @@ export function Scene3D({
     // el lado SUR del bloque (+Z) mirando hacia el norte; así el norte queda al
     // fondo (arriba) y el Pacífico (−X) a la izquierda.
     const target = new THREE.Vector3(0, -1.5, 0);
-    let camPos = new THREE.Vector3(0, 34, 40);
+    let camPos = new THREE.Vector3(0, 20, 44);
     const R = 46;
 
     if (viewCommand.view === 'top') {
-      // Planta casi vertical, con un leve corrimiento al SUR (+Z) para que la
-      // cámara no quede en posición degenerada y el norte (−Z) resuelva ARRIBA.
-      camPos = new THREE.Vector3(target.x, 60, target.z + 8);
+      // Planta: cámara alta y un corrimiento al SUR (+Z) suficiente para que la
+      // vista no quede degenerada y el norte (−Z) resuelva ARRIBA en pantalla.
+      camPos = new THREE.Vector3(target.x, 52, target.z + 18);
     } else if (viewCommand.view === 'north') {
       // Vista de frente desde el sur mirando al norte (norte al fondo/arriba).
-      camPos = new THREE.Vector3(target.x, 22, target.z + R);
+      camPos = new THREE.Vector3(target.x, 16, target.z + R);
     } else if (viewCommand.view === 'cut' && epicenter && selectedStation) {
       const stObj = stations.find(s => s.code === selectedStation);
       if (stObj) {
@@ -951,11 +951,11 @@ export function Scene3D({
         // Perpendicular horizontal a la dirección del corte.
         const px = -dz / len, pz = dx / len;
         target.set((ex + sx) / 2, -1.5, (ez + sz) / 2);
-        camPos = new THREE.Vector3(target.x + px * R, 22, target.z + pz * R);
+        camPos = new THREE.Vector3(target.x + px * R, 20, target.z + pz * R);
       }
     } else {
-      // fit: vista por defecto en ángulo desde arriba y desde el sur (norte arriba).
-      camPos = new THREE.Vector3(0, 34, 40);
+      // fit: vista por defecto en 3/4 (oblicua) desde el sur, con el norte arriba.
+      camPos = new THREE.Vector3(0, 20, 44);
     }
 
     // Transición suave de 800 ms.
