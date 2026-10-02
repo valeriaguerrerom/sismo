@@ -412,10 +412,8 @@ function RealRecordResultsPanel({
 }
 
 export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'common', heatmapGrid, realParams }: Props) {
-  // Registro real cargado: panel autónomo (sin simulación FDM de apoyo).
-  if (realRecord && realParams) {
-    return <RealRecordResultsPanel realRecord={realRecord} realParams={realParams} ampScale={ampScale} />;
-  }
+  // IMPORTANTE: todos los hooks se declaran ANTES de cualquier return, para no
+  // violar las reglas de hooks (el panel de registro real se decide al final).
   // Acordeón EXCLUSIVO: solo una sección abierta a la vez (al abrir una se
   // cierran las demás), para que siempre quepa sin scroll. Al inicio solo
   // "Métricas" está abierta.
@@ -530,6 +528,12 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
   useEffect(() => {
     if (forceSection) setOpenSections(new Set([forceSection]));
   }, [forceSection]);
+
+  // Registro real cargado: panel autónomo (sin simulación FDM de apoyo). Se
+  // decide DESPUÉS de declarar todos los hooks de arriba (regla de hooks).
+  if (realRecord && realParams) {
+    return <RealRecordResultsPanel realRecord={realRecord} realParams={realParams} ampScale={ampScale} />;
+  }
 
   if (!result) {
     const steps = [

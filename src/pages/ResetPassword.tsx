@@ -34,6 +34,7 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
     setError('');
     setLoading(true);
     const err = await updatePassword(password);
+    setPassword(''); // limpiar la contraseña del estado tras el intento
     if (err === 'EXPIRED') { setLoading(false); setExpired(true); return; }
     if (err) { setLoading(false); setError(err); return; }
     // Primero llevamos la app al login (fija page='auth' de forma síncrona) y

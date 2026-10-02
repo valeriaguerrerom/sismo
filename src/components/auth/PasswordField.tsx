@@ -1,7 +1,8 @@
 /**
  * Campo de contraseña con botón de ojo para mostrar u ocultar el texto.
- * La contraseña NUNCA se transforma ni se cifra en el cliente: Supabase la
- * guarda con hash en el servidor.
+ * La contraseña escrita aquí se deriva en el cliente (PBKDF2, ver
+ * passwordDerive.ts) antes de enviarse: el texto plano no viaja por la red.
+ * Supabase guarda el valor recibido con bcrypt en el servidor.
  */
 import { useState } from 'react';
 import { Lock, Eye, EyeSlash } from '../../lib/icons';

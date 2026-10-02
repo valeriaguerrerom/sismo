@@ -134,10 +134,12 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
       const err = await updatePassword(pw);
       if (err === 'EXPIRED') { setPwError('Tu sesión expiró. Vuelve a iniciar sesión para cambiar la contraseña.'); return; }
       if (err) { setPwError(err); return; }
-      setPw(''); setPwOpen(false);
+      setPwOpen(false);
       setToast('Contraseña actualizada');
       setTimeout(() => setToast(''), 3000);
     } finally {
+      // La contraseña original se limpia del estado tras cada intento.
+      setPw('');
       setPwSaving(false);
     }
   };

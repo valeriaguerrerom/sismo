@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { deriveAuthSecret } from './passwordDerive';
+import { isPasswordStrong } from './authConsent';
 
 export type UserRole = 'visitor' | 'user' | 'admin';
 
@@ -303,22 +305,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Registro en dos pasos: aquí solo se crea la cuenta con nombre y la
       // fecha de autorización de datos (Ley 1581). El resto del perfil de
       // investigador se completa después en "Completa tu perfil".
+      // Política mínima sobre la contraseña ORIGINAL, antes de derivar.
+      if (!isPasswordStrong(password)) {
+        return 'La contraseña debe tener al menos 8 caracteres, con letras y números.';
+      }
       const meta = {
         full_name: fullName.trim(),
         data_authorization_at: new Date().toISOString(),
       };
+      // Secreto derivado en el cliente: la contraseña en texto plano NUNCA viaja
+      // por la red. Lo que se envía a Supabase es el PBKDF2 (ver passwordDerive).
+      let secret: string;
+      try {
+        secret = await deriveAuthSecret(email, password);
+      } catch (e) {
+        return e instanceof Error ? e.message : 'No se pudo preparar el registro de forma segura.';
+      }
       try {
         // Los metadatos los copia el trigger handle_new_user a la tabla profiles.
         // Con timeout para que el botón no se quede en "Procesando…" si la red
-        // a Supabase se cuelga. La contraseña la cifra Supabase en el servidor;
-        // nunca se transforma ni se registra en el cliente.
+        // a Supabase se cuelga. Supabase cifra con bcrypt el secreto recibido.
         const { data, error } = await withTimeout(
           supabase.auth.signUp({
             email,
-            password,
+            password: secret,
             options: { data: meta, emailRedirectTo: window.location.origin },
           }), 12000, 'registro',
         );
+        secret = ''; // limpiar la copia local del secreto derivado
         if (error) return translateError(error.message);
 
         // Si no hay confirmación de email, ya hay sesión: asegurar los datos.
@@ -337,13 +351,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    // Secreto derivado en el cliente: la contraseña en texto plano no viaja.
+    let secret: string;
+    try {
+      secret = await deriveAuthSecret(email, password);
+    } catch (e) {
+      return e instanceof Error ? e.message : 'No se pudo iniciar sesión de forma segura.';
+    }
     try {
       // Con timeout: si la red a Supabase se cuelga, el botón no se queda
       // eternamente en "Procesando…" y se muestra un mensaje claro.
       const { error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password }), 12000, 'inicio de sesión',
+        supabase.auth.signInWithPassword({ email, password: secret }), 12000, 'inicio de sesión',
       );
-      if (error) return translateError(error.message);
+      secret = ''; // limpiar la copia local del secreto derivado
+      // Mensaje genérico: no se revela si el correo existe o no.
+      if (error) return 'Correo o contraseña incorrectos.';
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'No se pudo iniciar sesión. Revisa tu conexión.';
@@ -525,10 +548,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updatePassword = useCallback(async (password: string): Promise<string | null> => {
     if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    // Política mínima sobre la contraseña ORIGINAL antes de derivar.
+    if (!isPasswordStrong(password)) {
+      return 'La contraseña debe tener al menos 8 caracteres, con letras y números.';
+    }
     try {
+      // La sal depende del correo: se toma el de la sesión actual (recuperación
+      // o cambio desde el perfil; ambas tienen sesión). Si no hay sesión, la
+      // sesión de recuperación expiró.
+      const { data: sess } = await withTimeout(supabase.auth.getSession(), 8000, 'sesión');
+      const email = sess.session?.user?.email;
+      if (!email) return 'EXPIRED';
+
+      let secret = await deriveAuthSecret(email, password);
       const { error } = await withTimeout(
-        supabase.auth.updateUser({ password }), 12000, 'actualización de contraseña',
+        supabase.auth.updateUser({ password: secret }), 12000, 'actualización de contraseña',
       );
+      secret = ''; // limpiar la copia local del secreto derivado
       if (error) {
         const m = error.message.toLowerCase();
         if (m.includes('session') || m.includes('expired') || m.includes('jwt') || m.includes('token')) {

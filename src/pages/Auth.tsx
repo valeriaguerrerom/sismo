@@ -66,26 +66,31 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
     setSuccess('');
     setLoading(true);
 
-    if (mode === 'login') {
-      const err = await signIn(email, password);
-      if (err) setError(err);
-      else onSuccess();
-    } else if (mode === 'forgot') {
-      await sendPasswordReset(email);
-      // Mensaje neutro SIEMPRE, exista o no el correo (no se revelan cuentas).
-      setSuccess('Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa también la carpeta de spam.');
-    } else {
-      const err = await signUp(email, password, fullName);
-      if (err) setError(err);
-      else {
-        // Cuenta creada: llevar al usuario a la pantalla de inicio de sesión
-        // (sin paso de confirmación por correo).
-        setMode('login');
-        setPassword('');
-        setSuccess('¡Cuenta creada! Inicia sesión para completar tu perfil de investigador.');
+    try {
+      if (mode === 'login') {
+        const err = await signIn(email, password);
+        if (err) setError(err);
+        else onSuccess();
+      } else if (mode === 'forgot') {
+        await sendPasswordReset(email);
+        // Mensaje neutro SIEMPRE, exista o no el correo (no se revelan cuentas).
+        setSuccess('Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa también la carpeta de spam.');
+      } else {
+        const err = await signUp(email, password, fullName);
+        if (err) setError(err);
+        else {
+          // Cuenta creada: llevar al usuario a la pantalla de inicio de sesión
+          // (sin paso de confirmación por correo).
+          setMode('login');
+          setSuccess('¡Cuenta creada! Inicia sesión para completar tu perfil de investigador.');
+        }
       }
+    } finally {
+      // La contraseña original se limpia del estado tras CADA intento (exitoso
+      // o fallido), para no dejarla en memoria del componente.
+      setPassword('');
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleGoogle = async () => {

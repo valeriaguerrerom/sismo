@@ -722,7 +722,8 @@ function Footer() {
 
 /* ─────────────────────── Página ─────────────────────── */
 
-export function About(_props: Props) {
+export function About(_: Props) {
+  void _;
   const { user } = useAuth();
   return (
     <div className="min-h-screen pt-16" style={{ backgroundColor: C.cream }}>
