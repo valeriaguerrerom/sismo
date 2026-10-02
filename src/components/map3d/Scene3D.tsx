@@ -427,7 +427,19 @@ export function Scene3D({
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
+    // Guarda anti-arrastre: OrbitControls usa el MISMO elemento para rotar. Un
+    // arrastre (girar la escena) dispara igualmente un evento 'click' al soltar,
+    // y eso colocaba el epicentro "solo" al terminar de girar. Registramos dónde
+    // bajó el ratón y solo tratamos como clic real si casi no se movió.
+    let downX = 0, downY = 0, downT = 0;
+    const onPointerDownClickGuard = (ev: MouseEvent) => { downX = ev.clientX; downY = ev.clientY; downT = performance.now(); };
+    labelRenderer.domElement.addEventListener('mousedown', onPointerDownClickGuard);
+
     const onClick = (ev: MouseEvent) => {
+      // Si el ratón se movió más de 5 px (o pasó mucho tiempo) entre bajar y
+      // soltar, fue un ARRASTRE para girar, no un clic: no colocar epicentro.
+      const moved = Math.hypot(ev.clientX - downX, ev.clientY - downY);
+      if (moved > 5 || performance.now() - downT > 700) return;
       // El rect debe ser el del elemento que RECIBE el clic (labelRenderer),
       // que es donde está el listener, para que clientX/Y sean consistentes.
       const rect = labelRenderer.domElement.getBoundingClientRect();
@@ -770,6 +782,7 @@ export function Scene3D({
       window.removeEventListener('resize', onResize);
       resizeObserver.disconnect();
       labelRenderer.domElement.removeEventListener('click', onClick);
+      labelRenderer.domElement.removeEventListener('mousedown', onPointerDownClickGuard);
       labelRenderer.domElement.removeEventListener('mousedown', onGlobeDown);
       window.removeEventListener('mousemove', onGlobeMove);
       window.removeEventListener('mouseup', onGlobeUp);

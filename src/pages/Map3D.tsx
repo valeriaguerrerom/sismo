@@ -293,6 +293,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     loadEvents();
   }, []);
 
+  // Códigos de estación cuya traza sintética aún se está generando (declarado
+  // aquí arriba porque recomputeTravelTimes ya lo usa para evitar el parpadeo).
+  const [loadingTraces, setLoadingTraces] = useState<Set<string>>(new Set());
+
   // ── Recalcular tiempos de viaje cuando cambia epicentro / modelo / velocidades ──
   const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }) => {
     setLoadingTT(true);
@@ -303,10 +307,15 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         vp_km_s: vp, vs_km_s: vs, model,
       });
       setTravelTimes(res.estaciones);
+      // Marcar YA las estaciones como "en generación" para que isCalculating no
+      // caiga a false ni un frame entre terminar los tiempos de viaje y arrancar
+      // los sintéticos (esa caída causaba el parpadeo del overlay de carga).
+      setLoadingTraces(new Set(res.estaciones.map(t => t.code)));
       setMessage('Tiempos de viaje calculados. Generando sismogramas…');
     } catch (e) {
       setMessage(friendlyError(e, 'No se pudieron calcular los tiempos de viaje'));
       setTravelTimes([]);
+      setLoadingTraces(new Set());
     } finally {
       setLoadingTT(false);
     }
@@ -321,7 +330,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // Cada estación actualiza `traces` y `loadingTraces` en cuanto termina, para
   // mostrar una barra de progreso real. Un `runId` garantiza que solo la última
   // generación escriba estado (evita que una carga vieja pise a la nueva).
-  const [loadingTraces, setLoadingTraces] = useState<Set<string>>(new Set());
   const runIdRef = useRef(0);
 
   const loadSynthetics = useCallback(async (tts: StationTravelTime[]) => {

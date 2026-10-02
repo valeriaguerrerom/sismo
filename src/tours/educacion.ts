@@ -97,16 +97,6 @@ export function buildEducacionSteps({ openSection }: EduTourControls): TourStep[
       },
     },
     {
-      element: '[data-tour="edu-contenido"]',
-      onHighlightStarted: () => openSection('waves'),
-      popover: {
-        title: 'Aquí se muestra el contenido',
-        description: 'Cada pestaña despliega su contenido interactivo en esta zona.',
-        side: 'top',
-        align: 'center',
-      },
-    },
-    {
       element: '[data-tour="edu-tab-quiz"]',
       onHighlightStarted: () => openSection('quiz'),
       popover: {

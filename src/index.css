@@ -220,7 +220,7 @@ input[type='range']::-moz-range-thumb {
 }
 /* Etiqueta "¡Empieza aquí!" pegada a la derecha del botón. */
 .help-pulse::after {
-  content: '¡Empieza aquí! 👆';
+  content: 'Empieza aquí';
   position: absolute;
   left: calc(100% + 12px);
   top: 50%;

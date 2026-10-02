@@ -367,6 +367,8 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
           date: r.event_date,
           time: r.event_time,
           folder: r.region ?? 'Colombia',
+          latitude: r.latitude,
+          longitude: r.longitude,
           stations: stationsByEvent[r.event_id] ?? [],
         }));
 
@@ -447,7 +449,7 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
     }
     // Tectónico: todas las estaciones de la red (del backend, siempre visibles).
     const recording = new Set(openCMEvent?.stations.map(s => s.station) ?? []);
-    return stations.map(s => ({
+    const pts: MapPoint[] = stations.map(s => ({
       id: `station-${s.code}`,
       lat: s.latitude,
       lon: s.longitude,
@@ -456,8 +458,23 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
       highlighted: recording.has(s.code),
       badge: s.code,
       label: `Estación ${s.code}${s.approx ? ' (ubicación aproximada)' : ''}`,
-      sublabel: recording.has(s.code) ? `${s.name} · registró el evento abierto` : s.name,
+      sublabel: recording.has(s.code) ? `${s.name} · registró este evento` : s.name,
     }));
+    // Al abrir un evento, marcar su UBICACIÓN en el mapa. HONESTIDAD: el catálogo
+    // no trae el epicentro real; la coordenada es el CENTROIDE de las estaciones
+    // que lo registraron, así que se rotula como aproximada, no como epicentro.
+    if (openCMEvent && openCMEvent.latitude != null && openCMEvent.longitude != null) {
+      pts.push({
+        id: `event-${openCMEvent.id}`,
+        lat: openCMEvent.latitude,
+        lon: openCMEvent.longitude,
+        color: COLOR_VOLCANIC,
+        badge: `ML ${openCMEvent.magnitude.toFixed(1)}`,
+        label: `Evento ML ${openCMEvent.magnitude.toFixed(1)} · ${openCMEvent.folder}`,
+        sublabel: 'Ubicación aproximada (centroide de las estaciones que lo registraron); el catálogo no incluye el epicentro ni la profundidad real.',
+      });
+    }
+    return pts;
   }, [source, openCMEvent, stations]);
 
   const mapArea: MapArea | null = source === 'volcanic'
@@ -468,17 +485,17 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
     ? { center: [GALERAS_CRATER.lat, GALERAS_CRATER.lon] as [number, number], zoom: 13 }
     : { center: [1.35, -77.7] as [number, number], zoom: 7 };
 
-  // Tectónico: encuadrar todas las estaciones conocidas.
+  // Tectónico: encuadrar todas las ESTACIONES (fijo; no depende del evento
+  // abierto, para que seleccionar un evento no vuelva a hacer zoom al mapa).
   const mapBounds = useMemo(() => {
-    if (source !== 'tectonic') return null;
-    const lats = mapPoints.map(p => p.lat);
-    const lons = mapPoints.map(p => p.lon);
-    if (!lats.length) return null;
+    if (source !== 'tectonic' || !stations.length) return null;
+    const lats = stations.map(s => s.latitude);
+    const lons = stations.map(s => s.longitude);
     return [
       [Math.min(...lats), Math.min(...lons)],
       [Math.max(...lats), Math.max(...lons)],
     ] as [[number, number], [number, number]];
-  }, [source, mapPoints]);
+  }, [source, stations]);
 
   // ─── Handlers ───
   const loadGalerasWave = useCallback(async (ev: GalerasEvent) => {

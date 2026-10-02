@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BookOpen, Waves, Zap, Award,
   CheckCircle, XCircle, RotateCcw, Layers, ArrowRight, Clock,
-  Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library, HelpCircle
+  Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library, HelpCircle,
+  Flame, Activity
 } from '../lib/icons';
 import { loadQuizQuestions, loadWaveFacts, loadTimelineEvents, QuizQuestion, TimelineEvent } from '../lib/educationData';
 import { FdmMethodology } from '../components/education/FdmMethodology';
@@ -538,7 +539,7 @@ function HistoricalTimeline() {
                   ? 'bg-[#C4553A] text-white scale-110 shadow-lg shadow-[#C4553A]/30'
                   : e.event_type === 'volcanic' ? 'bg-[#C4553A]/20 text-[#C4553A]' : 'bg-stone-200 text-stone-500'
               }`}>
-                {e.event_type === 'volcanic' ? '🌋' : '⚡'}
+                {e.event_type === 'volcanic' ? <Flame size={13} /> : <Activity size={13} />}
               </div>
               <span className={`text-[9px] mt-1 font-bold ${selectedEvent === i ? 'text-[#C4553A]' : 'text-stone-400'}`}>{e.year}</span>
             </button>
@@ -552,10 +553,11 @@ function HistoricalTimeline() {
         borderColor: ev.event_type === 'volcanic' ? '#C4553A20' : '#2D6A4F20',
       }}>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold" style={{ color: ev.event_type === 'volcanic' ? '#C4553A' : '#2D6A4F' }}>
-            {ev.event_type === 'volcanic' ? '🌋 Evento Volcánico' : '⚡ Evento Tectónico'}
+          <span className="text-xs font-bold flex items-center gap-1.5" style={{ color: ev.event_type === 'volcanic' ? '#C4553A' : '#2D6A4F' }}>
+            {ev.event_type === 'volcanic' ? <Flame size={13} /> : <Activity size={13} />}
+            {ev.event_type === 'volcanic' ? 'Evento volcánico' : 'Evento tectónico'}
           </span>
-          {ev.magnitude !== '—' && <span className="text-xs text-stone-400">· ML {ev.magnitude}</span>}
+          {ev.magnitude !== '—' && <span className="text-xs text-stone-400">, ML {ev.magnitude}</span>}
         </div>
         <h4 className="text-2xl font-black text-[#1A1A2E] mb-2">{ev.title}</h4>
         <p className="text-stone-600 text-sm leading-relaxed">{ev.description}</p>
