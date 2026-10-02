@@ -7,6 +7,7 @@
 import { useRef, useState, ChangeEvent } from 'react';
 import { Upload, Activity, FileAudio, RefreshCw, AlertTriangle, Info, Waves, ChevronRight, Download, ExternalLink } from '../../lib/icons';
 import { uploadMseed, MseedUploadResult } from '../../lib/mseedUpload';
+import { VolcanoLoader } from '../ui/VolcanoLoader';
 import type { WaveData } from '../../lib/types';
 
 /**
@@ -294,8 +295,8 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-8 text-xs text-stone-400">
-            <div className="w-5 h-5 rounded-full border-[3px] border-stone-200 border-t-[#C4553A] animate-spin" /> Procesando con ObsPy…
+          <div className="py-8">
+            <VolcanoLoader size={44} label="Procesando con ObsPy…" />
           </div>
         )}
 

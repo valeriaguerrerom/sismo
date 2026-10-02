@@ -75,7 +75,7 @@ export function buildExploradorSteps({ canUpload }: ExploradorTourOptions): Tour
       popover: {
         title: 'Mapa',
         description:
-          'Ubica los eventos geográficamente. También puedes seleccionarlos desde aquí.',
+          'Ubica geográficamente la zona de origen y las estaciones. Para elegir un sismo usa la lista de la izquierda.',
         side: 'left',
         align: 'start',
       },
