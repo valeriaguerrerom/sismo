@@ -369,8 +369,9 @@ CSP (resumen de directivas y por qué):
 
 - ~~Aplicar la migración `20260930_prevent_role_self_escalation.sql`.~~
   **Hecho** (SQL editor: "Success. No rows returned").
-- **Aplicar la migración `20261002_harden_profiles_privileges.sql`** (amplía la
-  protección a INSERT/UPSERT y a las columnas `active`/`deactivated_by`).
+- ~~Aplicar la migración `20261002_harden_profiles_privileges.sql`~~ **Hecho**
+  (amplía la protección a INSERT/UPSERT y a las columnas `active`/`deactivated_by`;
+  cierra el ataque de reactivación en dos pasos).
 - Confirmar la configuración del bucket `mseed-raw` (lectura pública, 0 políticas
   de escritura).
 - Anotar los valores de rate limiting de Auth y la expiración del JWT.
