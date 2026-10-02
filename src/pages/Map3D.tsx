@@ -686,12 +686,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           <div className="w-full max-w-md flex flex-col items-center text-center">
             <VolcanoLoader size={72} dark label="" />
             <h3 className="mt-5 text-xl font-bold text-stone-100">Generando sismogramas…</h3>
-            <p className="mt-1 font-mono text-[12px] text-[#D4A853] min-h-[18px]">{genStepLabel}</p>
+            <p className="mt-1 text-[12px] text-[#D4A853] min-h-[18px]">{genStepLabel}</p>
             {genTotal > 0 && (
               <div className="mt-5 w-full max-w-sm">
-                <div className="flex items-center justify-between font-mono text-[10px] text-stone-400 mb-1.5">
-                  <span>{genDone}/{genTotal} estaciones</span>
-                  <span>{genPercent}%</span>
+                <div className="flex items-center justify-between text-[10px] text-stone-400 mb-1.5">
+                  <span><span className="font-mono">{genDone}/{genTotal}</span> estaciones</span>
+                  <span className="font-mono">{genPercent}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                   <div
@@ -703,12 +703,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             )}
             {/* Dato curioso rotativo mientras carga (se entretiene la espera). */}
             <div className="mt-7 w-full max-w-sm rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-[#C4553A] mb-1">¿Sabías que…?</p>
+              <p className="text-[11px] font-semibold text-[#C4553A] mb-1">¿Sabías que…?</p>
               <p key={factIndex} className="text-[12px] leading-snug text-stone-300 animate-fade-in">
                 {LOADER_FACTS[factIndex]}
               </p>
             </div>
-            <p className="mt-5 font-mono text-[10px] text-stone-500">Se reproducirá automáticamente al terminar</p>
+            <p className="mt-5 text-[10px] text-stone-500">Se reproducirá automáticamente al terminar</p>
           </div>
         </div>
       )}
@@ -1080,7 +1080,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             <div className="px-5 pt-5 pb-2 flex items-start gap-3">
               <div className="mt-0.5 text-[#C4553A]"><MapPin size={20} /></div>
               <div>
-                <h3 className="font-mono text-sm font-bold text-stone-100 mb-1">¿Seleccionar este epicentro?</h3>
+                <h3 className="text-sm font-bold text-stone-100 mb-1">¿Seleccionar este epicentro?</h3>
                 <p className="text-[12px] leading-snug text-stone-300">
                   Colocarás el epicentro en{' '}
                   <span className="font-semibold text-stone-100 whitespace-nowrap">
@@ -1116,7 +1116,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             <div className="px-5 pt-5 pb-2 flex items-start gap-3">
               <div className="mt-0.5 text-[#D4A853]"><AlertCircle size={20} /></div>
               <div>
-                <h3 className="font-mono text-sm font-bold text-stone-100 mb-1">Generación en curso</h3>
+                <h3 className="text-sm font-bold text-stone-100 mb-1">Generación en curso</h3>
                 <p className="text-[12px] leading-snug text-stone-300">
                   Se están generando los sismogramas del evento actual.
                   ¿Quieres reemplazarlos por{' '}
@@ -1149,11 +1149,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowEventList(false)}>
           <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-lg max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <h3 className="font-mono text-sm font-bold text-stone-100">Eventos ({filteredEvents.length}/{events.length})</h3>
+              <h3 className="text-sm font-bold text-stone-100">Eventos ({filteredEvents.length}/{events.length})</h3>
               <button onClick={() => setShowEventList(false)} aria-label="Cerrar lista de eventos" title="Cerrar" className="text-stone-400"><X size={16} /></button>
             </div>
             {/* Filtros */}
-            <div className="px-4 py-2.5 border-b border-white/10 grid grid-cols-2 gap-2 font-mono">
+            <div className="px-4 py-2.5 border-b border-white/10 grid grid-cols-2 gap-2">
               <input
                 type="text" placeholder="Buscar fecha/lugar..." value={evSearch}
                 onChange={e => setEvSearch(e.target.value)}
@@ -1190,12 +1190,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   className="w-full text-left px-4 py-2.5 hover:bg-white/5 flex items-center gap-2"
                 >
                   <MapPin size={12} className={ev.sourceType === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
-                  <span className="font-mono text-[11px] text-stone-300 flex-1">{ev.label}</span>
-                  <span className="font-mono text-[10px] text-stone-500">{ev.nStations} est.</span>
+                  <span className="text-[11px] text-stone-300 flex-1">{ev.label}</span>
+                  <span className="text-[10px] text-stone-500">{ev.nStations} est.</span>
                 </button>
               ))}
               {filteredEvents.length === 0 && (
-                <div className="px-4 py-6 text-center font-mono text-[11px] text-stone-500">Ningún evento coincide.</div>
+                <div className="px-4 py-6 text-center text-[11px] text-stone-500">Ningún evento coincide.</div>
               )}
             </div>
           </div>
@@ -1205,7 +1205,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       {/* Modal: generar reporte del Mapa 3D */}
       {showReport && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowReport(false)}>
-          <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-md overflow-hidden flex flex-col font-mono" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-md overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <h3 className="text-sm font-bold text-stone-100 flex items-center gap-2">
                 <FileDown size={15} className="text-[#2D6A4F]" /> Generar reporte del Mapa 3D
@@ -1216,7 +1216,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             <div className="px-4 py-3 space-y-4">
               {/* Qué incluir */}
               <div>
-                <div className="text-[9px] text-stone-500 uppercase mb-2">¿Qué incluir?</div>
+                <div className="text-[11px] font-semibold text-stone-300 mb-2">¿Qué incluir?</div>
                 <div className="space-y-2">
                   {([
                     ['epicentro', 'Epicentro y fuente'],
@@ -1247,7 +1247,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
               {/* Formato */}
               <div>
-                <div className="text-[9px] text-stone-500 uppercase mb-1">Formato</div>
+                <div className="text-[11px] font-semibold text-stone-300 mb-1">Formato</div>
                 <div className="flex gap-1.5">
                   {(['pdf', 'csv'] as const).map(f => (
                     <button
@@ -1336,7 +1336,7 @@ function TriaxialTraces({ syn, real }: { syn: SyntheticResult | null; real: Wave
     <div className="space-y-1">
       {comps.map(c => (
         <div key={c.label} className="flex items-center gap-2">
-          <span className="font-mono text-[9px] w-3" style={{ color: c.color }}>{c.label}</span>
+          <span className="text-[11px] font-semibold w-3" style={{ color: c.color }}>{c.label}</span>
           <svg viewBox={`0 0 ${w} ${h}`} className="flex-1 h-[54px] bg-black/30 rounded" preserveAspectRatio="none">
             <line x1={0} y1={h / 2} x2={w} y2={h / 2} stroke="#334155" strokeWidth={0.5} />
             {/* Marca P y S (solo si tenemos tiempos del sintético) */}
@@ -1347,9 +1347,9 @@ function TriaxialTraces({ syn, real }: { syn: SyntheticResult | null; real: Wave
         </div>
       ))}
       {!real && tP != null && (
-        <div className="flex gap-3 font-mono text-[9px]">
-          <span className="text-[#E07A5F]">P {tP.toFixed(2)} s</span>
-          <span className="text-[#3DA06F]">S {tS?.toFixed(2)} s</span>
+        <div className="flex gap-3 text-[11px]">
+          <span className="text-[#E07A5F]">P <span className="font-mono">{tP.toFixed(2)}</span> s</span>
+          <span className="text-[#3DA06F]">S <span className="font-mono">{tS?.toFixed(2)}</span> s</span>
         </div>
       )}
     </div>
