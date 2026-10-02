@@ -95,8 +95,36 @@ npm run typecheck && npm run lint
 docker compose up --build   # frontend http://localhost:8080 · backend http://localhost:8000
 ```
 
-También hay configuración lista para Vercel/Netlify (frontend) y Render/Railway (backend).
-Ver [docs/despliegue.md](docs/despliegue.md).
+El despliegue de referencia en producción es **Railway** (frontend + backend como
+servicios Docker) con **Supabase** de base de datos. Variables de seguridad del
+backend en producción: `APP_ENV=production`, `ALLOWED_ORIGINS` y
+`SUPABASE_SERVICE_ROLE_KEY`. También hay configuración alternativa para
+Render (backend) y Vercel/Netlify (frontend). Guía completa, incluidas las URLs
+de Supabase Auth y Google, en [docs/despliegue.md](docs/despliegue.md).
+
+## Administración (scripts locales)
+
+Herramientas de un solo uso que corren **solo en local** con la clave de servicio
+(`SUPABASE_SERVICE_ROLE_KEY` en `backend/.env`). No se incluyen en la imagen Docker
+(`backend/.dockerignore` excluye `scripts/admin/`) y fallan con un mensaje claro si
+no encuentran la clave. Nunca reciben contraseñas por argumento ni las imprimen.
+
+```bash
+cd backend
+
+# Inventario de cuentas (solo lectura): rol en el servidor e identidades vinculadas.
+py scripts/admin/audit_accounts.py
+
+# Restablece la contraseña de una cuenta con el esquema derivado del frontend
+# (para la cuenta admin de correo/contraseña tras activar la derivación).
+py scripts/admin/reset_password_derived.py
+
+# Borra cuentas de prueba (protege las admin) y crea cuentas de usuario normal.
+py scripts/admin/manage_test_accounts.py
+
+# Sube los MiniSEED crudos de data_raw/ al bucket público de Supabase Storage.
+py scripts/admin/upload_mseed_storage.py
+```
 
 ## Documentación
 

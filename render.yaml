@@ -13,3 +13,13 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      # Clave de servicio (service_role): necesaria para feedback y gestión de
+      # cuentas. NUNCA se versiona; se configura como secreto en el panel.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Endurecimiento de seguridad en producción (ver backend/core/config.py).
+      - key: APP_ENV
+        value: production
+      # Dominios del frontend permitidos por CORS, separados por comas.
+      - key: ALLOWED_ORIGINS
+        sync: false

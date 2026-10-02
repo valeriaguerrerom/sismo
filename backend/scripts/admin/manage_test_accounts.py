@@ -20,7 +20,7 @@ Seguridad:
 
 Uso:
     cd backend
-    py manage_test_accounts.py
+    py scripts/admin/manage_test_accounts.py
 
 Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
@@ -34,7 +34,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 
-BACKEND_DIR = Path(__file__).resolve().parent
+# backend/ está tres niveles arriba (scripts/admin/este_archivo.py).
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BACKEND_DIR / ".env")
 
 # Parámetros IDÉNTICOS a src/lib/passwordDerive.ts.
@@ -173,8 +174,10 @@ def main() -> None:
     url = os.getenv("SUPABASE_URL", "")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("SUPABASE_SERVICE_KEY", "")
     if not url or not key:
-        print("Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en backend/.env")
-        sys.exit(1)
+        sys.exit(
+            "ERROR: falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en backend/.env.\n"
+            "Este script solo se ejecuta en local con la service key; nunca en producción."
+        )
     sb = create_client(url, key)
 
     print("¿Qué quieres hacer?")

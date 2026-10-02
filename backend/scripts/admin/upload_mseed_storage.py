@@ -15,8 +15,8 @@ hardcodea. La LECTURA del bucket es pública; la escritura requiere esta clave.
 
 Uso:
     cd backend
-    py scripts/upload_mseed_storage.py            # sube lo que falte
-    py scripts/upload_mseed_storage.py --force    # re-sube todo (upsert)
+    py scripts/admin/upload_mseed_storage.py            # sube lo que falte
+    py scripts/admin/upload_mseed_storage.py --force    # re-sube todo (upsert)
 
 Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
@@ -27,14 +27,21 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent
+# backend/ está tres niveles arriba (scripts/admin/este_archivo.py).
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 DATA_RAW = BACKEND_DIR / "data_raw"
 BUCKET = "mseed-raw"
 
 load_dotenv(BACKEND_DIR / ".env")
 
 URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+KEY = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+if not URL or not KEY:
+    sys.exit(
+        "ERROR: falta SUPABASE_URL o la clave de servicio "
+        "(SUPABASE_SERVICE_KEY / SUPABASE_SERVICE_ROLE_KEY) en backend/.env.\n"
+        "Este script solo se ejecuta en local con la service key; nunca en producción."
+    )
 HEADERS = {"Authorization": f"Bearer {KEY}", "apikey": KEY}
 
 

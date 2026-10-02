@@ -5,3 +5,7 @@ data_raw/
 .env
 venv/
 .venv/
+
+# Scripts administrativos (usan la service key). Son herramientas LOCALES de
+# un solo uso; NO deben incluirse en la imagen de producción.
+scripts/admin/
