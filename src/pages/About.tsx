@@ -57,7 +57,7 @@ const CM_EVENT_ID = 'CM_M6.3_2025-04-25T11-44-52';
 const AUTHORS = [
   {
     role: 'Autora',
-    name: 'Valeria Sofía Guerrero Mejía',
+    name: 'Mag. Valeria Sofía Guerrero Mejía',
     affil: 'Ingeniera Civil. Universidad Mariana, Ingeniería de Sistemas.',
     did: 'Desarrollo de la plataforma: frontend, backend, motor de simulación y visualización.',
     station: 'BBAC',
@@ -76,7 +76,7 @@ const AUTHORS = [
 const ADVISORS = [
   {
     role: 'Asesor',
-    name: 'MSc. Sandro Favian Parra Pay',
+    name: 'PhD. Sandro Favian Parra Pay',
     affil: 'Profesor de Ingeniería de Sistemas, Universidad Mariana.',
     did: 'Asesoría en desarrollo de software y metodología Scrum.',
     station: 'CPOP2',
