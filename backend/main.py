@@ -170,6 +170,22 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+# Cabeceras de seguridad en TODAS las respuestas del backend. La API devuelve
+# JSON (no HTML navegable), así que la CSP es restrictiva: nada de scripts ni
+# marcos. HSTS solo se envía en producción (en local es HTTP y no aplica).
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
 # Manejador global de errores no controlados. Sin esto, una excepción cruda
 # produce un 500 SIN headers CORS, y el navegador lo reporta como "bloqueado por
 # CORS / Failed to fetch" ocultando el error real. Aquí devolvemos un JSON con

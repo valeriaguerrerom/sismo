@@ -116,6 +116,20 @@ revisado, el estado y la corrección aplicada.
   que sí actualiza `active`/`deactivated_by`. **Aplicada y verificada** en el
   panel de Supabase (SQL editor → "Success. No rows returned"): la función y el
   trigger quedaron creados.
+- **Escalada por otras vías (INSERT/UPSERT y columnas administrativas) — corregido.**
+  La policy de INSERT `"Users insert own profile"` permitía crear la fila con
+  cualquier `role`/`active`, y el trigger anterior solo cubría `role` en UPDATE.
+  **Fix:** migración `supabase/migrations/20261002_harden_profiles_privileges.sql`,
+  que reemplaza el trigger por uno `BEFORE INSERT OR UPDATE`
+  (`prevent_profile_privilege_escalation`, SECURITY DEFINER + `SET search_path=public`):
+  - **service_role** (`auth.uid() IS NULL`) y **admin** (`current_user_role()='admin'`): sin restricción.
+  - usuario normal en **INSERT**: se fuerzan `role='user'`, `active=true` y las columnas de desactivación a NULL.
+  - usuario normal en **UPDATE**: no puede cambiar `role`, `deactivated_by` (salvo a `'usuario'`), `deactivation_reason`; puede autodesactivarse (`active`→`false`) y reactivarse **solo si él mismo** se había desactivado (`OLD.deactivated_by='usuario'`), nunca si lo desactivó un admin.
+- **Confirmado sobre `current_user_role()`:** es `SECURITY DEFINER` con
+  `SET search_path = public` (migración `20260902`). Bajo **service_role**
+  devuelve `NULL` (no hay `auth.uid()`), por eso el trigger usa
+  `auth.uid() IS NULL` para reconocer al backend/scripts y **no** bloquearlos.
+  Verificado en vivo: `rpc('current_user_role')` con la service key → `None`.
 - `feedback_messages`: sin INSERT para `anon`/`authenticated`; solo el backend
   escribe con la service key (migración `20260926_feedback_backend_only.sql`).
 
@@ -238,10 +252,110 @@ revisado, el estado y la corrección aplicada.
   commiteado jamás. Las claves se leen con `os.getenv()`; el `.env.example` usa
   solo marcadores de posición.
 
+---
+
+## Evidencia de control de acceso (RLS por tabla)
+
+Todas las tablas tienen RLS habilitado. La escritura privilegiada la hace el
+backend con la **service_role** (salta RLS); por eso varias tablas no tienen
+policy de escritura para clientes. "admin" = `current_user_role() = 'admin'`.
+
+| Tabla | SELECT (leer) | INSERT (crear) | UPDATE (editar) | DELETE (borrar) |
+|-------|---------------|----------------|-----------------|-----------------|
+| `profiles` | dueño (su fila) · admin (todas) | dueño (su fila; trigger fuerza role=user/active) | dueño (sin tocar columnas admin, vía trigger) · admin (todo) | — (no hay policy; baja vía backend) |
+| `simulation_reports` | dueño (`user_id=auth.uid()`) · admin (todos) | dueño | dueño | dueño · admin (cualquiera) |
+| `seismic_events` | todos (autenticados) | admin | admin | admin |
+| `quiz_questions` | todos (autenticados) | admin | admin | admin |
+| `wave_facts` | todos (autenticados) | admin | admin | admin |
+| `timeline_events` | todos (autenticados) | admin | admin | admin |
+| `account_deletions` | admin | — (solo backend/service) | — | — |
+| `feedback_messages` | admin | — (solo backend/service) | admin | — |
+
+Notas:
+- Los reportes anonimizados (`user_id = NULL`, tras borrar una cuenta) no los ve
+  ningún usuario común: la policy exige `user_id IS NOT NULL AND auth.uid() = user_id`.
+- No hay lectura anónima en ninguna tabla: la plataforma es de acceso restringido.
+
+## Pruebas de control de acceso
+
+**Automáticas (en la suite, sin cuentas reales)** — `backend/tests/`:
+- `test_access_control.py`: endpoint admin `DELETE /api/admin/users/{id}` sin
+  sesión → **401**; con token de rol `user` → **403**; `DELETE /api/account` sin
+  sesión → **401**.
+- `test_injection.py`: payloads de inyección (SQL, XSS, path traversal, control
+  chars) contra `/api/events?search=`, filtros numéricos, `/api/waveforms/...`
+  (path traversal) y `/api/simulate` con tipos inválidos. Resultado esperado y
+  obtenido: **200** tratando el valor como literal, o **4xx** controlado; nunca
+  **500** con traza. Además, `sourceType`/`source_type` pasaron de `str` libre a
+  `Literal["tectonic","volcanic"]` (un valor fuera de ese conjunto ahora da 422).
+
+**En vivo (requiere las cuentas de prueba)** — `backend/scripts/admin/verify_access_control.py`:
+inicia sesión como `prueba1` y `prueba2` (rol user) y comprueba que `prueba1`
+**no** puede: leer/editar/borrar reportes de `prueba2` (IDOR), leer el perfil de
+`prueba2`, subirse a `role='admin'` por UPDATE ni por upsert, ni leer
+`account_deletions`. Cada comprobación imprime PASA (acceso denegado) o FALLA.
+Correr cuando existan las cuentas (`manage_test_accounts.py`). Para el caso de
+reactivación tras baja administrativa, desactiva `prueba1` desde el panel admin
+y luego intenta `active=true` desde la consola: debe fallar.
+
+## Resultado de las pruebas de inyección por endpoint
+
+| Endpoint | Vector probado | Resultado |
+|----------|----------------|-----------|
+| `GET /api/events?search=` | SQLi, XSS, control chars | 200, valor tratado como texto (`.ilike` parametrizado) |
+| `GET /api/events` (filtros) | texto donde van números | 200/422, nunca 500 |
+| `GET /api/waveforms/{event}/{station}` | path traversal (`../`, `%2f`) | 400/404/422, no sirve archivos del sistema |
+| `POST /api/simulate` | tipo no numérico en campos | 422 (validación Pydantic) |
+| `POST /api/simulate` | `sourceType` arbitrario | 422 (`Literal`) |
+
+El backend usa el SDK de Supabase (consultas parametrizadas `.eq/.ilike/.gte`),
+no concatena SQL, y Pydantic valida tipos y rangos antes de ejecutar.
+
+## Cabeceras de seguridad HTTP
+
+**Frontend (Nginx, `nginx.conf`)** — en todas las respuestas:
+- `Content-Security-Policy` (ver abajo), `Strict-Transport-Security`
+  (`max-age=31536000; includeSubDomains`), `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`,
+  `X-Frame-Options: DENY` (+ `frame-ancestors 'none'` en la CSP).
+
+CSP (resumen de directivas y por qué):
+- `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`.
+- `script-src 'self'` (los bundles de Vite llevan hash; **sin** `unsafe-inline`).
+- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (Tailwind/React
+  y Leaflet aplican estilos en línea; CSS de Google Fonts).
+- `font-src 'self' https://fonts.gstatic.com` (IBM Plex Sans).
+- `img-src 'self' data: blob: https://*.tile.openstreetmap.org` (teselas de
+  Leaflet; `data:`/`blob:` para capturas de html2canvas y el canvas de Three.js).
+- `connect-src 'self' https://*.supabase.co https://*.up.railway.app` (REST/Auth
+  de Supabase y el backend; **ajustar** si el backend no está en `up.railway.app`).
+- `frame-src https://accounts.google.com https://*.supabase.co` (OAuth de Google
+  vía Supabase).
+- `worker-src 'self' blob:` (el motor FDM corre en un Web Worker).
+- El Mapa 3D (Three.js) carga sus texturas/datos desde `/terrain` y `/textures`
+  **locales**, así que no requiere orígenes externos extra.
+
+**Backend (FastAPI, middleware en `main.py`)** — en todas las respuestas:
+`X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY`,
+`Permissions-Policy`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`
+(la API solo devuelve JSON) y `Strict-Transport-Security` **solo en producción**
+(`APP_ENV=production`). Verificado en vivo sobre `/health`.
+
+**Pendiente de verificar tras desplegar con Nginx** (no se pudo probar en local
+sin Docker): confirmar con las DevTools (pestaña Network → Response Headers) que
+la CSP no bloquea el login con Google, los mapas de Leaflet ni el Mapa 3D. Si la
+consola reporta un bloqueo de CSP, ajustar la directiva correspondiente en
+`nginx.conf` (lo más probable: añadir el dominio real del backend a `connect-src`).
+
 ## Pendientes en el panel de Supabase
 
 - ~~Aplicar la migración `20260930_prevent_role_self_escalation.sql`.~~
   **Hecho** (SQL editor: "Success. No rows returned").
+- **Aplicar la migración `20261002_harden_profiles_privileges.sql`** (amplía la
+  protección a INSERT/UPSERT y a las columnas `active`/`deactivated_by`).
 - Confirmar la configuración del bucket `mseed-raw` (lectura pública, 0 políticas
   de escritura).
 - Anotar los valores de rate limiting de Auth y la expiración del JWT.
+- Tras desplegar: verificar en DevTools que la CSP del Nginx no bloquea Google
+  login, los mapas ni el Mapa 3D.

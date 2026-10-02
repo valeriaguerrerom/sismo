@@ -26,6 +26,7 @@ Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import base64
 import math
+from typing import Literal
 import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
@@ -98,7 +99,7 @@ class SimulationParams(BaseModel):
     density: float = Field(default=2600, ge=1500, le=3500, description="Densidad del medio (kg/m³)")
     lambda_: float = Field(default=0, description="Primer parámetro de Lamé (Pa)")
     mu: float = Field(default=0, description="Módulo de corte (Pa)")
-    sourceType: str = Field(default="tectonic", description="Tipo de fuente: tectonic | volcanic")
+    sourceType: Literal["tectonic", "volcanic"] = Field(default="tectonic", description="Tipo de fuente: tectonic | volcanic")
     magnitude: float = Field(default=5.0, ge=2.0, le=9.0, description="Magnitud momento (Mw)")
     depth: float = Field(default=15, ge=1, le=100, description="Profundidad focal (km)")
     epicenterLat: float = Field(default=1.2136, ge=-1.0, le=3.0, description="Latitud del epicentro (Nariño y entorno)")
@@ -1382,7 +1383,7 @@ class SyntheticParams(BaseModel):
     density: float = Field(default=2600, gt=0)
     magnitude: float = Field(default=5.0)
     depth_km: float = Field(default=15.0, ge=0)
-    source_type: str = Field(default="tectonic")
+    source_type: Literal["tectonic", "volcanic"] = Field(default="tectonic")
     distance_km: float = Field(default=3.0, ge=0)
     nx: int = Field(default=200, ge=40, le=600)
     nz: int = Field(default=150, ge=40, le=600)
