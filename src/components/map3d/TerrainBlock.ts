@@ -24,7 +24,41 @@ export interface TerrainHandle {
   sampleHeightAt: (x: number, z: number) => number;
   /** Oculta (true) o muestra (false) el eje de profundidad + Moho en vista superior. */
   setTopView: (isTop: boolean) => void;
+  /**
+   * ¿La posición de escena (x,z) cae DENTRO de la silueta del departamento?
+   * Para el bloque rectangular (sin silueta) siempre es true. Sirve para no
+   * dejar flotando en el vacío a las estaciones que caen fuera de Nariño.
+   */
+  isInside: (x: number, z: number) => boolean;
+  /**
+   * Punto del borde de la silueta más cercano a (x,z). Devuelve ese punto de
+   * escena y la distancia (en unidades de escena) desde (x,z) hasta el borde.
+   * Para el bloque rectangular devuelve el mismo punto con distancia 0.
+   */
+  nearestBorder: (x: number, z: number) => { x: number; z: number; dist: number };
   dispose: () => void;
+}
+
+/**
+ * Punto más cercano del polígono (anillo) a un punto (x,z), probando cada
+ * segmento. Devuelve el punto proyectado y la distancia euclídea.
+ */
+function nearestPointOnRing(
+  x: number, z: number, ringXZ: [number, number][],
+): { x: number; z: number; dist: number } {
+  let best = { x: ringXZ[0][0], z: ringXZ[0][1], dist: Infinity };
+  for (let i = 0, j = ringXZ.length - 1; i < ringXZ.length; j = i++) {
+    const [xi, zi] = ringXZ[i];
+    const [xj, zj] = ringXZ[j];
+    const ex = xi - xj, ez = zi - zj;
+    const len2 = ex * ex + ez * ez || 1e-30;
+    let t = ((x - xj) * ex + (z - zj) * ez) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = xj + t * ex, pz = zj + t * ez;
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best.dist) best = { x: px, z: pz, dist: d };
+  }
+  return best;
 }
 
 const SEG = 200; // segmentación del plano (200×200); se puede bajar por rendimiento
@@ -224,6 +258,9 @@ export function buildTerrainBlock(
     group,
     sampleHeightAt,
     setTopView: (isTop: boolean) => { axisGroup.visible = !isTop; },
+    // Bloque rectangular: todo el dominio es "terreno", nada queda fuera.
+    isInside: () => true,
+    nearestBorder: (x: number, z: number) => ({ x, z, dist: 0 }),
     dispose: () => {
       disposables.forEach(d => d.dispose());
       scene.remove(group);
@@ -510,6 +547,8 @@ function buildSilhouetteBlock(
     group,
     sampleHeightAt: sampleHeightAtPublic,
     setTopView: (isTop: boolean) => { axisGroupInner.visible = !isTop; },
+    isInside: (x: number, z: number) => pointInRing(x, z, ringXZ),
+    nearestBorder: (x: number, z: number) => nearestPointOnRing(x, z, ringXZ),
     dispose: () => {
       disposables.forEach(d => d.dispose());
       // Eliminar del DOM los elementos de las etiquetas CSS2D (eje de

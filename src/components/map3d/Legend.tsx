@@ -36,7 +36,7 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
     <div className="absolute bottom-3 right-3 z-10 bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 px-3 py-2 font-mono max-w-[200px]">
       {/* Título corto */}
       <div className="text-[11px] font-bold text-stone-100 mb-1.5 flex items-center gap-1.5">
-        <span className="text-[#C4553A]">◉</span> Mapa 3D · Nariño
+        <span className="text-[#C4553A]">◉</span> Mapa 3D de Nariño
       </div>
 
       {/* Símbolos principales */}
@@ -64,6 +64,14 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
             <span className="text-[10px] text-stone-200 tracking-wide">{item.label}</span>
           </div>
         ))}
+      </div>
+
+      {/* Aclaración del símbolo "~" que acompaña a algunas estaciones. */}
+      <div className="mt-2 pt-2 border-t border-white/10 flex items-start gap-1.5">
+        <span className="text-[10px] text-stone-300">~</span>
+        <span className="text-[9px] leading-snug text-stone-400">
+          Ubicación aproximada (casco urbano del municipio).
+        </span>
       </div>
 
       {/* Rampa de profundidad de los hipocentros del catálogo */}

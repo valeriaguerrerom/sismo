@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import {
-  DOMAIN, BLOCK, lonToX, latToZ, depthToY, kmToSceneUnits,
+  DOMAIN, BLOCK, DOMAIN_WIDTH_KM, lonToX, latToZ, depthToY, kmToSceneUnits,
 } from './domain';
 import {
   buildTerrainBlock, loadGeoLines, loadHeightData, loadNarinoRing, type TerrainHandle,
@@ -652,14 +652,34 @@ export function Scene3D({
 
       // Preferir x/z del backend; el fallback recalcula con lonToX/latToZ.
       const scn = sceneByCode.get(station.code);
-      const sx = scn ? scn.x : lonToX(station.longitude);
-      const sz = scn ? scn.z : latToZ(station.latitude);
-      const surfY = terrainRef.current ? terrainRef.current.sampleHeightAt(sx, sz) : 0;
+      let sx = scn ? scn.x : lonToX(station.longitude);
+      let sz = scn ? scn.z : latToZ(station.latitude);
+
+      // ── Estaciones fuera de la silueta de Nariño ──
+      // Algunas estaciones de la red CM están en departamentos vecinos (p. ej.
+      // CPOP2 en Popayán, Cauca). Su posición cae FUERA del polígono de Nariño,
+      // así que un cono allí "flotaría" sobre el vacío. En ese caso lo pegamos
+      // al borde del terreno (punto más cercano de la silueta) y lo marcamos con
+      // una flecha hacia su ubicación real + la distancia aproximada.
+      const th = terrainRef.current;
+      let outside = false;
+      let outsideKm = 0;
+      let arrowAngle = 0; // ángulo en el plano XZ hacia la ubicación real
+      if (th && !th.isInside(sx, sz)) {
+        const nb = th.nearestBorder(sx, sz);
+        arrowAngle = Math.atan2(sx - nb.x, sz - nb.z); // dirección borde→estación
+        outsideKm = (nb.dist / BLOCK.width) * DOMAIN_WIDTH_KM;
+        outside = true;
+        sx = nb.x;
+        sz = nb.z;
+      }
+
+      const surfY = th ? th.sampleHeightAt(sx, sz) : 0;
       const markerY = surfY + (scn ? scn.marker_offset_y : 0.6);
       mesh.position.set(sx, markerY, sz);
       mesh.userData.code = station.code;
 
-      // Ubicación aproximada (PAS2, TUM3C): pendiente de confirmar con el SGC.
+      // Ubicación aproximada (PAS2, TUM3C): casco urbano del municipio.
       const approx = station.approx === true;
 
       // Línea guía delgada: de la cima del cono a la base de la etiqueta.
@@ -671,18 +691,42 @@ export function Scene3D({
       const guide = new THREE.Line(guideGeo, guideMat);
       mesh.add(guide);
 
-      // Etiqueta CSS2D anclada al cono. El sufijo "~" marca ubicación aproximada.
+      // Flecha que apunta hacia la ubicación real (solo estaciones fuera del
+      // departamento): una pequeña línea horizontal desde el cono hacia afuera.
+      if (outside) {
+        const ax = Math.sin(arrowAngle), az = Math.cos(arrowAngle);
+        const arrowGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0.1, 0),
+          new THREE.Vector3(ax * 1.6, 0.1, az * 1.6),
+        ]);
+        const arrowMat = new THREE.LineBasicMaterial({ color: 0xffd27f, transparent: true, opacity: 0.9 });
+        mesh.add(new THREE.Line(arrowGeo, arrowMat));
+        // Punta de la flecha (cono pequeño) orientada hacia afuera.
+        const tip = new THREE.Mesh(
+          new THREE.ConeGeometry(0.14, 0.34, 10),
+          new THREE.MeshBasicMaterial({ color: 0xffd27f }),
+        );
+        tip.position.set(ax * 1.7, 0.1, az * 1.7);
+        tip.rotation.z = -arrowAngle; // orienta la punta en el plano
+        tip.rotation.x = Math.PI / 2;
+        mesh.add(tip);
+      }
+
+      // Etiqueta CSS2D anclada al cono. El sufijo "~" marca ubicación aproximada;
+      // "↗ fuera de Nariño" indica que la estación real está en otro departamento.
       const div = document.createElement('div');
-      div.textContent = approx ? `${station.code} ~` : station.code;
+      const outsideTag = outside ? ` ↗ ${outsideKm.toFixed(0)} km` : '';
+      div.textContent = (approx ? `${station.code} ~` : station.code) + outsideTag;
       div.title = `${station.name}\nlat ${station.latitude}, lon ${station.longitude}` +
         (station.altitude_m != null ? `, alt ${station.altitude_m} m` : '') +
         `\nFuente: ${station.source}` +
-        (approx ? '\nUbicación aproximada, pendiente de confirmar con el SGC' : '');
+        (approx ? '\nUbicación aproximada (casco urbano del municipio)' : '') +
+        (outside ? `\nFuera del departamento de Nariño; se muestra en el borde, a ~${outsideKm.toFixed(0)} km de su ubicación real` : '');
       div.style.cssText = 'font-family:monospace;font-size:10px;color:#ffb0b0;' +
         'text-shadow:0 0 3px #000,0 0 3px #000;' +
         'background:rgba(0,0,0,0.45);padding:1px 4px;border-radius:3px;white-space:nowrap;' +
         'pointer-events:auto;cursor:help;transition:opacity 0.15s;' +
-        (approx ? 'border:1px dashed rgba(255,176,176,0.6);' : '');
+        (approx || outside ? 'border:1px dashed rgba(255,176,176,0.6);' : '');
       const label = new CSS2DObject(div);
       label.position.set(0, LABEL_Y, 0);
       mesh.add(label);

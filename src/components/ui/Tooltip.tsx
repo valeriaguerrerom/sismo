@@ -14,6 +14,10 @@ interface TooltipProps {
    * ícono se puede tocar para fijar el tooltip (útil en táctil).
    */
   hoverOnly?: boolean;
+  /** Clases extra para el disparador (p. ej. `flex-1` para ocupar el ancho). */
+  className?: string;
+  /** Si es true, no muestra el tooltip (pero sí renderiza al hijo). */
+  disabled?: boolean;
 }
 
 /** Ancho fijo del tooltip (px). Se usa para clampear con precisión al viewport. */
@@ -27,7 +31,7 @@ const TIP_WIDTH = 224; // 14rem
  * Se recalcula la posición al hacer scroll o redimensionar, y se ajusta (clamp)
  * al ancho de la ventana para que nunca se corte por ningún borde.
  */
-export function Tooltip({ content, children, showIcon = false, hoverOnly = false }: TooltipProps) {
+export function Tooltip({ content, children, showIcon = false, hoverOnly = false, className = '', disabled = false }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   // En táctil no hay hover: el tooltip se fija con un toque y se cierra tocando
   // fuera o tocando de nuevo. `pinned` distingue ese modo del hover de escritorio.
@@ -79,7 +83,7 @@ export function Tooltip({ content, children, showIcon = false, hoverOnly = false
   return (
     <span
       ref={triggerRef}
-      className="relative inline-flex items-center gap-1"
+      className={`relative inline-flex items-center gap-1 ${className}`}
       // El hover (escritorio) se mantiene en todo el disparador; NO se pone
       // onClick aquí para no interceptar los clics del control que se envuelve
       // (botones, selectores, deslizadores). El toque táctil se maneja en el
@@ -114,7 +118,7 @@ export function Tooltip({ content, children, showIcon = false, hoverOnly = false
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
         />
       )}
-      {visible && pos && createPortal(
+      {visible && pos && !disabled && createPortal(
         <span
           style={{
             position: 'fixed', left: pos.left, top: pos.top,
