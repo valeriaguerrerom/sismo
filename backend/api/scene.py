@@ -162,17 +162,20 @@ class EventsResponse(BaseModel):
 
 
 def _depth_color(depth_km: float) -> str:
-    """Color por profundidad (someros cálidos → profundos fríos).
+    """Color por profundidad: escala SECUENCIAL de un solo tono azul, de claro
+    (superficial) a oscuro (profundo).
 
-    Rangos aproximados: <30 km rojo, 30–70 naranja, 70–150 verde, >150 azul.
+    Se usa un único matiz azul (sin rojo, naranja, verde ni púrpura) para no
+    confundir la profundidad con los frentes de onda P (terracota) y S (verde).
+    Rangos: <30 km, 30–70 km, 70–150 km, >150 km.
     """
     if depth_km < 30:
-        return "#e5484d"   # rojo (superficial)
+        return "#93C5FD"   # azul claro (superficial)
     if depth_km < 70:
-        return "#f5a524"   # naranja
+        return "#5B9BE0"   # azul medio
     if depth_km < 150:
-        return "#2fbf71"   # verde
-    return "#3b82f6"       # azul (profundo)
+        return "#3570B5"   # azul
+    return "#1E3A6E"       # azul oscuro (profundo)
 
 
 def _magnitude_radius(mag: float) -> float:
@@ -219,9 +222,9 @@ def scene_events(req: EventsRequest):
         ))
 
     ramp = [
-        {"label": "< 30 km", "color": "#e5484d"},
-        {"label": "30–70 km", "color": "#f5a524"},
-        {"label": "70–150 km", "color": "#2fbf71"},
-        {"label": "> 150 km", "color": "#3b82f6"},
+        {"label": "< 30 km", "color": "#93C5FD"},
+        {"label": "30–70 km", "color": "#5B9BE0"},
+        {"label": "70–150 km", "color": "#3570B5"},
+        {"label": "> 150 km", "color": "#1E3A6E"},
     ]
     return EventsResponse(hypocenters=out, depth_color_ramp=ramp)

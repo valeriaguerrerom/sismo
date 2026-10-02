@@ -746,7 +746,7 @@ export function Scene3D({
         `\nFuente: ${station.source}` +
         (approx ? '\nUbicación aproximada (casco urbano del municipio)' : '') +
         (outside ? `\nFuera del departamento de Nariño; se muestra en el borde, a ~${outsideKm.toFixed(0)} km de su ubicación real` : '');
-      div.style.cssText = "font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffd9d9;" +
+      div.style.cssText = "font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffd9d9;" +
         'text-shadow:0 0 3px #000,0 0 4px #000;' +
         'background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;' +
         'pointer-events:auto;cursor:help;transition:opacity 0.15s;' +
@@ -814,7 +814,7 @@ export function Scene3D({
     // Etiqueta de profundidad del hipocentro
     const hdiv = document.createElement('div');
     hdiv.textContent = `Hipocentro, ${epicenter.depthKm} km`;
-    hdiv.style.cssText = "font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;";
+    hdiv.style.cssText = "font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;";
     const hlabel = new CSS2DObject(hdiv);
     hlabel.position.set(ex, ey - 0.7, ez);
     st.hypoGroup.add(hlabel);
@@ -896,7 +896,7 @@ export function Scene3D({
       const dHypo = Math.hypot(rayPath?.distancia_epicentral_km ?? horiz, epicenter.depthKm);
       const rdiv = document.createElement('div');
       rdiv.textContent = `${isCurved ? 'Rayo P (IASP91)' : 'Rayo directo'}, ${dHypo.toFixed(0)} km`;
-      rdiv.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;`;
+      rdiv.style.cssText = `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;`;
       const rlabel = new CSS2DObject(rdiv);
       rlabel.position.copy(mid);
       group.add(rlabel);

@@ -32,7 +32,7 @@ interface Props {
 const COLOR_P = WAVE_COLORS.P;
 const COLOR_S = WAVE_COLORS.S;
 const TRACE_HALF_WIDTH = 26; // px a cada lado del eje de la traza
-const PLEX = "'IBM Plex Sans', system-ui, sans-serif";
+const LABEL_FONT = "'Inter', system-ui, sans-serif";
 // Reserva inferior para las dos líneas de etiqueta (estación + distancia).
 const LABEL_FOOTER = 34;
 const PAD_TOP = 22;
@@ -93,7 +93,7 @@ export function RecordSection({
 
   return (
     <div ref={hostRef} className="w-full h-full min-h-[320px]">
-      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ fontFamily: PLEX }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ fontFamily: LABEL_FONT }}>
         {/* Eje de tiempo (etiquetas cada 5 s) */}
         {maxTime > 0 && Array.from({ length: Math.floor(maxTime / 5) + 1 }, (_, k) => k * 5).map(sec => {
           const y = PAD_TOP + sec * tScale;

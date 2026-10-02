@@ -6,8 +6,8 @@
  * La barra de escala y el ancho del dominio provienen del backend
  * (/api/scene-geometry). Si no están disponibles, esas piezas se omiten.
  *
- * Tipografía: IBM Plex Sans (misma que las etiquetas de la escena), legible
- * sobre el fondo oscuro.
+ * Tipografía: Inter (la misma del sitio y de las etiquetas de la escena),
+ * legible sobre el fondo oscuro.
  *
  * @module map3d/Legend
  */
@@ -30,13 +30,15 @@ const ITEMS = [
   { label: 'Frente de onda S', color: WAVE_COLORS.S, shape: 'ring' as const },
 ];
 
-// Paleta de profundidad en azules → púrpura, DISTINTA de la terracota (P) y el
-// verde (S) para que la escala de profundidad no se confunda con los frentes de
-// onda. Se superpone a la rampa del backend (solo reutilizamos sus etiquetas).
-const DEPTH_PALETTE = ['#7FD4FF', '#4A90D9', '#3A5BC7', '#5B4B9E', '#6B3F8C'];
+// Escala de profundidad SECUENCIAL de un solo tono azul: claro (superficial) →
+// oscuro (profundo). No usa púrpura, terracota, verde ni ocre, para no
+// confundirse con los frentes de onda P/S. Coincide con la rampa del backend
+// (_depth_color en api/scene.py) para que la leyenda y las esferas de
+// hipocentros usen exactamente los mismos azules.
+const DEPTH_PALETTE = ['#93C5FD', '#5B9BE0', '#3570B5', '#1E3A6E'];
 
-/** Tipografía de la leyenda (coincide con las etiquetas 3D). */
-const PLEX = "'IBM Plex Sans', system-ui, sans-serif";
+/** Tipografía de la leyenda (Inter, la del sitio; coincide con las etiquetas 3D). */
+const LABEL_FONT = "'Inter', system-ui, sans-serif";
 
 /** Leyenda posicionada abajo a la derecha sobre la escena. */
 export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
@@ -47,7 +49,7 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
   return (
     <div
       className="absolute bottom-3 right-3 z-10 bg-black/55 backdrop-blur-sm rounded-lg border border-white/15 px-3 py-2.5 max-w-[220px]"
-      style={{ fontFamily: PLEX }}
+      style={{ fontFamily: LABEL_FONT }}
     >
       {/* Título corto */}
       <div className="text-[12px] font-bold text-stone-100 mb-2 flex items-center gap-1.5">

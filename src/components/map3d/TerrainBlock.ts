@@ -229,7 +229,7 @@ export function buildTerrainBlock(
     const y = depthToY(km);
     const div = document.createElement('div');
     div.textContent = km === 35 ? '35 km, Moho' : `${km} km`;
-    div.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
+    div.style.cssText = `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
     const label = new CSS2DObject(div);
     label.position.set(cutX, y, BLOCK.depthXY / 2 + 0.5);
     axisGroup.add(label);
@@ -542,7 +542,7 @@ function buildSilhouetteBlock(
 
     const div = document.createElement('div');
     div.textContent = km === 35 ? '35 km, Moho' : `${km} km`;
-    div.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
+    div.style.cssText = `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
     const label = new CSS2DObject(div);
     label.position.set(axX, y, axZ + 0.75);
     axisGroupInner.add(label);
