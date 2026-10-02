@@ -20,6 +20,16 @@ export function buildMapa3dSteps(): TourStep[] {
       },
     },
     {
+      element: '[data-tour="m3d-escena"]',
+      popover: {
+        title: '¿Por qué el bloque llega a 200 km?',
+        description:
+          'En Nariño la placa de Nazca se hunde bajo la de Sudamérica (subducción). Eso genera sismos no solo superficiales, sino también intermedios, de decenas hasta ~200 km de profundidad. Por eso el bloque llega tan hondo.',
+        side: 'left',
+        align: 'center',
+      },
+    },
+    {
       element: '[data-tour="m3d-hint"]',
       popover: {
         title: 'Coloca el epicentro',
@@ -61,9 +71,9 @@ export function buildMapa3dSteps(): TourStep[] {
     {
       element: '[data-tour="m3d-modelo"]',
       popover: {
-        title: 'Modelo de tiempos',
+        title: 'Modelo de velocidades',
         description:
-          'Elige cómo se calculan los tiempos de llegada: medio homogéneo o el modelo global IASP91.',
+          'Elige cómo viajan las ondas: con velocidad constante o con el modelo terrestre IASP91 (cambia con la profundidad).',
         side: 'left',
         align: 'start',
       },

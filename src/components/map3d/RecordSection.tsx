@@ -27,7 +27,16 @@ interface Props {
   maxTime: number;
   selectedStation: string | null;
   onSelectStation?: (code: string) => void;
+  /**
+   * Modo esqueleto: dibuja un boceto atenuado (7 trazas grises tenues, eje de
+   * tiempo y nombres) como fondo del estado vacío, sin datos reales. No es
+   * interactivo. Usa las 7 estaciones del dominio como marcadores de posición.
+   */
+  skeleton?: boolean;
 }
+
+/** Códigos de las 7 estaciones del dominio, para el esqueleto del estado vacío. */
+const SKELETON_STATIONS = ['TUM', 'TUM3C', 'PAS2', 'CUM', 'CRU', 'BBAC', 'CPOP2'];
 
 const COLOR_P = WAVE_COLORS.P;
 const COLOR_S = WAVE_COLORS.S;
@@ -42,7 +51,7 @@ const PAD_TOP = 22;
  */
 export function RecordSection({
   stations, traces, loadingTraces, elapsed, maxTime,
-  selectedStation, onSelectStation,
+  selectedStation, onSelectStation, skeleton = false,
 }: Props) {
   // Medir el contenedor para estirar el SVG a su alto/ancho reales. Se reajusta
   // al redimensionar la ventana y al mostrar/ocultar los paneles laterales.
@@ -76,6 +85,14 @@ export function RecordSection({
   const tScale = maxTime > 0 ? (axisBottom - PAD_TOP) / maxTime : 0;
   const yNow = PAD_TOP + elapsed * tScale;
 
+  // Si las columnas quedan muy juntas, las etiquetas del pie (código y
+  // distancia) no caben en horizontal y se rotan 45° para no tocarse. El ancho
+  // mínimo para una etiqueta horizontal como "CPOP2 / 156 km" ronda los 56 px.
+  const colGap = layout.length > 1
+    ? Math.abs(layout[1].x - layout[0].x)
+    : width;
+  const rotateLabels = colGap < 56;
+
   /** Construye la polilínea de la forma de onda vertical de una estación. */
   function buildWavePath(code: string, x: number): string | null {
     const syn = traces[code];
@@ -92,6 +109,52 @@ export function RecordSection({
       pts.push(`${(x + amp).toFixed(1)},${y.toFixed(1)}`);
     }
     return pts.length > 1 ? `M ${pts.join(' L ')}` : null;
+  }
+
+  // ── Modo esqueleto: boceto atenuado del estado vacío (sin datos reales) ──
+  if (skeleton) {
+    const n = SKELETON_STATIONS.length;
+    const padX = 40;
+    const usableW = Math.max(1, width - 2 * padX);
+    return (
+      <div ref={hostRef} className="w-full h-full min-h-[320px] overflow-hidden" aria-hidden="true">
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMin meet" style={{ fontFamily: LABEL_FONT, display: 'block' }}>
+          {/* Eje de tiempo tenue */}
+          {Array.from({ length: 7 }, (_, k) => k).map(k => {
+            const y = PAD_TOP + (k / 6) * (height - LABEL_FOOTER - PAD_TOP);
+            return (
+              <g key={k}>
+                <line x1={0} y1={y} x2={width} y2={y} stroke="#1e293b" strokeWidth={0.5} opacity={0.5} />
+                <text x={3} y={y - 3} fontSize={11} fill="#475569">{k * 5}s</text>
+              </g>
+            );
+          })}
+          {/* 7 trazas grises tenues con una onda suave de relleno */}
+          {SKELETON_STATIONS.map((code, i) => {
+            const x = n === 1 ? width / 2 : padX + (usableW * i) / (n - 1);
+            const pts: string[] = [];
+            for (let s = 0; s <= 40; s++) {
+              const yy = PAD_TOP + (s / 40) * (height - LABEL_FOOTER - PAD_TOP);
+              const amp = Math.sin(s * 0.6 + i) * 6 * (s > 8 ? 1 : s / 8);
+              pts.push(`${(x + amp).toFixed(1)},${yy.toFixed(1)}`);
+            }
+            return (
+              <g key={code} opacity={0.18}>
+                <line x1={x} y1={PAD_TOP} x2={x} y2={height - LABEL_FOOTER} stroke="#64748b" strokeWidth={0.5} />
+                <path d={`M ${pts.join(' L ')}`} fill="none" stroke="#94a3b8" strokeWidth={0.8} />
+              </g>
+            );
+          })}
+          {/* Nombres de las estaciones (marcadores de posición) */}
+          {SKELETON_STATIONS.map((code, i) => {
+            const x = n === 1 ? width / 2 : padX + (usableW * i) / (n - 1);
+            return (
+              <text key={code} x={x} y={height - 8} fontSize={11} fill="#475569" textAnchor="middle" opacity={0.5}>{code}</text>
+            );
+          })}
+        </svg>
+      </div>
+    );
   }
 
   return (
@@ -153,9 +216,25 @@ export function RecordSection({
                 </circle>
               )}
 
-              {/* Etiqueta de estación y distancia, pegadas al borde inferior */}
-              <text x={tr.x} y={height - 14} fontSize={11} fontWeight={isSel ? 700 : 600} fill={isSel ? '#e2e8f0' : '#cbd5e1'} textAnchor="middle">{tr.code}</text>
-              <text x={tr.x} y={height - 2} fontSize={11} fill="#94a3b8" textAnchor="middle">{tr.distancia_km.toFixed(0)} km</text>
+              {/* Etiqueta de estación (línea 1) y distancia (línea 2), centradas
+                  bajo la traza. Si las columnas están muy juntas (poco ancho por
+                  traza), se rotan 45° para que nunca se toquen. */}
+              {rotateLabels ? (
+                <text
+                  x={tr.x} y={height - 20}
+                  fontSize={11} fill={isSel ? '#e2e8f0' : '#cbd5e1'}
+                  textAnchor="end"
+                  transform={`rotate(-45 ${tr.x} ${height - 20})`}
+                >
+                  <tspan fontWeight={isSel ? 700 : 600}>{tr.code}</tspan>
+                  <tspan fill="#94a3b8"> · {tr.distancia_km.toFixed(0)} km</tspan>
+                </text>
+              ) : (
+                <>
+                  <text x={tr.x} y={height - 16} fontSize={11} fontWeight={isSel ? 700 : 600} fill={isSel ? '#e2e8f0' : '#cbd5e1'} textAnchor="middle">{tr.code}</text>
+                  <text x={tr.x} y={height - 3} fontSize={11} fill="#94a3b8" textAnchor="middle">{tr.distancia_km.toFixed(0)} km</text>
+                </>
+              )}
             </g>
           );
         })}

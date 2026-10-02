@@ -26,7 +26,11 @@ import {
   type RayPathResult, type WaveformResult, type SceneGeometry, type SceneHypocenter,
   type SceneEventInput, ApiError,
 } from '../lib/api3d';
-import { loadCatalog } from '../lib/catalog';
+import { loadCatalog, type CatalogRow } from '../lib/catalog';
+import {
+  filterEvents, hasActiveFilters, magnitudeLabel, assumedDepthKm,
+  DEPTH_RANGES, EMPTY_FILTERS, type EventFilters, type DepthRangeId,
+} from '../lib/eventFilters';
 import { LOADER_FACTS, randomFactIndex } from '../lib/loaderFacts';
 import { useAuth } from '../lib/authContext';
 import { supabase } from '../lib/supabase';
@@ -89,6 +93,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // Datos base
   const [stations, setStations] = useState<Station[]>([]);
   const [events, setEvents] = useState<CatalogEvent[]>([]);
+  // Filas crudas del catálogo (CatalogRow) para filtrar con la lógica común.
+  const [catalogRows, setCatalogRows] = useState<CatalogRow[]>([]);
   const [message, setMessage] = useState('Coloca un epicentro en el mapa o carga un evento.');
 
   // Geometría de escena calculada por el backend (posiciones preferidas).
@@ -188,24 +194,33 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [viewCommand, setViewCommand] = useState<{ view: 'north' | 'cut' | 'top' | 'fit'; nonce: number } | null>(null);
   const setView = (view: 'north' | 'cut' | 'top' | 'fit') => setViewCommand({ view, nonce: Date.now() });
   // Filtros de la lista de eventos.
-  const [evSearch, setEvSearch] = useState('');
-  const [evMinMag, setEvMinMag] = useState('');
-  const [evYear, setEvYear] = useState('');
+  // Filtros de la lista de eventos (misma lógica que el Explorador, en
+  // src/lib/eventFilters.ts). Orden aparte (no es un filtro).
+  const [evFilters, setEvFilters] = useState<EventFilters>(EMPTY_FILTERS);
   const [evSort, setEvSort] = useState<'date' | 'magnitude'>('date');
   const [panelsCollapsed, setPanelsCollapsed] = useState(false);
+  // Modo "colocar epicentro": resalta el mapa y cambia la ayuda superior para
+  // indicar que el usuario ya puede hacer clic en el terreno. Se activa desde el
+  // estado vacío del panel de sismogramas y se apaga al colocar un epicentro.
+  const [placingEpicenter, setPlacingEpicenter] = useState(false);
 
-  // Eventos filtrados y ordenados para la lista "Cargar evento".
-  const filteredEvents = useMemo(() => {
-    let list = [...events];
-    if (evSearch) {
-      const q = evSearch.toLowerCase();
-      list = list.filter(e => e.label.toLowerCase().includes(q) || e.date.includes(q));
-    }
-    if (evMinMag) { const m = Number(evMinMag); if (!isNaN(m)) list = list.filter(e => e.magnitude >= m); }
-    if (evYear) list = list.filter(e => e.date.startsWith(evYear));
-    list.sort((a, b) => evSort === 'magnitude' ? b.magnitude - a.magnitude : b.date.localeCompare(a.date));
-    return list;
-  }, [events, evSearch, evMinMag, evYear, evSort]);
+  // Eventos filtrados y ordenados para la lista "Cargar evento". Usa la lógica
+  // de filtros COMPARTIDA con el Explorador (src/lib/eventFilters.ts) sobre las
+  // filas crudas del catálogo, y luego ordena por fecha o magnitud.
+  const filteredRows = useMemo(() => {
+    const rows = filterEvents(catalogRows, evFilters);
+    rows.sort((a, b) => evSort === 'magnitude'
+      ? (b.magnitude ?? 0) - (a.magnitude ?? 0)
+      : (b.event_date + b.event_time).localeCompare(a.event_date + a.event_time));
+    return rows;
+  }, [catalogRows, evFilters, evSort]);
+
+  // Mapa id → CatalogEvent (para cargar en la escena al elegir una fila).
+  const eventById = useMemo(() => {
+    const m = new Map<string, CatalogEvent>();
+    for (const e of events) m.set(e.id, e);
+    return m;
+  }, [events]);
 
   // Tiempo máximo del eje de sismogramas = mayor tS + margen
   const maxTime = useMemo(() => {
@@ -231,6 +246,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
     async function loadEvents() {
       const catalog = await loadCatalog();
+      setCatalogRows(catalog);
       const out: CatalogEvent[] = catalog.map(r => {
         const isVolc = r.event_type === 'volcanic';
         const subLabel = r.volcanic_subtype ? SUBTYPE_LABELS[r.volcanic_subtype] ?? '' : '';
@@ -399,6 +415,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const applyEpicenter = (lat: number, lon: number) => {
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
+    setPlacingEpicenter(false); // ya se colocó: salir del modo "colocar"
     resetRealState();
     setElapsed(0);
     setPlaying(false);
@@ -411,6 +428,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     if (ev.sourceType === 'volcanic') { setVp(3.0); setVs(1.7); setDensity(2500); }
     setEpicenter({ lat: ev.lat, lon: ev.lon, depthKm: ev.depthKm });
     setCurrentEventId(ev.id);
+    setPlacingEpicenter(false);
     resetRealState();
     setElapsed(0);
     setPlaying(false);
@@ -778,35 +796,57 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             </div>
           )}
           {travelTimes.length === 0 ? (
-            // Estado vacío: sin tiempos de viaje aún. En vez de dejar un panel
-            // ancho en blanco, mostramos un mensaje claro y dos accesos directos
-            // (cargar un evento del catálogo o colocar un epicentro en el mapa).
-            <div className="flex flex-col items-center justify-center text-center px-4 py-10 min-h-[260px]">
-              {loadingTT ? (
-                <VolcanoLoader size={40} dark label="Calculando tiempos de viaje…" />
-              ) : (
-                <>
-                  <Radio size={28} className="text-stone-600 mb-3" />
-                  <p className="text-[12px] text-stone-300 font-semibold mb-1">Aún no hay sismogramas</p>
-                  <p className="text-[11px] text-stone-500 leading-snug mb-4">
-                    Carga un evento del catálogo o coloca un epicentro en el mapa para generarlos.
-                  </p>
-                  <div className="flex flex-col gap-2 w-full max-w-[220px]">
-                    <button
-                      onClick={() => setShowEventList(true)}
-                      className="flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[11px] font-bold py-2 rounded-lg"
-                    >
-                      <List size={13} /> Cargar un evento
-                    </button>
-                    <button
-                      onClick={() => setView('top')}
-                      className="flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 text-stone-200 text-[11px] font-bold py-2 rounded-lg"
-                    >
-                      <MapPin size={13} /> Colocar epicentro en el mapa
-                    </button>
+            // Estado vacío: esqueleto atenuado de fondo + tarjeta centrada.
+            // Al llegar datos, ambos desaparecen (la condición cambia a la rama
+            // de abajo); la tarjeta usa animate-fade-in para una entrada suave.
+            <div className="relative flex-1 min-h-0">
+              {/* Fondo: boceto de la sección de registros (no son datos reales). */}
+              <div className="absolute inset-0">
+                <RecordSection
+                  skeleton
+                  stations={[]}
+                  traces={{}}
+                  elapsed={0}
+                  maxTime={30}
+                  selectedStation={null}
+                />
+              </div>
+              {/* Tarjeta centrada con el mensaje y las dos acciones. */}
+              <div className="absolute inset-0 flex items-center justify-center p-3">
+                {loadingTT ? (
+                  <VolcanoLoader size={40} dark label="Calculando tiempos de viaje…" />
+                ) : (
+                  <div className="w-full max-w-[240px] rounded-2xl border border-white/15 bg-[#0f1420]/85 backdrop-blur-sm px-4 py-5 text-center shadow-xl animate-fade-in">
+                    <div className="flex justify-center mb-3">
+                      <div className="w-11 h-11 rounded-full bg-[#C4553A]/15 flex items-center justify-center">
+                        <Radio size={20} className="text-[#C4553A]" />
+                      </div>
+                    </div>
+                    <p className="text-[13px] text-stone-100 font-semibold mb-1">Aún no hay sismogramas</p>
+                    <p className="text-[11px] text-stone-400 leading-snug mb-4">
+                      Carga un evento del catálogo o coloca un epicentro en el mapa.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => setShowEventList(true)}
+                        className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg"
+                      >
+                        <List size={14} /> Cargar un evento
+                      </button>
+                      <button
+                        onClick={() => { setPlacingEpicenter(true); setView('top'); }}
+                        className={`w-full flex items-center justify-center gap-1.5 text-[12px] font-bold py-2.5 rounded-lg border transition-colors ${
+                          placingEpicenter
+                            ? 'bg-[#2D6A4F]/20 border-[#2D6A4F] text-[#8fd3b4]'
+                            : 'bg-white/5 border-white/15 text-stone-200'
+                        }`}
+                      >
+                        <MapPin size={14} /> Colocar epicentro en el mapa
+                      </button>
+                    </div>
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           ) : (
             // flex-1 + min-h-0 permite que el SVG (altura 100%) se estire al
@@ -826,7 +866,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         </div>
 
         {/* ── CENTRO: Escena 3D ── */}
-        <div ref={sceneContainerRef} data-tour="m3d-escena" className="relative bg-black/30 rounded-xl border border-white/10 overflow-hidden min-h-[560px] lg:min-h-[640px]">
+        <div
+          ref={sceneContainerRef}
+          data-tour="m3d-escena"
+          className={`relative bg-black/30 rounded-xl overflow-hidden min-h-[560px] lg:min-h-[640px] transition-all ${
+            placingEpicenter ? 'border-2 border-[#2D6A4F] ring-2 ring-[#2D6A4F]/40' : 'border border-white/10'
+          }`}
+        >
           <Scene3D
             stations={stations}
             epicenter={epicenter}
@@ -839,12 +885,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             viewCommand={viewCommand}
             sceneGeometry={sceneGeometry}
             hypocenters={hypocenters}
+            model={model}
             onSelectStation={selectStation}
             onPlaceEpicenter={placeEpicenter}
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
-          <div data-tour="m3d-hint" className="absolute top-2 left-2 z-10 text-[10px] text-stone-400 bg-black/40 rounded px-2 py-1">
-            Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación
+          <div data-tour="m3d-hint" className={`absolute top-2 left-2 z-10 text-[10px] rounded px-2 py-1 transition-colors ${
+            placingEpicenter ? 'text-white bg-[#2D6A4F]/80 font-semibold' : 'text-stone-400 bg-black/40'
+          }`}>
+            {placingEpicenter
+              ? 'Haz clic en el terreno para colocar el epicentro'
+              : 'Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación'}
           </div>
           {/* Aviso cuando hay un MiniSEED subido asociado a una estación: su traza
               es dato real, pero el epicentro es un supuesto del usuario. */}
@@ -1149,28 +1200,83 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowEventList(false)}>
           <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-lg max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <h3 className="text-sm font-bold text-stone-100">Eventos ({filteredEvents.length}/{events.length})</h3>
+              <h3 className="text-sm font-bold text-stone-100">
+                Eventos <span className="text-stone-400 font-normal">({filteredRows.length} de {catalogRows.length})</span>
+              </h3>
               <button onClick={() => setShowEventList(false)} aria-label="Cerrar lista de eventos" title="Cerrar" className="text-stone-400"><X size={16} /></button>
             </div>
-            {/* Filtros */}
-            <div className="px-4 py-2.5 border-b border-white/10 grid grid-cols-2 gap-2">
+            {/* Filtros (misma lógica que el Explorador) */}
+            <div className="px-4 py-2.5 border-b border-white/10 space-y-2">
               <input
-                type="text" placeholder="Buscar fecha/lugar..." value={evSearch}
-                onChange={e => setEvSearch(e.target.value)}
-                className="col-span-2 text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                type="text" placeholder="Buscar por fecha, región o id…" value={evFilters.search ?? ''}
+                onChange={e => setEvFilters(f => ({ ...f, search: e.target.value }))}
+                className="w-full text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
               />
-              <input
-                type="number" step="0.1" placeholder="Mag. mín." value={evMinMag}
-                onChange={e => setEvMinMag(e.target.value)}
-                className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
-              />
-              <input
-                type="number" placeholder="Año (ej. 2024)" value={evYear}
-                onChange={e => setEvYear(e.target.value)}
-                className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
-              />
-              <div className="col-span-2 flex gap-1.5">
-                <span className="text-[10px] text-stone-500 self-center">Ordenar:</span>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Región */}
+                <select
+                  value={evFilters.region ?? 'all'}
+                  onChange={e => setEvFilters(f => ({ ...f, region: e.target.value }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                >
+                  <option value="all">Región: todas</option>
+                  <option value="Colombia">Colombia</option>
+                  <option value="Ecuador">Ecuador</option>
+                </select>
+                {/* Tipo */}
+                <select
+                  value={evFilters.type ?? 'all'}
+                  onChange={e => setEvFilters(f => ({ ...f, type: e.target.value as EventFilters['type'] }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                >
+                  <option value="all">Tipo: todos</option>
+                  <option value="tectonic">Tectónico</option>
+                  <option value="volcanic">Volcánico</option>
+                </select>
+                {/* Magnitud mín / máx */}
+                <input
+                  type="number" step="0.1" placeholder="Mag. mín." value={evFilters.minMag ?? ''}
+                  onChange={e => setEvFilters(f => ({ ...f, minMag: e.target.value === '' ? null : Number(e.target.value) }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                />
+                <input
+                  type="number" step="0.1" placeholder="Mag. máx." value={evFilters.maxMag ?? ''}
+                  onChange={e => setEvFilters(f => ({ ...f, maxMag: e.target.value === '' ? null : Number(e.target.value) }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                />
+                {/* Profundidad (rangos de la leyenda) */}
+                <select
+                  value={evFilters.depthRange ?? 'all'}
+                  onChange={e => setEvFilters(f => ({ ...f, depthRange: e.target.value as DepthRangeId }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                  title="La profundidad usa el valor asumido por la escena (el catálogo no trae profundidad real)"
+                >
+                  {DEPTH_RANGES.map(d => (
+                    <option key={d.id} value={d.id}>{d.id === 'all' ? 'Profundidad: todas' : d.label}</option>
+                  ))}
+                </select>
+                {/* Nº mínimo de estaciones */}
+                <input
+                  type="number" min="1" placeholder="Mín. estaciones" value={evFilters.minStations ?? ''}
+                  onChange={e => setEvFilters(f => ({ ...f, minStations: e.target.value === '' ? null : Number(e.target.value) }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                />
+                {/* Rango de fechas */}
+                <input
+                  type="date" value={evFilters.dateFrom ?? ''}
+                  onChange={e => setEvFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                  title="Desde"
+                />
+                <input
+                  type="date" value={evFilters.dateTo ?? ''}
+                  onChange={e => setEvFilters(f => ({ ...f, dateTo: e.target.value }))}
+                  className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
+                  title="Hasta"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-stone-500">Ordenar:</span>
                 {(['date', 'magnitude'] as const).map(s => (
                   <button
                     key={s}
@@ -1180,22 +1286,44 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                     {s === 'date' ? 'Fecha' : 'Magnitud'}
                   </button>
                 ))}
+                {hasActiveFilters(evFilters) && (
+                  <button
+                    onClick={() => setEvFilters(EMPTY_FILTERS)}
+                    className="ml-auto text-[10px] font-bold px-2 py-1 rounded bg-white/5 text-[#D4A853] hover:bg-white/10"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
               </div>
             </div>
             <div className="overflow-y-auto divide-y divide-white/5">
-              {filteredEvents.map(ev => (
-                <button
-                  key={ev.id}
-                  onClick={() => loadEvent(ev)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-white/5 flex items-center gap-2"
-                >
-                  <MapPin size={12} className={ev.sourceType === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
-                  <span className="text-[11px] text-stone-300 flex-1">{ev.label}</span>
-                  <span className="text-[10px] text-stone-500">{ev.nStations} est.</span>
-                </button>
-              ))}
-              {filteredEvents.length === 0 && (
-                <div className="px-4 py-6 text-center text-[11px] text-stone-500">Ningún evento coincide.</div>
+              {filteredRows.map(row => {
+                const ev = eventById.get(row.event_id);
+                // Campos de la fila SIN puntos medios (separados por comas):
+                // magnitud con su tipo, fecha, región y profundidad asumida.
+                const parts = [
+                  magnitudeLabel(row),
+                  row.event_date,
+                  row.region ?? '',
+                  `Prof. ${assumedDepthKm(row)} km`,
+                ].filter(Boolean);
+                return (
+                  <button
+                    key={row.event_id}
+                    onClick={() => ev && loadEvent(ev)}
+                    disabled={!ev}
+                    className="w-full text-left px-4 py-2.5 hover:bg-white/5 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <MapPin size={12} className={row.event_type === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
+                    <span className="text-[11px] text-stone-300 flex-1">{parts.join(', ')}</span>
+                    <span className="text-[10px] text-stone-500 whitespace-nowrap">
+                      {row.station_count} {row.station_count === 1 ? 'estación' : 'estaciones'}
+                    </span>
+                  </button>
+                );
+              })}
+              {filteredRows.length === 0 && (
+                <div className="px-4 py-6 text-center text-[11px] text-stone-500">Ningún evento coincide con los filtros.</div>
               )}
             </div>
           </div>

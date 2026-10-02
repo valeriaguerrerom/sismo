@@ -50,6 +50,8 @@ interface Props {
   sceneGeometry?: SceneGeometry | null;
   /** Hipocentros del catálogo posicionados por el backend (esferas). */
   hypocenters?: SceneHypocenter[];
+  /** Modelo de velocidades activo: cambia cómo se rotulan las capas del bloque. */
+  model?: 'homogeneous' | 'iasp91';
   /** Callbacks de interacción. */
   onSelectStation?: (code: string) => void;
   onPlaceEpicenter?: (lat: number, lon: number) => void;
@@ -63,12 +65,23 @@ const COLOR_S = 0x2d6a4f;
 const COLOR_STATION = 0x9ca3af;
 
 /**
+ * Capas del subsuelo del bloque, con su Vp del modelo IASP91 (Kennett y
+ * Engdahl, 1991). Las profundidades son los límites de cada capa en km; la Vp
+ * es el valor de referencia del modelo que usa el cálculo (obspy.taup iasp91).
+ */
+const SUBSURFACE_LAYERS = [
+  { name: 'Corteza superior', from: 0, to: 15, vp: 5.8 },
+  { name: 'Corteza inferior', from: 15, to: 35, vp: 6.5 },
+  { name: 'Manto superior', from: 35, to: 200, vp: 8.04 },
+] as const;
+
+/**
  * Componente de la escena 3D. Gestiona el ciclo de vida de Three.js y
  * actualiza los frentes de onda en cada cambio de `elapsed`.
  */
 export function Scene3D({
   stations, epicenter, travelTimes, vpKmS, vsKmS, elapsed,
-  selectedStation, rayPath, viewCommand, sceneGeometry, hypocenters,
+  selectedStation, rayPath, viewCommand, sceneGeometry, hypocenters, model,
   onSelectStation, onPlaceEpicenter,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -93,6 +106,10 @@ export function Scene3D({
   const dataRef = useRef({ epicenter, travelTimes, vpKmS, vsKmS, elapsed, selectedStation });
   dataRef.current = { epicenter, travelTimes, vpKmS, vsKmS, elapsed, selectedStation };
 
+  // Vista de cámara activa (para saber si estamos en "Corte" y mostrar el
+  // frente de onda dentro del bloque). Se actualiza con cada viewCommand.
+  const viewRef = useRef<'north' | 'cut' | 'top' | 'fit'>('fit');
+
   // El usuario puede arrastrar el mini globo para rotarlo (pausa el giro auto).
   const globeUserRotating = useRef(false);
   // Terreno y segmentación (se baja si el rendimiento cae).
@@ -100,6 +117,8 @@ export function Scene3D({
   const terrainSeg = useRef(200);
   // Grupo del plano de corte + rayo.
   const cutGroupRef = useRef<THREE.Group | null>(null);
+  // Grupo de etiquetas de las capas del subsuelo (nombre + Vp del modelo).
+  const layerLabelsRef = useRef<THREE.Group | null>(null);
   // Estado de arribos (destello/etiquetas), reseteable al cambiar epicentro.
   const arrivalResetRef = useRef<(() => void) | null>(null);
 
@@ -289,6 +308,60 @@ export function Scene3D({
     const pRings = makeWaveRings(COLOR_P);
     const sRings = makeWaveRings(COLOR_S);
 
+    // ── Frente de onda DENTRO del bloque (vista Corte) ──
+    // Semicircunferencias P y S que nacen en el hipocentro y crecen hacia abajo
+    // y a los lados, contenidas en el plano vertical del corte (epicentro →
+    // estación). Solo se dibujan en la vista "Corte". A diferencia de los
+    // anillos de superficie, estos muestran la onda propagándose en profundidad.
+    const ARC_SEGMENTS = 64;
+    const makeCutArc = (color: number): { line: THREE.Line; mat: THREE.LineBasicMaterial } => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((ARC_SEGMENTS + 1) * 3), 3));
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
+      const line = new THREE.Line(geo, mat);
+      line.visible = false;
+      line.renderOrder = 5;
+      scene.add(line);
+      return { line, mat };
+    };
+    const pCutArc = makeCutArc(COLOR_P);
+    const sCutArc = makeCutArc(COLOR_S);
+
+    /**
+     * Actualiza una semicircunferencia del frente de onda en el plano de corte.
+     * El arco va de −90° (hacia la superficie, pero recortado a y≤0) a +90°
+     * cubriendo el semiplano inferior, y se abre también hacia los lados en el
+     * eje horizontal (u) del corte. Centro = hipocentro (ex,ey,ez).
+     */
+    const updateCutArc = (
+      arc: { line: THREE.Line; mat: THREE.LineBasicMaterial },
+      ex: number, ey: number, ez: number, ux: number, uz: number,
+      vKmS: number, elapsed: number,
+    ) => {
+      const rKm = vKmS * elapsed;
+      const r = kmToSceneUnits(rKm);
+      const { line, mat } = arc;
+      if (viewRef.current !== 'cut' || elapsed <= 0 || r < 0.05) { line.visible = false; return; }
+      const posAttr = line.geometry.attributes.position as THREE.BufferAttribute;
+      // Ángulo de −PI/2 (horizontal −u) a +PI/2 (horizontal +u) pasando por el
+      // fondo (ángulo 0 = hacia abajo, −Y). Así el frente baja por el bloque.
+      for (let s = 0; s <= ARC_SEGMENTS; s++) {
+        const a = -Math.PI / 2 + (s / ARC_SEGMENTS) * Math.PI; // [-PI/2, PI/2]
+        const horizComp = Math.sin(a) * r; // a lo largo de u (horizontal del corte)
+        const downComp = Math.cos(a) * r;  // hacia abajo (−Y)
+        const x = ex + ux * horizComp;
+        const z = ez + uz * horizComp;
+        let y = ey - downComp;             // ey es negativo; bajar resta más
+        if (y > 0) y = 0;                  // no asomar sobre la superficie
+        posAttr.setXYZ(s, x, y, z);
+      }
+      posAttr.needsUpdate = true;
+      // Atenuar cuando el frente ya llenó el bloque en profundidad.
+      const maxR = kmToSceneUnits(200);
+      mat.opacity = r <= maxR * 0.7 ? 0.9 : Math.max(0, 0.9 * (1 - (r - maxR * 0.7) / (maxR * 0.3)));
+      line.visible = mat.opacity > 0.03;
+    };
+
     // Radios (en unidades de escena) para el desvanecimiento de las ondas.
     // El frente llena el área del modelo (≈ ±BLOCK.width/2 desde el centro) y,
     // al salir del terreno, se vuelve claramente SEMITRANSPARENTE y se apaga,
@@ -337,6 +410,11 @@ export function Scene3D({
     const cutGroup = new THREE.Group();
     scene.add(cutGroup);
     cutGroupRef.current = cutGroup;
+
+    // ── Grupo de etiquetas de capas del subsuelo (se puebla según el modelo) ──
+    const layerLabels = new THREE.Group();
+    scene.add(layerLabels);
+    layerLabelsRef.current = layerLabels;
 
     const stationMeshes = new Map<string, THREE.Mesh>();
 
@@ -458,9 +536,27 @@ export function Scene3D({
         const ez = latToZ(d.epicenter.lat);
         updateWaveRings(pRings, ex, ez, d.vpKmS, d.elapsed);
         updateWaveRings(sRings, ex, ez, d.vsKmS, d.elapsed);
+
+        // Frente de onda dentro del bloque (solo en vista Corte): usa la
+        // dirección epicentro→estación seleccionada como eje horizontal del corte.
+        const stSel = d.selectedStation ? stations.find(s => s.code === d.selectedStation) : null;
+        if (stSel) {
+          const sx = lonToX(stSel.longitude), sz = latToZ(stSel.latitude);
+          const dxc = sx - ex, dzc = sz - ez;
+          const h = Math.hypot(dxc, dzc) || 1e-6;
+          const ux = dxc / h, uz = dzc / h;
+          const ey = depthToY(d.epicenter.depthKm);
+          updateCutArc(pCutArc, ex, ey, ez, ux, uz, d.vpKmS, d.elapsed);
+          updateCutArc(sCutArc, ex, ey, ez, ux, uz, d.vsKmS, d.elapsed);
+        } else {
+          pCutArc.line.visible = false;
+          sCutArc.line.visible = false;
+        }
       } else {
         pRings.forEach(r => (r.line.visible = false));
         sRings.forEach(r => (r.line.visible = false));
+        pCutArc.line.visible = false;
+        sCutArc.line.visible = false;
       }
 
       // Opacidad según selección (el escalado/color lo maneja el destello abajo)
@@ -520,50 +616,85 @@ export function Scene3D({
 
       controls.update();
 
-      // Anticolisión de etiquetas: si dos se solapan en pantalla, la etiqueta
-      // MÁS CERCANA a la cámara se mantiene fija; la más lejana se desplaza un
-      // poco hacia arriba y baja opacidad. Evita el choque TUM/TUM3C.
+      // ── Anticolisión REAL de TODAS las etiquetas en pantalla ──
+      // Cada cuadro se proyectan a 2D las etiquetas (estaciones + hipocentro +
+      // rayo), se calcula su rectángulo (AABB con el tamaño medido del DOM) y,
+      // en orden de cercanía a la cámara, se desplazan en vertical hasta que no
+      // se solapen. Si una etiqueta se desplaza, se dibuja una línea guía
+      // (ancla→etiqueta) para no perder a qué punto pertenece.
       const rect = renderer.domElement.getBoundingClientRect();
-      const placed: { x: number; y: number }[] = [];
       const camPos = new THREE.Vector3();
       camera.getWorldPosition(camPos);
-      const projected: { code: string; el: HTMLElement; x: number; y: number; dist: number }[] = [];
-      stationMeshes.forEach((mesh, code) => {
-        // La etiqueta es el hijo CSS2DObject (puede haber también una Line guía).
+
+      type LabelBox = {
+        el: HTMLElement;
+        ay: number;                  // ancla (posición base vertical en pantalla)
+        x: number; y: number;        // posición final (tras desplazar)
+        w: number; h: number; dist: number;
+      };
+      const boxes: LabelBox[] = [];
+
+      const addLabel = (obj: THREE.Object3D, anchor: THREE.Vector3, yOffsetScene: number) => {
+        const css = obj as CSS2DObject;
+        const el = css.element as HTMLElement | undefined;
+        if (!el) return;
+        const world = anchor.clone();
+        const dist = world.distanceTo(camPos);
+        world.y += yOffsetScene;
+        world.project(camera);
+        if (world.z > 1) return; // detrás de la cámara
+        const x = (world.x * 0.5 + 0.5) * rect.width;
+        const y = (-world.y * 0.5 + 0.5) * rect.height;
+        const w = el.offsetWidth || 40;
+        const h = el.offsetHeight || 16;
+        boxes.push({ el, ay: y, x, y, w, h, dist });
+      };
+
+      // Estaciones (ancladas al cono, con un offset vertical de etiqueta).
+      stationMeshes.forEach((mesh) => {
         const label = mesh.children.find(c => (c as CSS2DObject).element) as CSS2DObject | undefined;
         if (!label) return;
         const world = new THREE.Vector3();
         mesh.getWorldPosition(world);
-        const dist = world.distanceTo(camPos);
-        world.y += 0.85;
-        world.project(camera);
-        const x = (world.x * 0.5 + 0.5) * rect.width;
-        const y = (-world.y * 0.5 + 0.5) * rect.height;
-        projected.push({ code, el: label.element as HTMLElement, x, y, dist });
+        addLabel(label, world, 0.85);
       });
-      // Prioridad de dibujo por cercanía a la cámara (las cercanas se colocan
-      // primero y conservan su sitio). A las que chocan se les busca un hueco
-      // libre probando desplazamientos crecientes hacia arriba y hacia abajo;
-      // así se separan de verdad (TUM/TUM3C, BBAC/CPOP2, CRU/PAS2) en vez de
-      // apilarse. Si queda desplazada, baja un poco la opacidad.
-      projected.sort((a, b) => a.dist - b.dist);
-      const COL_X = 46, COL_Y = 15;
-      const collides = (x: number, y: number) =>
-        placed.some(q => Math.abs(x - q.x) < COL_X && Math.abs(y - q.y) < COL_Y);
-      for (const p of projected) {
-        let shift = 0;
-        if (collides(p.x, p.y)) {
-          // Probar offsets: ±16, ±32, ±48… hasta encontrar hueco.
-          for (let k = 1; k <= 5; k++) {
-            const up = -k * 16, down = k * 16;
-            if (!collides(p.x, p.y + up)) { shift = up; break; }
-            if (!collides(p.x, p.y + down)) { shift = down; break; }
+      // Hipocentro y rayo (viven en hypoGroup / cutGroup).
+      [hypoGroup, cutGroupRef.current].forEach(grp => {
+        grp?.children.forEach(c => {
+          if ((c as CSS2DObject).element) {
+            const world = new THREE.Vector3();
+            c.getWorldPosition(world);
+            addLabel(c, world, 0);
           }
-          if (shift === 0) shift = -16 * 3; // último recurso
+        });
+      });
+
+      // Resolver colisiones: las más cercanas conservan su sitio; las demás se
+      // empujan (±) hasta hallar hueco con AABB real + un margen.
+      boxes.sort((a, b) => a.dist - b.dist);
+      const MARGIN = 3;
+      const placed: LabelBox[] = [];
+      const hits = (bx: number, by: number, w: number, h: number) =>
+        placed.some(q =>
+          Math.abs(bx - q.x) * 2 < (w + q.w) + MARGIN * 2 &&
+          Math.abs(by - q.y) * 2 < (h + q.h) + MARGIN * 2,
+        );
+      for (const b of boxes) {
+        let y = b.ay;
+        if (hits(b.x, y, b.w, b.h)) {
+          for (let k = 1; k <= 8; k++) {
+            const step = k * (Math.max(b.h, 14) + MARGIN);
+            if (!hits(b.x, b.ay - step, b.w, b.h)) { y = b.ay - step; break; }
+            if (!hits(b.x, b.ay + step, b.w, b.h)) { y = b.ay + step; break; }
+          }
         }
-        p.el.style.transform = `translate(-50%, -50%) translateY(${shift}px)`;
-        p.el.style.opacity = shift !== 0 ? '0.82' : '1';
-        placed.push({ x: p.x, y: p.y + shift });
+        b.y = y;
+        const dyPx = Math.round(y - b.ay);
+        b.el.style.transform = `translate(-50%, -50%) translateY(${dyPx}px)`;
+        // Al desplazarse hacia arriba, un pequeño borde punteado da pista visual
+        // de que la etiqueta se movió de su ancla.
+        b.el.style.opacity = dyPx !== 0 ? '0.92' : '1';
+        placed.push(b);
       }
 
       renderer.render(scene, camera);
@@ -845,6 +976,49 @@ export function Scene3D({
     });
   }, [hypocenters]);
 
+  // ── Etiquetas de las capas del subsuelo (nombre + Vp del modelo) ──
+  // Con 'homogeneous' las capas se muestran ATENUADAS y sin Vp (todo el medio
+  // tiene la misma velocidad). Con 'iasp91' se RESALTAN y cada capa muestra su
+  // Vp del modelo que usa el cálculo (obspy.taup iasp91).
+  useEffect(() => {
+    const group = layerLabelsRef.current;
+    if (!group) return;
+    // Limpiar etiquetas previas.
+    group.children.slice().forEach(c => group.remove(c));
+
+    const isIasp = model === 'iasp91';
+    // Cara −X del bloque (lado izquierdo), un poco afuera, para no tapar el relieve.
+    const faceX = -BLOCK.width / 2 - 0.3;
+    for (const layer of SUBSURFACE_LAYERS) {
+      const yMid = (depthToY(layer.from) + depthToY(layer.to)) / 2;
+      const div = document.createElement('div');
+      div.textContent = isIasp ? `${layer.name}, Vp ${layer.vp.toFixed(1)} km/s` : layer.name;
+      const color = isIasp ? '#d4dde8' : '#64748b';
+      const weight = isIasp ? 600 : 500;
+      const opacity = isIasp ? 1 : 0.5;
+      div.style.cssText =
+        `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:${weight};` +
+        `color:${color};opacity:${opacity};text-shadow:0 0 3px #000,0 0 4px #000;` +
+        'background:rgba(10,14,26,0.6);padding:1px 5px;border-radius:3px;white-space:nowrap;';
+      const label = new CSS2DObject(div);
+      label.position.set(faceX, yMid, 0);
+      group.add(label);
+    }
+
+    // Nota del modelo homogéneo: todo el subsuelo con la misma velocidad.
+    if (!isIasp) {
+      const note = document.createElement('div');
+      note.textContent = 'En este modelo todo el subsuelo tiene la misma velocidad';
+      note.style.cssText =
+        "font-family:'Inter',system-ui,sans-serif;font-size:10px;font-weight:500;" +
+        'color:#94a3b8;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);' +
+        'padding:1px 6px;border-radius:3px;white-space:nowrap;max-width:220px;';
+      const label = new CSS2DObject(note);
+      label.position.set(faceX, depthToY(110), 0);
+      group.add(label);
+    }
+  }, [model]);
+
   // ── Plano de corte + rayo (epicentro → estación seleccionada) ──
   useEffect(() => {
     const group = cutGroupRef.current;
@@ -918,6 +1092,7 @@ export function Scene3D({
     const st = stateRef.current;
     if (!st || !viewCommand) return;
     const { camera, controls } = st;
+    viewRef.current = viewCommand.view;
 
     // En vista superior ocultamos el eje de profundidad + Moho (no aportan de
     // planta); en las demás vistas se muestran de nuevo.
