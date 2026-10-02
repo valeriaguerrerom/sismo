@@ -42,7 +42,19 @@ function translateError(message: string): string {
   if (m.includes('unable to validate email') || m.includes('invalid email')) return 'El correo electrónico no es válido.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.';
   if (m.includes('for security purposes')) return 'Por seguridad, espera unos segundos antes de volver a intentarlo.';
-  return message;
+  if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups are disabled')) {
+    return 'El registro está deshabilitado temporalmente. Inténtalo más tarde o contacta al administrador.';
+  }
+  if (m.includes('database error') || m.includes('saving new user')) {
+    return 'No se pudo guardar la cuenta. Inténtalo de nuevo en un momento; si persiste, contacta al administrador.';
+  }
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network request failed') || m.includes('timeout')) {
+    return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
+  }
+  // Último recurso: NO mostrar el texto crudo de Supabase (suele venir en
+  // inglés). Un mensaje claro en español, invitando a reintentar.
+  console.warn('[auth] Error de Supabase sin traducción específica:', message);
+  return 'No se pudo completar la operación. Revisa los datos e inténtalo de nuevo.';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

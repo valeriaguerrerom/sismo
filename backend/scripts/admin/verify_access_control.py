@@ -5,7 +5,10 @@ Comprueba contra el Supabase real que un usuario normal NO puede:
   1. Leer/editar/borrar reportes de OTRO usuario (IDOR en simulation_reports).
   2. Escalar privilegios: UPDATE o INSERT/upsert de su perfil con role='admin'.
   3. Reactivarse si fue desactivado por un administrador (active=true).
-  4. Usar endpoints de administración (listar usuarios / borrar cuentas).
+  4. Leer el perfil de otro usuario.
+  5. Usar endpoints de administración (listar usuarios / borrar cuentas).
+  6. Registrarse directo contra la API de Auth con una contraseña corta
+     (la longitud mínima del servidor debe rechazarla).
 
 Requisitos (crea las cuentas con manage_test_accounts.py primero):
   - Dos cuentas de prueba de rol 'user': prueba1 y prueba2.
@@ -228,6 +231,29 @@ def main() -> None:
         check("prueba1 lee la bitácora account_deletions", not r.data)
     except Exception:
         check("prueba1 lee la bitácora account_deletions", True)
+
+    print("\n== 6. Política de contraseña del servidor (registro directo) ==")
+    # La app deriva la contraseña con PBKDF2 (64 hex) antes de enviarla, así que
+    # el registro legítimo siempre manda 64 caracteres. La longitud mínima en
+    # Supabase (64) es la defensa contra un atacante que llame a la API de Auth
+    # SALTÁNDOSE el cliente con una contraseña corta. Aquí lo simulamos: un
+    # sign_up directo con contraseña corta DEBE fallar.
+    sb_anon = create_client(url, anon)
+    short_email = f"policytest+{os.urandom(4).hex()}@example.com"
+    short_pw = "1234"  # 4 caracteres: por debajo del mínimo del servidor
+    try:
+        res = sb_anon.auth.sign_up({"email": short_email, "password": short_pw})
+        # Si no lanzó, el registro NO debió crear un usuario utilizable.
+        creado = bool(getattr(res, "user", None) and getattr(res.user, "id", None))
+        check("registro directo con contraseña corta (4 caracteres)", not creado)
+        # Limpieza defensiva: si por error se creó sesión, cerrarla.
+        try:
+            sb_anon.auth.sign_out()
+        except Exception:
+            pass
+    except Exception:
+        # Excepción = el servidor rechazó la contraseña corta: correcto.
+        check("registro directo con contraseña corta (4 caracteres)", True)
 
     sb1.auth.sign_out()
     sb2.auth.sign_out()

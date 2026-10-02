@@ -88,6 +88,25 @@ autorizar las URLs en los paneles de Supabase y Google. Pon **ambos** entornos
   - `http://localhost:5173`
   - `http://localhost:5173/?recovery=1`
 
+### Supabase → Authentication → Policies (política de contraseña, OBLIGATORIO)
+
+Dejar EXACTAMENTE así (si se cambia, el registro deja de funcionar):
+
+- **Required characters: `Letters and digits`.**
+- **Minimum password length: `64`.**
+
+Por qué: la app NO envía la contraseña real a Supabase, sino un **secreto
+derivado con PBKDF2 de 64 caracteres hexadecimales** (`0-9 a-f`). Ese hex tiene
+letras y dígitos pero **nunca mayúsculas ni símbolos**, así que la opción
+"recommended" (que exige símbolos/mayúsculas) rechazaría **todo** registro. La
+política fuerte (8+ con letra, número y símbolo) se valida **en el cliente sobre
+la contraseña original** (`src/lib/authConsent.ts`), que es lo que ve el usuario.
+La **longitud mínima de 64 en el servidor** bloquea los registros hechos
+directamente contra la API de Auth con contraseñas cortas (saltándose el
+cliente); el registro legítimo siempre manda 64 caracteres. Detalle completo en
+`docs/seguridad.md` → "Política de contraseña en Supabase". Se verifica con
+`backend/scripts/admin/verify_access_control.py` (comprobación #6).
+
 ### Google Cloud Console → APIs y servicios → Credenciales → ID de cliente OAuth
 
 - **Orígenes de JavaScript autorizados:**

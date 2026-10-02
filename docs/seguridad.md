@@ -72,6 +72,39 @@ ese valor a Supabase, nunca la contraseña real.
   Supabase Auth (rate limiting de Auth y expiración del JWT). *(Verificar/anotar
   los valores exactos en el panel.)*
 
+#### Política de contraseña en Supabase (Authentication → Policies)
+
+Configuración EXACTA que debe mantenerse en el panel, y el porqué:
+
+- **Required characters: "Letters and digits".**
+- **Minimum password length: 64.**
+
+Razón del diseño (dos capas que trabajan juntas):
+
+1. **La política FUERTE se valida en el CLIENTE sobre la contraseña ORIGINAL.**
+   `src/lib/authConsent.ts` exige 8+ caracteres con **letra, número y símbolo**
+   antes de derivar. El formulario de registro, el de cambio (`Profile.tsx`) y
+   el de restablecimiento (`ResetPassword.tsx`) muestran esos 4 requisitos con
+   un check en vivo y no dejan enviar hasta cumplirlos.
+2. **Supabase recibe el SECRETO DERIVADO, no la contraseña.** La derivación
+   PBKDF2 produce **64 caracteres hexadecimales** (`0-9 a-f`): tiene letras y
+   dígitos, pero **nunca mayúsculas ni símbolos**. Por eso la política del panel
+   debe ser **"Letters and digits"**: si se dejara "Lowercase, uppercase, digits
+   and symbols (recommended)", Supabase rechazaría el hex derivado **con
+   cualquier contraseña original** (el hex no tiene mayúscula ni símbolo), y
+   nadie podría registrarse. Este fue un bug real detectado en la auditoría.
+3. **La longitud mínima de 64 es la defensa del servidor contra registros
+   directos.** Un atacante que llame a la API de Auth **saltándose el cliente**
+   (sin pasar por la validación fuerte del navegador) con una contraseña corta
+   es rechazado por longitud: el registro legítimo siempre envía exactamente 64
+   caracteres (el hex), así que 64 es el umbral natural que no estorba al flujo
+   real pero bloquea los intentos con contraseñas cortas. Se verifica en vivo
+   con `backend/scripts/admin/verify_access_control.py` (comprobación #6).
+
+> Nota: NO se puede subir la política del panel a "symbols/uppercase" sin
+> cambiar el esquema de derivación (ver "Opción B" descartada en la auditoría);
+> hacerlo volvería a romper el registro de todas las cuentas.
+
 ### Restablecer cuentas tras activar la derivación
 
 Las cuentas creadas antes del cambio tienen guardada la contraseña original
@@ -90,6 +123,10 @@ Las cuentas creadas antes del cambio tienen guardada la contraseña original
 `src/lib/passwordDerive.test.ts`: misma entrada → mismo resultado; correo con
 mayúsculas/espacios → mismo resultado; contraseñas distintas → resultados
 distintos; correos distintos → resultados distintos; salida de 64 hex.
+
+`backend/scripts/admin/verify_access_control.py` (comprobación #6, en vivo):
+intenta registrarse directo contra la API de Auth con una contraseña corta
+(4 caracteres) y confirma que el servidor la rechaza (defensa de longitud 64).
 
 ---
 
