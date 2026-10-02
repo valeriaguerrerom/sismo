@@ -18,10 +18,11 @@ import io
 import math
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
 
 # Archivo MiniSEED de ejemplo servido por el backend (se incluye en la imagen
@@ -32,6 +33,14 @@ router = APIRouter(tags=["Importación"])
 
 MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_POINTS = 3000
+
+# Límite de subidas por IP: procesar un MiniSEED consume CPU y memoria, así que
+# se acota el ritmo para evitar abuso. Generoso para el uso real (un
+# investigador sube unos pocos archivos), restrictivo frente a ráfagas.
+_upload_limiter = RateLimiter(
+    per_minute=10, per_hour=60,
+    mensaje="Demasiadas cargas seguidas. Espera un momento e inténtalo de nuevo.",
+)
 # Prioridad de canal: primero VELOCÍMETROS (banda ancha HH, luego periodo corto
 # EH/SH, luego banda ancha de baja tasa BH), y solo al final ACELERÓMETROS
 # (HN/HL). Así, si una estación tiene velocímetro y acelerómetro, se usa el
@@ -348,6 +357,7 @@ def process_mseed_bytes(
 @router.post("/api/upload/mseed", response_model=MseedUploadResponse,
              summary="Procesar un archivo MiniSEED subido por un investigador")
 async def upload_mseed(
+    request: Request,
     file: UploadFile = File(..., description="Archivo MiniSEED (.mseed/.msd/.seed)"),
     station: str | None = Form(default=None, description="Código de estación a extraer"),
     freqmin: float | None = Form(default=None, description="Pasabanda: frecuencia mínima (Hz)"),
@@ -358,12 +368,24 @@ async def upload_mseed(
     Raises:
         HTTPException 400: archivo vacío, demasiado grande o ilegible.
         HTTPException 404: estación inexistente o sin componente vertical.
+        HTTPException 429: si se supera el límite de cargas por IP.
     """
-    data = await file.read()
+    _upload_limiter.check(client_ip(request))
+    # Se lee por bloques y se aborta en cuanto se supera el límite, para no
+    # cargar en memoria un archivo gigante antes de rechazarlo (DoS por memoria).
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1 MB por iteración
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_BYTES:
+            raise HTTPException(status_code=400, detail="El archivo supera los 50 MB.")
+        chunks.append(chunk)
+    data = b"".join(chunks)
     if not data:
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=400, detail="El archivo supera los 50 MB.")
     try:
         return process_mseed_bytes(data, file.filename or "archivo.mseed", station, freqmin, freqmax)
     except ValueError as exc:

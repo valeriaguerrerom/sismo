@@ -9,6 +9,7 @@ Reutiliza core.fdm.run_fdm_synthetic (misma física que el motor del frontend).
 """
 from fastapi import APIRouter, HTTPException
 
+from core.config import safe_error_detail
 from core.fdm import SyntheticParams, SyntheticResult, run_fdm_synthetic
 
 router = APIRouter(tags=["Mapa 3D"])
@@ -37,4 +38,4 @@ def synthetic(params: SyntheticParams):
     try:
         return run_fdm_synthetic(params)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en síntesis FDM: {e}")
+        raise HTTPException(status_code=500, detail=safe_error_detail(e, "Error en síntesis FDM"))

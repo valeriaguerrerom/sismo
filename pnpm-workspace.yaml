@@ -7,3 +7,9 @@ allowBuilds:
 # No re-verificar/reinstalar dependencias antes de cada script (pnpm dev/build).
 # Evita que el chequeo automático dispare un install que falla por builds.
 verifyDepsBeforeRun: false
+
+# Fuerza la versión parcheada de DOMPurify (dependencia transitiva de jspdf).
+# Las versiones 3.4.13–3.4.15 tienen una vulnerabilidad de DOM XSS (low):
+# GHSA-p98j-92pf-mc4p, corregida en 3.4.16.
+overrides:
+  dompurify@>=3.4.13 <=3.4.15: '>=3.4.16'

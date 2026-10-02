@@ -1,4 +1,8 @@
-fastapi==0.115.0
+# fastapi 0.115.6 (última de la serie 0.115.x) admite starlette>=0.40, que
+# corrige varios advisories de la 0.38.x. Es un salto de parche sin cambios de API.
+fastapi==0.115.6
+# starlette la fija FastAPI; se pinnea una versión parcheada dentro de su rango.
+starlette==0.41.3
 uvicorn[standard]==0.30.0
 numpy==1.26.4
 # Compila el bucle temporal del FDM (~5×). 0.60.0 soporta Python 3.11 y numpy 1.26.
@@ -6,13 +10,15 @@ numba==0.60.0
 scipy==1.13.1
 obspy==1.4.1
 supabase==2.9.1
-python-dotenv==1.0.1
+python-dotenv==1.1.1
 pydantic==2.9.0
 pytest==8.3.2
 httpx==0.27.2
-python-multipart==0.0.9
+# python-multipart procesa las subidas multipart (/api/upload/mseed). Las
+# versiones antiguas tienen CVEs de DoS por formularios malformados.
+python-multipart==0.0.32
 # Generación de terreno (scripts/make_terrain.py) — opcional
-pillow==10.4.0
-requests==2.32.3
+pillow==11.3.0
+requests==2.32.4
 rasterio==1.3.11
 elevation==1.1.3

@@ -14,6 +14,7 @@
  * @module map3dReport
  */
 import { jsPDF } from 'jspdf';
+import { sanitizeCell } from './csvSafe';
 
 // ─── Tipos de datos del reporte ───
 
@@ -533,7 +534,7 @@ export function downloadMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions
 export function buildMap3dCsv(data: Map3dReportData, opts: Map3dReportOptions): string {
   const lines: string[] = [];
   const esc = (v: string | number) => {
-    const s = String(v);
+    const s = sanitizeCell(String(v));
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   lines.push(`# SismoNariño — Reporte del Mapa 3D`);

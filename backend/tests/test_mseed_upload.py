@@ -195,3 +195,23 @@ def test_endpoint_example_mseed_descarga():
     from obspy import read
     st = read(io.BytesIO(r.content))
     assert {tr.stats.station for tr in st} == {"CUM"}
+
+
+def test_endpoint_upload_mseed_vacio_rechazado():
+    # Un archivo vacío se rechaza con 400 (no se intenta leer como MiniSEED).
+    client = TestClient(app)
+    r = client.post("/api/upload/mseed", files={"file": ("vacio.mseed", b"", "application/octet-stream")})
+    assert r.status_code == 400
+
+
+def test_endpoint_upload_mseed_demasiado_grande_rechazado():
+    # Un archivo que supera el límite (50 MB) se rechaza con 400 por tamaño,
+    # SIN intentar parsearlo. Se usa un payload de 51 MB de bytes nulos.
+    client = TestClient(app)
+    big = b"\x00" * (51 * 1024 * 1024)
+    r = client.post(
+        "/api/upload/mseed",
+        files={"file": ("grande.mseed", big, "application/octet-stream")},
+    )
+    assert r.status_code == 400
+    assert "50 MB" in r.json().get("detail", "")

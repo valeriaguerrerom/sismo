@@ -10,6 +10,7 @@
  * @module adminChars
  */
 import type { AdminUser } from './adminData';
+import { sanitizeCell } from './csvSafe';
 
 /** Palabras que se dejan en minúscula dentro de un título (conectores). */
 const LOWER_WORDS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en', 'el', 'o', 'u', 'para']);
@@ -132,7 +133,12 @@ export function characterize(users: AdminUser[]): Characterization {
 /** Construye el CSV de la caracterización para exportar (para la tesis). */
 export function characterizationCsv(c: Characterization): string {
   const rows: string[] = ['Dimensión,Categoría,Usuarios'];
-  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  // sanitizeCell neutraliza inyección de fórmulas; el escape de comillas/comas
+  // envuelve el valor para el formato CSV.
+  const esc = (v: string) => {
+    const safe = sanitizeCell(v);
+    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
   const add = (dim: string, buckets: CharBucket[]) => {
     for (const b of buckets) rows.push(`${esc(dim)},${esc(b.label)},${b.count}`);
   };

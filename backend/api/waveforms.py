@@ -26,6 +26,8 @@ from pathlib import Path
 import requests
 from fastapi import APIRouter, HTTPException, Query
 
+from core.config import safe_error_detail
+
 router = APIRouter(tags=["Mapa 3D"])
 
 # Raíz de datos crudos en disco (solo para desarrollo local).
@@ -191,7 +193,7 @@ def waveforms(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo MiniSEED: {e}")
+        raise HTTPException(status_code=500, detail=safe_error_detail(e, "Error leyendo MiniSEED"))
 
     # Filtrar por estación
     st = st.select(station=station_code)

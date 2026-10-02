@@ -25,6 +25,8 @@ import os
 from fastapi import APIRouter, Body, Header, HTTPException
 from supabase import create_client, Client
 
+from core.config import safe_error_detail
+
 router = APIRouter(tags=["Cuenta"])
 
 # Las variables se leen en tiempo de request (dentro de las funciones), no al
@@ -148,7 +150,7 @@ def _delete_account(admin: Client, user_id: str, origin: str, admin_id: str | No
     try:
         admin.auth.admin.delete_user(user_id)
     except Exception as exc:  # pragma: no cover - depende del servicio remoto
-        raise HTTPException(status_code=500, detail=f"No se pudo eliminar la cuenta: {exc}")
+        raise HTTPException(status_code=500, detail=safe_error_detail(exc, "No se pudo eliminar la cuenta"))
     _log_deletion(admin, origin, admin_id, reason, count)
     return count
 

@@ -29,6 +29,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 
+from core.config import IS_PRODUCTION, safe_error_detail
+from core.rate_limit import RateLimiter, client_ip
 from simulation import (
     SimulationParams, SimulationResult, SimulationFullResult,
     run_fdm, run_fdm_full, compute_lame, warmup_fdm,
@@ -45,6 +47,35 @@ from api.account import router as account_router
 from api.feedback import router as feedback_router
 
 load_dotenv()
+
+# ─── Configuración por entorno (seguridad) ───
+# IS_PRODUCTION y safe_error_detail viven en core.config para compartirse con
+# los routers. En producción se restringe CORS, se ocultan los detalles de las
+# excepciones y se deshabilita la documentación interactiva.
+# Orígenes permitidos para CORS. En producción se toman de ALLOWED_ORIGINS
+# (lista separada por comas con los dominios del frontend). En desarrollo se
+# permiten los orígenes locales de Vite.
+_DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+_env_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if IS_PRODUCTION:
+    # Sin ALLOWED_ORIGINS en producción no se habilita ningún origen (fallo seguro).
+    ALLOWED_ORIGINS = _env_origins
+else:
+    ALLOWED_ORIGINS = _env_origins + _DEV_ORIGINS
+
+# Límite de peticiones por IP para las simulaciones FDM (cómputo intensivo). Es
+# generoso para el uso normal (el panel lanza una simulación por clic) pero
+# frena ráfagas automatizadas que podrían saturar la CPU del servidor.
+_simulate_limiter = RateLimiter(
+    per_minute=20, per_hour=200,
+    mensaje="Demasiadas simulaciones seguidas. Espera unos segundos e inténtalo de nuevo.",
+)
+
 
 # ─── Fallback data when Supabase is unavailable ───
 
@@ -109,11 +140,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# En producción se deshabilita la documentación interactiva (/docs, /redoc) y el
+# esquema OpenAPI (/openapi.json) para no exponer la superficie de la API. En
+# desarrollo quedan habilitados en sus rutas por defecto.
 app = FastAPI(
     title="SismoNariño API",
     description="Simulador Triaxial de Pseudo-Sismogramas — Backend",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
 # CORS: la API no usa cookies (la sesión viaja en el header Authorization:
@@ -122,7 +159,7 @@ app = FastAPI(
 # peticiones fallan con "Failed to fetch", sobre todo en los DELETE (preflight).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -137,12 +174,26 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 # produce un 500 SIN headers CORS, y el navegador lo reporta como "bloqueado por
 # CORS / Failed to fetch" ocultando el error real. Aquí devolvemos un JSON con
 # el detalle y con Access-Control-Allow-Origin, para que el frontend lo lea.
+def _cors_header_for(request: Request) -> dict[str, str]:
+    """Calcula el header Access-Control-Allow-Origin para respuestas de error.
+
+    Los exception_handler globales de Starlette se saltan el CORSMiddleware, así
+    que debemos reflejar el header manualmente. Solo se refleja el origen de la
+    petición si está en la lista de orígenes permitidos; en caso contrario no se
+    añade ningún header (fallo seguro).
+    """
+    origin = request.headers.get("origin")
+    if origin and origin in ALLOWED_ORIGINS:
+        return {"Access-Control-Allow-Origin": origin}
+    return {}
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Error interno del servidor: {exc}"},
-        headers={"Access-Control-Allow-Origin": "*"},
+        content={"detail": safe_error_detail(exc, "Error interno del servidor")},
+        headers=_cors_header_for(request),
     )
 
 
@@ -163,7 +214,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={"detail": detalle},
-        headers={"Access-Control-Allow-Origin": "*"},
+        headers=_cors_header_for(request),
     )
 
 # Routers del Mapa 3D (cálculo geo, geometría de escena, tiempos, síntesis, MiniSEED)
@@ -209,7 +260,7 @@ def health():
 # ─── Simulación FDM ───
 
 @app.post("/api/simulate", response_model=SimulationResult, tags=["Simulación"], summary="Ejecutar simulación FDM 2D")
-def simulate(params: SimulationParams):
+def simulate(params: SimulationParams, request: Request):
     """Ejecuta una simulación de propagación de ondas sísmicas usando el Método de Diferencias Finitas (FDM) 2D.
 
     Resuelve la ecuación de onda elástica en un medio isótropo con:
@@ -225,18 +276,20 @@ def simulate(params: SimulationParams):
         SimulationResult: Sismogramas triaxiales, métricas de amplitud, llegadas P/S y metadatos de la malla.
 
     Raises:
+        HTTPException(429): Si se supera el límite de peticiones por IP.
         HTTPException(500): Si ocurre un error durante la simulación.
     """
+    _simulate_limiter.check(client_ip(request))
     try:
         result = run_fdm(params)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en simulación: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_detail(e, "Error en simulación"))
 
 
 @app.post("/api/simulate/full", response_model=SimulationFullResult, tags=["Simulación"],
           summary="Ejecutar simulación FDM 2D con snapshots del campo (mapa de calor)")
-def simulate_full(params: SimulationParams):
+def simulate_full(params: SimulationParams, request: Request):
     """Ejecuta el FDM 2D y devuelve además los snapshots del campo de ondas.
 
     Igual que ``/api/simulate`` pero incluye ``snapshots`` (frames del campo
@@ -251,12 +304,14 @@ def simulate_full(params: SimulationParams):
         SimulationFullResult: Sismogramas, métricas, llegadas P/S, snapshots y grid.
 
     Raises:
+        HTTPException(429): Si se supera el límite de peticiones por IP.
         HTTPException(500): Si ocurre un error durante la simulación.
     """
+    _simulate_limiter.check(client_ip(request))
     try:
         return run_fdm_full(params)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en simulación: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_detail(e, "Error en simulación"))
 
 
 @app.get("/api/lame", tags=["Simulación"], summary="Calcular parámetros de Lamé")

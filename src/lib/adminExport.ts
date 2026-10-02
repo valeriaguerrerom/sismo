@@ -9,6 +9,12 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import type { AdminReport, AdminUser, DashboardStats } from './adminData';
 import type { Characterization } from './adminChars';
+import { sanitizeCell } from './csvSafe';
+
+/** Sanea cada celda de texto de una fila contra inyección de fórmulas (XLSX). */
+function safeRow<T>(row: T[]): (T | string)[] {
+  return row.map(sanitizeCell);
+}
 
 export interface AdminReportInput {
   stats: DashboardStats;
@@ -70,7 +76,7 @@ export function exportAdminExcel(input: AdminReportInput): void {
 
   const usuarios = [
     ['Nombre', 'Email', 'Rol', 'Institución', 'Ocupación', 'Área de investigación', 'Ciudad', 'País', 'Propósito de uso', 'Estado', 'Registro', 'Último acceso'],
-    ...users.map(u => [u.full_name || '—', u.email, u.role === 'admin' ? 'Administrador' : 'Investigador', u.institution || '—', u.occupation || '—', u.research_area || '—', u.city || '—', u.country || '—', u.usage_purpose || '—', u.active ? 'Activo' : 'Inactivo', fmt(u.created_at), fmt(u.last_login)]),
+    ...users.map(u => safeRow([u.full_name || '—', u.email, u.role === 'admin' ? 'Administrador' : 'Investigador', u.institution || '—', u.occupation || '—', u.research_area || '—', u.city || '—', u.country || '—', u.usage_purpose || '—', u.active ? 'Activo' : 'Inactivo', fmt(u.created_at), fmt(u.last_login)])),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(usuarios), 'Usuarios');
 
@@ -79,13 +85,13 @@ export function exportAdminExcel(input: AdminReportInput): void {
     ...reports.map(r => {
       const p = r.params as Record<string, number | string>;
       const res = r.results as Record<string, number>;
-      return [
+      return safeRow([
         fmt(r.created_at), r.title, r.profiles?.full_name || '—', r.profiles?.email || '—',
         p.sourceType === 'volcanic' ? 'Volcánica' : 'Tectónica', p.magnitude, p.depth, p.vp, p.vs, p.density,
         res.dominantFrequency != null ? Number(res.dominantFrequency.toFixed(2)) : '—',
         res.pArrival != null ? Number(res.pArrival.toFixed(2)) : '—',
         res.sArrival != null ? Number(res.sArrival.toFixed(2)) : '—',
-      ];
+      ]);
     }),
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sims), 'Simulaciones');
@@ -224,7 +230,7 @@ export function exportCharacterizationExcel(c: Characterization): void {
     ['Dimensión', 'Categoría', 'Usuarios', '% del total'],
   ];
   for (const s of charSections(c)) {
-    for (const b of s.buckets) resumen.push([s.title.replace('Por ', ''), b.label, b.count, `${pct(b.count)}%`]);
+    for (const b of s.buckets) resumen.push([s.title.replace('Por ', ''), sanitizeCell(b.label), b.count, `${pct(b.count)}%`]);
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Caracterización');
 
