@@ -748,7 +748,7 @@ export function Map3D() {
                 <span className="font-mono text-[11px] font-bold text-stone-200">
                   Panel triaxial · {selectedStation} · {showReal[selectedStation] ? 'señal real (1–10 Hz)' : 'sintético FDM'}
                 </span>
-                <button onClick={() => setShowTriaxial(false)} className="text-stone-400"><X size={14} /></button>
+                <button onClick={() => setShowTriaxial(false)} aria-label="Cerrar panel triaxial" title="Cerrar" className="text-stone-400"><X size={14} /></button>
               </div>
               <TriaxialTraces
                 syn={traces[selectedStation] ?? null}
@@ -776,7 +776,7 @@ export function Map3D() {
                   <>{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'Pausar' : 'Reproducir'}</>
                 )}
               </button>
-              <button onClick={reset} className="p-2 rounded-lg bg-white/5 border border-white/10 text-stone-300">
+              <button onClick={reset} aria-label="Reiniciar vista" title="Reiniciar vista" className="p-2 rounded-lg bg-white/5 border border-white/10 text-stone-300">
                 <RotateCcw size={13} />
               </button>
             </div>
@@ -945,7 +945,7 @@ export function Map3D() {
           <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-lg max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <h3 className="font-mono text-sm font-bold text-stone-100">Eventos ({filteredEvents.length}/{events.length})</h3>
-              <button onClick={() => setShowEventList(false)} className="text-stone-400"><X size={16} /></button>
+              <button onClick={() => setShowEventList(false)} aria-label="Cerrar lista de eventos" title="Cerrar" className="text-stone-400"><X size={16} /></button>
             </div>
             {/* Filtros */}
             <div className="px-4 py-2.5 border-b border-white/10 grid grid-cols-2 gap-2 font-mono">
@@ -970,7 +970,7 @@ export function Map3D() {
                   <button
                     key={s}
                     onClick={() => setEvSort(s)}
-                    className={`text-[10px] font-bold px-2 py-1 rounded ${evSort === s ? 'bg-[#6B5B95] text-white' : 'bg-white/5 text-stone-400'}`}
+                    className={`text-[10px] font-bold px-2 py-1 rounded ${evSort === s ? 'bg-[#2D6A4F] text-white' : 'bg-white/5 text-stone-400'}`}
                   >
                     {s === 'date' ? 'Fecha' : 'Magnitud'}
                   </button>
@@ -1005,7 +1005,7 @@ export function Map3D() {
               <h3 className="text-sm font-bold text-stone-100 flex items-center gap-2">
                 <FileDown size={15} className="text-[#2D6A4F]" /> Generar reporte del Mapa 3D
               </h3>
-              <button onClick={() => setShowReport(false)} className="text-stone-400"><X size={16} /></button>
+              <button onClick={() => setShowReport(false)} aria-label="Cerrar reporte" title="Cerrar" className="text-stone-400"><X size={16} /></button>
             </div>
 
             <div className="px-4 py-3 space-y-4">

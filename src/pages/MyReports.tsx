@@ -122,14 +122,14 @@ export function MyReports() {
                   <div className="flex flex-wrap items-center gap-3 text-xs text-stone-400 mt-0.5">
                     <span className="flex items-center gap-1"><Calendar size={11} /> {new Date(r.created_at).toLocaleDateString()}</span>
                     {isMap3d(r) ? (
-                      <span className="text-[#6B5B95] font-semibold">Mapa 3D · tiempos de viaje</span>
+                      <span className="text-[#2D6A4F] font-semibold">Mapa 3D · tiempos de viaje</span>
                     ) : (
                       <>
                         {r.params && <span>Mw {String(r.params.magnitude ?? '?')} · {r.params.depth} km · {r.params.sourceType === 'volcanic' ? 'Volcánica' : 'Tectónica'}</span>}
                         {r.results?.waveData ? (
                           <span className="text-[#2D6A4F]">Con sismogramas</span>
                         ) : (
-                          <span className="text-stone-300" title="Reporte guardado antes de la versión con series; el PDF incluirá solo métricas.">Solo métricas</span>
+                          <span className="text-stone-500" title="Reporte guardado antes de la versión con series; el PDF incluirá solo métricas.">Solo métricas</span>
                         )}
                       </>
                     )}

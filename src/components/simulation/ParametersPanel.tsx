@@ -198,8 +198,8 @@ export function ParametersPanel({ params, onChange, onRun, loading, locked = fal
           editan). Cualquier intento de cambio pregunta si se quiere pasar al
           laboratorio. Se atenúan los controles para dejarlo claro. */}
       {locked && (
-        <div className="bg-[#6B5B95]/10 border border-[#6B5B95]/25 rounded-xl p-3 text-[11px] text-[#4A3F6B] leading-relaxed">
-          <span className="font-bold text-[#4A3F6B]">Registro real cargado.</span> Sus parámetros son fijos; los datos reales no se modifican. Para ajustar el modelo, cámbialos y te preguntaré si quieres pasar al laboratorio de simulación.
+        <div className="bg-[#2D6A4F]/10 border border-[#2D6A4F]/25 rounded-xl p-3 text-[11px] text-[#1A4733] leading-relaxed">
+          <span className="font-bold text-[#1A4733]">Registro real cargado.</span> Sus parámetros son fijos; los datos reales no se modifican. Para ajustar el modelo, cámbialos y te preguntaré si quieres pasar al laboratorio de simulación.
         </div>
       )}
       {/* Cada acordeón ocupa el alto de su contenido (sin scroll interno). Si el

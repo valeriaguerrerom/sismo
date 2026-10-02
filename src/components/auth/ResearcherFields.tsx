@@ -9,7 +9,7 @@ import { OCCUPATIONS, inputCls } from './researcherFieldsConstants';
 export function Field({ icon, label, children, optional }: { icon: React.ReactNode; label: string; children: React.ReactNode; optional?: boolean }) {
   return (
     <div>
-      <label className="text-xs font-semibold text-stone-500 mb-1 block">{label}{optional && <span className="text-stone-300 font-normal"> (opcional)</span>}</label>
+      <label className="text-xs font-semibold text-stone-500 mb-1 block">{label}{optional && <span className="text-stone-400 font-normal"> (opcional)</span>}</label>
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none">{icon}</span>
         {children}

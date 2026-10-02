@@ -77,7 +77,7 @@ function WaveExplorer() {
   const waves = {
     P: {
       name: 'Onda P (Primaria)',
-      color: '#6B5B95',
+      color: '#1A1A2E',
       speed: '3–8 km/s',
       motion: 'Compresión-dilatación',
       icon: <Zap size={18} />,
@@ -110,7 +110,7 @@ function WaveExplorer() {
     },
     Rayleigh: {
       name: 'Onda Rayleigh',
-      color: '#6B5B95',
+      color: '#C9A227',
       speed: '1–4 km/s',
       motion: 'Elíptico (rodamiento)',
       icon: <Globe size={18} />,
@@ -182,9 +182,9 @@ function WaveExplorer() {
           </div>
         </div>
 
-        <div className="bg-[#D4A853]/10 border border-[#D4A853]/20 rounded-lg p-3 flex gap-2">
-          <Info size={14} className="text-[#D4A853] flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-[#D4A853] leading-relaxed"><span className="font-bold">Dato curioso:</span> {currentFact || 'Cargando...'}</p>
+        <div className="bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-lg p-3 flex gap-2">
+          <Info size={14} className="text-[#B8860B] flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-[#1A1A2E] leading-relaxed"><span className="font-bold">Dato curioso:</span> {currentFact || 'Cargando...'}</p>
         </div>
       </div>
     </div>
@@ -248,7 +248,7 @@ function SeismicQuiz() {
         <div className="w-full bg-stone-100 rounded-full h-3 mb-6 max-w-xs mx-auto">
           <div className="h-3 rounded-full transition-all duration-1000" style={{ width: `${pct}%`, backgroundColor: pct >= 60 ? '#2D6A4F' : '#C4553A' }} />
         </div>
-        <button onClick={handleReset} className="flex items-center gap-2 mx-auto bg-[#6B5B95] text-white px-6 py-2.5 rounded-xl font-bold text-sm">
+        <button onClick={handleReset} className="flex items-center gap-2 mx-auto bg-[#2D6A4F] text-white px-6 py-2.5 rounded-xl font-bold text-sm">
           <RotateCcw size={14} /> Intentar de nuevo
         </button>
       </div>
@@ -589,11 +589,11 @@ export function Education() {
   const sections = [
     { id: 'waves', label: 'Tipos de Ondas', icon: <Waves size={16} />, color: '#2D6A4F' },
     { id: 'magnitude', label: 'Escala de Magnitud', icon: <TrendingUp size={16} />, color: '#C4553A' },
-    { id: 'depth', label: 'Profundidad', icon: <Layers size={16} />, color: '#6B5B95' },
+    { id: 'depth', label: 'Profundidad', icon: <Layers size={16} />, color: '#1A1A2E' },
     { id: 'fdm', label: 'Metodología FDM', icon: <Calculator size={16} />, color: '#2D6A4F' },
-    { id: 'timeline', label: 'Línea de Tiempo', icon: <Clock size={16} />, color: '#6B5B95' },
+    { id: 'timeline', label: 'Línea de Tiempo', icon: <Clock size={16} />, color: '#C9A227' },
     { id: 'glossary', label: 'Glosario', icon: <BookMarked size={16} />, color: '#D4A853' },
-    { id: 'references', label: 'Referencias', icon: <Library size={16} />, color: '#6B5B95' },
+    { id: 'references', label: 'Referencias', icon: <Library size={16} />, color: '#C4553A' },
     { id: 'quiz', label: 'Quiz Sísmico', icon: <Award size={16} />, color: '#C4553A' },
   ];
 

@@ -346,7 +346,7 @@ function UserDrawer({ u, onClose }: { u: AdminUser; onClose: () => void }) {
               <div className="text-sm mt-0.5 text-[#1A1A2E]">{u.deactivation_reason}</div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {row('Ocupación', u.occupation)}
             {row('Área de interés', u.research_area)}
             {row('Institución', u.institution)}
@@ -357,7 +357,7 @@ function UserDrawer({ u, onClose }: { u: AdminUser; onClose: () => void }) {
             <div className="text-[11px] font-semibold text-stone-500">¿Para qué usa la plataforma?</div>
             <div className="text-sm mt-0.5 text-[#1A1A2E]"><DisplayVal value={u.usage_purpose} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-stone-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-stone-100">
             <div>
               <div className="text-[11px] font-semibold text-stone-500">Último acceso</div>
               <div className="text-sm mt-0.5 text-stone-600">{u.last_login ? fmtDate(u.last_login, true) : 'Sin dato'}</div>
@@ -804,7 +804,7 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
                 <td className="px-4 py-2.5 text-stone-500 text-xs">{ev.source}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-3">
-                    <button onClick={() => setEditing(ev)} className="text-xs text-[#6B5B95] font-semibold flex items-center gap-1"><Pencil size={12} /> Editar</button>
+                    <button onClick={() => setEditing(ev)} className="text-xs text-[#2D6A4F] font-semibold flex items-center gap-1"><Pencil size={12} /> Editar</button>
                     <button onClick={() => remove(ev)} className="text-xs text-red-500 font-semibold flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
                   </div>
                 </td>
@@ -835,7 +835,7 @@ function QuizEditor({ row, onSave, onCancel }: { row: Partial<QuizRow>; onSave: 
         ))}
       </div>
       <label className="text-xs text-stone-500 block">Explicación<textarea required rows={2} className={inputCls} value={f.explanation || ''} onChange={e => setF({ ...f, explanation: e.target.value })} /></label>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <label className="text-xs text-stone-500">Categoría
           <select className={inputCls} value={f.category} onChange={e => setF({ ...f, category: e.target.value })}>
             {['ondas', 'volcanes', 'tectonica', 'general'].map(c => <option key={c} value={c}>{c}</option>)}
@@ -931,7 +931,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
         <div className="flex gap-2">
           {subTabs.map(t => (
             <button key={t.id} onClick={() => { setSub(t.id); setEditing(null); }}
-              className={`px-3 py-2 rounded-xl text-xs font-bold border ${sub === t.id ? 'bg-[#6B5B95] text-white border-transparent' : 'bg-white text-stone-500 border-stone-200'}`}>
+              className={`px-3 py-2 rounded-xl text-xs font-bold border ${sub === t.id ? 'bg-[#1A1A2E] text-white border-transparent' : 'bg-white text-stone-500 border-stone-200'}`}>
               {t.label} <span className="opacity-70">({t.count})</span>
             </button>
           ))}
@@ -984,7 +984,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   return (
     <div className="flex gap-2 flex-shrink-0">
-      <button onClick={onEdit} className="p-1.5 rounded-lg text-[#6B5B95] bg-[#6B5B95]/5" title="Editar"><Pencil size={13} /></button>
+      <button onClick={onEdit} className="p-1.5 rounded-lg text-[#2D6A4F] bg-[#2D6A4F]/5" title="Editar"><Pencil size={13} /></button>
       <button onClick={onDelete} className="p-1.5 rounded-lg text-red-500 bg-red-50" title="Eliminar"><Trash2 size={13} /></button>
     </div>
   );

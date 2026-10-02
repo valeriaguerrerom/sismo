@@ -10,7 +10,7 @@ const CATS: { id: Term['cat'] | 'todos'; label: string; color: string }[] = [
   { id: 'todos', label: 'Todos', color: '#1A1A2E' },
   { id: 'sismología', label: 'Sismología', color: '#C4553A' },
   { id: 'ondas', label: 'Ondas', color: '#2D6A4F' },
-  { id: 'numérico', label: 'Método numérico', color: '#6B5B95' },
+  { id: 'numérico', label: 'Método numérico', color: '#1A1A2E' },
   { id: 'región', label: 'Nariño', color: '#D4A853' },
 ];
 

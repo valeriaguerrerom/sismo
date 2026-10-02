@@ -82,7 +82,7 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                 {user.role === 'admin' && (
                   <button onClick={() => onNavigate('admin')} title="Administración"
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium ${
-                      currentPage === 'admin' ? 'bg-[#6B5B95] text-white' : 'text-stone-500'
+                      currentPage === 'admin' ? 'bg-[#1A1A2E] text-white' : 'text-stone-500'
                     }`}>
                     <Settings size={15} />
                     <span className="hidden lg:inline">Admin</span>
@@ -98,7 +98,7 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                         {user.profileComplete ? ROLE_LABELS[user.role] : 'Perfil incompleto'}
                       </div>
                     </div>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${user.role === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${user.role === 'admin' ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}
                       title={ROLE_LABELS[user.role]}>
                       {user.full_name?.charAt(0)?.toUpperCase() || user.email.charAt(0).toUpperCase()}
                     </div>
@@ -179,7 +179,7 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                 {user.role === 'admin' && (
                   <button onClick={() => go('admin')}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
-                      currentPage === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'text-stone-600 hover:bg-stone-100'
+                      currentPage === 'admin' ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]' : 'text-stone-600 hover:bg-stone-100'
                     }`}>
                     <Settings size={15} /> Admin
                   </button>
@@ -188,7 +188,7 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
                     currentPage === 'profile' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'text-stone-600 hover:bg-stone-100'
                   }`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${user.role === 'admin' ? 'bg-[#6B5B95]/10 text-[#6B5B95]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${user.role === 'admin' ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}>
                     {user.full_name?.charAt(0)?.toUpperCase() || user.email.charAt(0).toUpperCase()}
                   </div>
                   <span className="truncate">{user.full_name || user.email}</span>

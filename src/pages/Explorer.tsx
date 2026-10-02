@@ -772,7 +772,7 @@ export function Explorer({ onLoadRealData }: Props) {
                           <div className="px-2 pb-4 animate-fade-in">
                             <div className="bg-stone-50/50 rounded-xl p-3 border border-stone-100">
                               <div className="text-[11px] font-semibold text-stone-500 mb-2">Elige una estación para ver su sismograma</div>
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {c.stations.map(st => (
                                   <button
                                     key={st.station}

@@ -65,7 +65,7 @@ export function References() {
         <RefList items={BOOKS} />
       </section>
       <section className="bg-white rounded-2xl border border-stone-200/60 p-6">
-        <h3 className="flex items-center gap-2 font-bold text-[#1A1A2E] mb-4"><Code2 size={17} className="text-[#6B5B95]" /> Software y antecedentes</h3>
+        <h3 className="flex items-center gap-2 font-bold text-[#1A1A2E] mb-4"><Code2 size={17} className="text-[#2D6A4F]" /> Software y antecedentes</h3>
         <RefList items={SOFTWARE} />
       </section>
       <section className="bg-white rounded-2xl border border-stone-200/60 p-6">

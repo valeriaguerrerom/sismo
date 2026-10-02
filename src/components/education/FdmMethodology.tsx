@@ -50,7 +50,7 @@ const STEPS = [
     id: 'tiempo',
     icon: <Clock size={16} />,
     title: '3. Integración temporal (leapfrog)',
-    color: '#6B5B95',
+    color: '#1A1A2E',
     body: (
       <>
         <p>El tiempo avanza en pasos <b>dt</b> con un esquema explícito de salto de rana (leapfrog):</p>

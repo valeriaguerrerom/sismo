@@ -108,7 +108,7 @@ export function exportAdminPdf(input: AdminReportInput): void {
   const W = 210 - M * 2;
   let y = M;
 
-  doc.setFillColor(107, 91, 149);
+  doc.setFillColor(26, 26, 46);
   doc.rect(0, 0, 210, 22, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
