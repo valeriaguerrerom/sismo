@@ -124,18 +124,6 @@ def main() -> None:
     except Exception:
         check("prueba1 se asigna role=admin por UPDATE", True)  # excepción = denegado
 
-    # prueba1 intenta reactivarse / activarse (debería dar igual si está activa,
-    # pero probamos que no pueda forzar active=true tras una desactivación admin).
-    try:
-        sb1.table("profiles").update({
-            "active": True, "deactivated_by": None, "deactivation_reason": None,
-        }).eq("id", uid1).execute()
-        # No es un fallo si la cuenta ya estaba activa; el caso crítico (desactivada
-        # por admin) debe probarse desactivándola antes desde el panel.
-        print("  INFO  · UPDATE de active por prueba1 no lanzó (válido si la cuenta ya estaba activa).")
-    except Exception:
-        print("  INFO  · UPDATE de active por prueba1 fue rechazado por el trigger.")
-
     # prueba1 intenta upsert de su perfil con role='admin' (vía INSERT).
     try:
         sb1.table("profiles").upsert({
@@ -147,11 +135,93 @@ def main() -> None:
     except Exception:
         check("prueba1 se asigna role=admin por upsert", True)
 
-    print("\n== 3. Lectura de perfiles ajenos ==")
+    print("\n== 3. Estado de cuenta: desactivación por admin + ataque en dos pasos ==")
+    svc_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("SUPABASE_SERVICE_KEY", "")
+    if not svc_key:
+        print("  SALTADO · falta SUPABASE_SERVICE_ROLE_KEY para simular la baja administrativa.")
+    else:
+        svc = create_client(url, svc_key)
+        # Simula que un ADMIN desactiva a prueba1.
+        svc.table("profiles").update({
+            "active": False, "deactivated_by": "administrador",
+            "deactivated_at": "2026-01-01T00:00:00+00:00",
+            "deactivation_reason": "Prueba de control de acceso",
+        }).eq("id", uid1).execute()
+
+        # Ataque en UN paso: prueba1 intenta reactivarse directamente.
+        try:
+            sb1.table("profiles").update({
+                "active": True, "deactivated_by": None, "deactivated_at": None, "deactivation_reason": None,
+            }).eq("id", uid1).execute()
+            st = svc.table("profiles").select("active").eq("id", uid1).execute()
+            activa = bool(st.data and st.data[0]["active"])
+            check("prueba1 (baja admin) se reactiva en un paso", not activa)
+        except Exception:
+            check("prueba1 (baja admin) se reactiva en un paso", True)
+
+        # Ataque en DOS pasos: paso 1 -> "firmar" la baja como propia.
+        try:
+            sb1.table("profiles").update({"deactivated_by": "usuario"}).eq("id", uid1).execute()
+            st = svc.table("profiles").select("deactivated_by").eq("id", uid1).execute()
+            firmo = bool(st.data and st.data[0]["deactivated_by"] == "usuario")
+            check("prueba1 (baja admin) re-marca la baja como 'usuario' (paso 1)", not firmo)
+        except Exception:
+            check("prueba1 (baja admin) re-marca la baja como 'usuario' (paso 1)", True)
+
+        # Paso 2 (por si el paso 1 hubiera pasado): intentar reactivar.
+        try:
+            sb1.table("profiles").update({
+                "active": True, "deactivated_by": None, "deactivated_at": None, "deactivation_reason": None,
+            }).eq("id", uid1).execute()
+            st = svc.table("profiles").select("active").eq("id", uid1).execute()
+            activa = bool(st.data and st.data[0]["active"])
+            check("prueba1 (baja admin) se reactiva en dos pasos", not activa)
+        except Exception:
+            check("prueba1 (baja admin) se reactiva en dos pasos", True)
+
+        # Caso LEGÍTIMO: el propio usuario se desactiva y se reactiva.
+        # Primero restauramos la cuenta a activa (como admin) para partir limpio.
+        svc.table("profiles").update({
+            "active": True, "deactivated_by": None, "deactivated_at": None, "deactivation_reason": None,
+        }).eq("id", uid1).execute()
+
+        ok_deact = False
+        ok_react = False
+        try:
+            # Autodesactivación legítima (lo mismo que hace deactivateOwnAccount).
+            sb1.table("profiles").update({
+                "active": False, "deactivated_by": "usuario",
+                "deactivated_at": "2026-01-01T00:00:00+00:00", "deactivation_reason": None,
+            }).eq("id", uid1).execute()
+            st = svc.table("profiles").select("active").eq("id", uid1).execute()
+            ok_deact = bool(st.data and st.data[0]["active"] is False)
+        except Exception:
+            ok_deact = False
+
+        try:
+            # Reactivación propia legítima (lo mismo que reactivateOwnAccount).
+            sb1.table("profiles").update({
+                "active": True, "deactivated_by": None, "deactivated_at": None, "deactivation_reason": None,
+            }).eq("id", uid1).execute()
+            st = svc.table("profiles").select("active").eq("id", uid1).execute()
+            ok_react = bool(st.data and st.data[0]["active"] is True)
+        except Exception:
+            ok_react = False
+
+        # Aquí "acceso denegado" NO es lo deseado: estos flujos deben FUNCIONAR.
+        check("autodesactivación propia de prueba1 FUNCIONA", ok_deact)
+        check("reactivación propia de prueba1 FUNCIONA", ok_react)
+
+        # Dejar la cuenta activa y limpia pase lo que pase.
+        svc.table("profiles").update({
+            "active": True, "deactivated_by": None, "deactivated_at": None, "deactivation_reason": None,
+        }).eq("id", uid1).execute()
+
+    print("\n== 4. Lectura de perfiles ajenos ==")
     r = sb1.table("profiles").select("*").eq("id", uid2).execute()
     check("prueba1 lee el perfil de prueba2", not r.data)
 
-    print("\n== 4. Endpoints de administración (vía RPC/tabla) ==")
+    print("\n== 5. Endpoints de administración (vía RPC/tabla) ==")
     # account_deletions es solo-admin para lectura.
     try:
         r = sb1.table("account_deletions").select("*").limit(1).execute()

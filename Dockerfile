@@ -33,11 +33,19 @@ RUN pnpm run build
 # ── Etapa 2: servir con Nginx ──
 FROM nginx:1.27-alpine
 
-# Config directa (nginx escucha en 8080 fijo, sin plantillas ni envsubst).
-# En Railway el dominio se genera apuntando al puerto 8080.
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# La config se genera al arrancar a partir de nginx.conf.template con envsubst,
+# sustituyendo SOLO ${BACKEND_ORIGIN} y ${CSP_HEADER_NAME} (las variables de
+# nginx como $uri/$csp se dejan intactas al pasar la lista explícita a envsubst).
+#   BACKEND_ORIGIN   URL del backend para connect-src de la CSP (vacío = solo Supabase).
+#   CSP_HEADER_NAME  Content-Security-Policy-Report-Only (primer despliegue) o
+#                    Content-Security-Policy (bloqueo). Por defecto: Report-Only.
+ENV BACKEND_ORIGIN="" \
+    CSP_HEADER_NAME="Content-Security-Policy-Report-Only"
+
+COPY nginx.conf.template /etc/nginx/templates-src/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# envsubst genera el config final y luego arranca nginx en primer plano.
+CMD ["/bin/sh", "-c", "envsubst '${BACKEND_ORIGIN} ${CSP_HEADER_NAME}' < /etc/nginx/templates-src/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]

@@ -18,6 +18,14 @@ alternativas (Docker Compose local, Render, Vercel/Netlify).
 | `VITE_SUPABASE_ANON_KEY` | `eyJ...` | Clave pública (anon). |
 | `VITE_API_URL` | `https://sismonarino-api.up.railway.app` | URL pública del backend. En local, vacío → usa `http://localhost:8000`. |
 
+Variables del **contenedor** del frontend (Nginx, no son build args; se leen al
+arrancar para generar la config con `envsubst`):
+
+| Variable | Ejemplo | Notas |
+|----------|---------|-------|
+| `BACKEND_ORIGIN` | `https://api.midominio.com` | URL del backend que se añade a `connect-src` de la CSP. Permite usar dominio propio sin editar la plantilla. Vacío = solo Supabase. |
+| `CSP_HEADER_NAME` | `Content-Security-Policy-Report-Only` | Primer despliegue en Report-Only (reporta sin romper). Tras verificar, cambiar a `Content-Security-Policy`. |
+
 Se inyectan en el **build** (son `import.meta.env.*`). En Railway van como
 *build args / variables* del servicio del frontend.
 
@@ -52,6 +60,9 @@ Dos servicios en el mismo proyecto de Railway, ambos a partir del repositorio.
 - **Root directory:** raíz del repo (usa el `Dockerfile` de la raíz, Nginx en el puerto 8080).
 - **Build args / variables:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y
   `VITE_API_URL` = dominio del backend del paso 1.
+- **Variables del contenedor** (para la CSP): `BACKEND_ORIGIN` = dominio del
+  backend del paso 1; `CSP_HEADER_NAME` = `Content-Security-Policy-Report-Only`
+  en el primer despliegue (cambiar a `Content-Security-Policy` tras verificar).
 - Genera el dominio público (p. ej. `https://sismonarino.up.railway.app`). Anótalo.
 
 ### 3. Cerrar el círculo de CORS

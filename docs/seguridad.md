@@ -313,12 +313,22 @@ no concatena SQL, y Pydantic valida tipos y rangos antes de ejecutar.
 
 ## Cabeceras de seguridad HTTP
 
-**Frontend (Nginx, `nginx.conf`)** — en todas las respuestas:
-- `Content-Security-Policy` (ver abajo), `Strict-Transport-Security`
-  (`max-age=31536000; includeSubDomains`), `X-Content-Type-Options: nosniff`,
-  `Referrer-Policy: strict-origin-when-cross-origin`,
+**Frontend (Nginx)** — la config se genera al arrancar el contenedor con
+`envsubst` a partir de `nginx.conf.template` (ver Dockerfile). En todas las
+respuestas:
+- CSP (ver abajo), `Strict-Transport-Security` (`max-age=31536000; includeSubDomains`),
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`,
   `X-Frame-Options: DENY` (+ `frame-ancestors 'none'` en la CSP).
+
+Variables de la plantilla (se pasan como variables de entorno del contenedor):
+- `BACKEND_ORIGIN`: URL del backend que se añade a `connect-src` (p. ej.
+  `https://api.midominio.com`). Así el dominio del backend NO queda fijo en el
+  repositorio y funciona con dominio propio o con `*.up.railway.app`.
+- `CSP_HEADER_NAME`: en el **primer despliegue** se deja en
+  `Content-Security-Policy-Report-Only` (reporta en la consola lo que se
+  bloquearía, sin romper la página). Tras verificar que todo funciona, se cambia
+  a `Content-Security-Policy` para activar el bloqueo real.
 
 CSP (resumen de directivas y por qué):
 - `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`.
@@ -328,8 +338,9 @@ CSP (resumen de directivas y por qué):
 - `font-src 'self' https://fonts.gstatic.com` (IBM Plex Sans).
 - `img-src 'self' data: blob: https://*.tile.openstreetmap.org` (teselas de
   Leaflet; `data:`/`blob:` para capturas de html2canvas y el canvas de Three.js).
-- `connect-src 'self' https://*.supabase.co https://*.up.railway.app` (REST/Auth
-  de Supabase y el backend; **ajustar** si el backend no está en `up.railway.app`).
+- `connect-src 'self' https://*.supabase.co wss://*.supabase.co ${BACKEND_ORIGIN}`
+  (REST/Auth de Supabase, `wss://` para Realtime, y el backend vía la variable
+  `BACKEND_ORIGIN`, que se sustituye al arrancar el contenedor).
 - `frame-src https://accounts.google.com https://*.supabase.co` (OAuth de Google
   vía Supabase).
 - `worker-src 'self' blob:` (el motor FDM corre en un Web Worker).
@@ -342,11 +353,17 @@ CSP (resumen de directivas y por qué):
 (la API solo devuelve JSON) y `Strict-Transport-Security` **solo en producción**
 (`APP_ENV=production`). Verificado en vivo sobre `/health`.
 
-**Pendiente de verificar tras desplegar con Nginx** (no se pudo probar en local
-sin Docker): confirmar con las DevTools (pestaña Network → Response Headers) que
-la CSP no bloquea el login con Google, los mapas de Leaflet ni el Mapa 3D. Si la
-consola reporta un bloqueo de CSP, ajustar la directiva correspondiente en
-`nginx.conf` (lo más probable: añadir el dominio real del backend a `connect-src`).
+**Despliegue con CSP en dos tiempos** (recomendado):
+1. Primer despliegue con `CSP_HEADER_NAME=Content-Security-Policy-Report-Only` y
+   `BACKEND_ORIGIN` = URL real del backend. Navega la app completa (login con
+   Google, Explorador con mapas Leaflet, Mapa 3D, generar PDF) con las DevTools
+   abiertas: la consola muestra `[Report Only]` para cualquier recurso que se
+   bloquearía, sin romper la página.
+2. Si aparece algún reporte, ajusta la directiva correspondiente en
+   `nginx.conf.template` (lo más común: un dominio que falte en `connect-src` o
+   `img-src`).
+3. Cuando no haya reportes, cambia `CSP_HEADER_NAME` a `Content-Security-Policy`
+   y redespliega para activar el bloqueo real.
 
 ## Pendientes en el panel de Supabase
 

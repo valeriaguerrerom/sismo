@@ -25,8 +25,13 @@ services:
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_API_URL: ""
     container_name: sismonarino-frontend
+    environment:
+      # connect-src de la CSP: en local el navegador llama al backend por :8000.
+      BACKEND_ORIGIN: "http://localhost:8000"
+      # En local se usa Report-Only para no romper nada mientras se prueba.
+      CSP_HEADER_NAME: "Content-Security-Policy-Report-Only"
     ports:
-      # Nginx escucha en 8080 dentro del contenedor (ver nginx.conf / Dockerfile).
+      # Nginx escucha en 8080 dentro del contenedor (ver nginx.conf.template / Dockerfile).
       - "8080:8080"
     depends_on:
       - backend
