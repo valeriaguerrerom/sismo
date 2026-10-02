@@ -30,7 +30,7 @@ export const KM_PER_DEG = 111.195;
 
 /** Elevación máxima real del dominio (m) y exageración vertical del relieve. */
 export const TERRAIN_MAX_ELEV_M = 5724; // ~Galeras/nevados (del heightmap generado)
-export const TERRAIN_EXAGGERATION = 2.5;
+export const TERRAIN_EXAGGERATION = 1.8; // exageración moderada (coincide con backend)
 /** Altura del relieve en unidades de escena para elevación normalizada [0,1]. */
 export const TERRAIN_SCENE_HEIGHT = 2.2 * TERRAIN_EXAGGERATION;
 

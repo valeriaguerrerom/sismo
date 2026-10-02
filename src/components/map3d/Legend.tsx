@@ -1,9 +1,13 @@
 /**
  * Leyenda fija de la escena 3D (estilo Swaves): título, símbolos (estación,
- * hipocentro, ondas P/S), barra de escala, flecha norte y rampa de profundidad.
+ * hipocentro, frentes de onda P/S), barra de escala, flecha norte y rampa de
+ * profundidad.
  *
  * La barra de escala y el ancho del dominio provienen del backend
  * (/api/scene-geometry). Si no están disponibles, esas piezas se omiten.
+ *
+ * Tipografía: IBM Plex Sans (misma que las etiquetas de la escena), legible
+ * sobre el fondo oscuro.
  *
  * @module map3d/Legend
  */
@@ -22,20 +26,31 @@ interface LegendProps {
 const ITEMS = [
   { label: 'Estación', color: '#9CA3AF', shape: 'triangle' as const },
   { label: 'Hipocentro', color: '#ffffff', shape: 'circle' as const },
-  { label: 'Ondas P', color: WAVE_COLORS.P, shape: 'ring' as const },
-  { label: 'Ondas S', color: WAVE_COLORS.S, shape: 'ring' as const },
+  { label: 'Frente de onda P', color: WAVE_COLORS.P, shape: 'ring' as const },
+  { label: 'Frente de onda S', color: WAVE_COLORS.S, shape: 'ring' as const },
 ];
+
+// Paleta de profundidad en azules → púrpura, DISTINTA de la terracota (P) y el
+// verde (S) para que la escala de profundidad no se confunda con los frentes de
+// onda. Se superpone a la rampa del backend (solo reutilizamos sus etiquetas).
+const DEPTH_PALETTE = ['#7FD4FF', '#4A90D9', '#3A5BC7', '#5B4B9E', '#6B3F8C'];
+
+/** Tipografía de la leyenda (coincide con las etiquetas 3D). */
+const PLEX = "'IBM Plex Sans', system-ui, sans-serif";
 
 /** Leyenda posicionada abajo a la derecha sobre la escena. */
 export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
   // La barra se dibuja a un ancho fijo en px; el rótulo usa los km del backend.
-  const BAR_PX = 60;
+  const BAR_PX = 80;
   const barKm = scaleBar?.km ?? null;
 
   return (
-    <div className="absolute bottom-3 right-3 z-10 bg-black/50 backdrop-blur-sm rounded-lg border border-white/10 px-3 py-2 font-mono max-w-[200px]">
+    <div
+      className="absolute bottom-3 right-3 z-10 bg-black/55 backdrop-blur-sm rounded-lg border border-white/15 px-3 py-2.5 max-w-[220px]"
+      style={{ fontFamily: PLEX }}
+    >
       {/* Título corto */}
-      <div className="text-[11px] font-bold text-stone-100 mb-1.5 flex items-center gap-1.5">
+      <div className="text-[12px] font-bold text-stone-100 mb-2 flex items-center gap-1.5">
         <span className="text-[#C4553A]">◉</span> Mapa 3D de Nariño
       </div>
 
@@ -43,7 +58,7 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
       <div className="space-y-1.5">
         {ITEMS.map(item => (
           <div key={item.label} className="flex items-center gap-2">
-            <span className="inline-flex w-3.5 justify-center">
+            <span className="inline-flex w-3.5 justify-center shrink-0">
               {item.shape === 'circle' && (
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
               )}
@@ -61,51 +76,57 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
                 />
               )}
             </span>
-            <span className="text-[10px] text-stone-200 tracking-wide">{item.label}</span>
+            <span className="text-[11px] text-stone-100">{item.label}</span>
           </div>
         ))}
       </div>
 
       {/* Aclaración del símbolo "~" que acompaña a algunas estaciones. */}
-      <div className="mt-2 pt-2 border-t border-white/10 flex items-start gap-1.5">
-        <span className="text-[10px] text-stone-300">~</span>
-        <span className="text-[9px] leading-snug text-stone-400">
+      <div className="mt-2.5 pt-2 border-t border-white/10 flex items-start gap-1.5">
+        <span className="text-[11px] text-stone-200">~</span>
+        <span className="text-[10px] leading-snug text-stone-300">
           Ubicación aproximada (casco urbano del municipio).
         </span>
       </div>
 
-      {/* Rampa de profundidad de los hipocentros del catálogo */}
+      {/* Rampa de profundidad de los hipocentros del catálogo (colores en azul
+          y púrpura para no confundirse con los frentes P/S). */}
       {depthRamp && depthRamp.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/10">
-          <div className="text-[9px] text-stone-400 uppercase mb-1">Profundidad</div>
-          <div className="flex h-2 rounded overflow-hidden">
-            {depthRamp.map(r => (
-              <span key={r.label} className="flex-1" style={{ backgroundColor: r.color }} title={r.label} />
+        <div className="mt-2.5 pt-2 border-t border-white/10">
+          <div className="text-[10px] text-stone-300 mb-1">Profundidad</div>
+          <div className="flex h-2.5 rounded overflow-hidden">
+            {depthRamp.map((r, i) => (
+              <span
+                key={r.label}
+                className="flex-1"
+                style={{ backgroundColor: DEPTH_PALETTE[i] ?? DEPTH_PALETTE[DEPTH_PALETTE.length - 1] }}
+                title={r.label}
+              />
             ))}
           </div>
           <div className="flex justify-between mt-0.5">
             {depthRamp.map(r => (
-              <span key={r.label} className="text-[8px] text-stone-400">{r.label}</span>
+              <span key={r.label} className="text-[9px] text-stone-300">{r.label}</span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Barra de escala + flecha norte */}
-      <div className="mt-2 pt-2 border-t border-white/10 flex items-end justify-between gap-3">
+      {/* Barra de escala + flecha norte (más grandes y legibles) */}
+      <div className="mt-2.5 pt-2 border-t border-white/10 flex items-end justify-between gap-3">
         {barKm != null && (
           <div
             className="flex flex-col items-start"
             title={domainWidthKm != null ? `Dominio ≈ ${Math.round(domainWidthKm)} km de ancho` : undefined}
           >
-            <div className="h-1.5 bg-stone-200 rounded-sm" style={{ width: `${BAR_PX}px` }} />
-            <span className="text-[8px] text-stone-400 mt-0.5">{barKm} km</span>
+            <div className="h-2 bg-stone-100 rounded-sm" style={{ width: `${BAR_PX}px` }} />
+            <span className="text-[11px] font-semibold text-stone-100 mt-1">{barKm} km</span>
           </div>
         )}
-        {/* Flecha norte: el norte es hacia -Z (vista por defecto → "hacia atrás"). */}
+        {/* Flecha norte: en la vista por defecto y superior el norte queda arriba. */}
         <div className="flex flex-col items-center">
-          <span className="text-[#D4A853] text-sm leading-none">↑</span>
-          <span className="text-[9px] font-bold text-stone-200">N</span>
+          <span className="text-[#D4A853] text-2xl leading-none">↑</span>
+          <span className="text-[12px] font-bold text-stone-100">N</span>
         </div>
       </div>
     </div>

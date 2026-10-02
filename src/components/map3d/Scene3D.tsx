@@ -116,9 +116,10 @@ export function Scene3D({
     scene.background = new THREE.Color(0x0a0e1a);
 
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
-    // Cámara alejada: el bloque ocupa menos del lienzo y queda margen alrededor
-    // para que las ondas P/S crezcan y se atenúen sin cortarse contra el borde.
-    camera.position.set(33, 30, 41);
+    // Cámara alejada, sobre el lado SUR (+Z) y en ángulo desde arriba, para que
+    // el NORTE (−Z) quede arriba en pantalla y el Pacífico (−X) a la izquierda.
+    // Queda margen alrededor para que las ondas P/S crezcan sin cortarse.
+    camera.position.set(0, 34, 40);
 
     // preserveDrawingBuffer permite capturar el canvas con toDataURL() para el
     // reporte PDF (sin él, la captura sale en negro). Costo de rendimiento
@@ -289,10 +290,12 @@ export function Scene3D({
     const sRings = makeWaveRings(COLOR_S);
 
     // Radios (en unidades de escena) para el desvanecimiento de las ondas.
-    // Las ondas pueden crecer MÁS ALLÁ del contorno de Nariño y atenuarse
-    // suavemente hasta el borde del área visible, en vez de cortarse en seco.
-    const WAVE_FADE_START = BLOCK.width * 0.75; // empieza a desvanecerse
-    const WAVE_FADE_END = BLOCK.width * 1.6;    // desaparece por completo
+    // El frente llena el área del modelo (≈ ±BLOCK.width/2 desde el centro) y,
+    // al salir del terreno, se vuelve claramente SEMITRANSPARENTE y se apaga,
+    // para que se entienda que fuera del modelo ya no hay cálculo. Empieza a
+    // atenuar justo en el borde del terreno (medio ancho del bloque).
+    const WAVE_FADE_START = BLOCK.width * 0.5; // borde del terreno: empieza a atenuar
+    const WAVE_FADE_END = BLOCK.width * 0.95;  // poco más allá del borde: desaparece
 
     /** Actualiza un conjunto de anillos (frente + estela) a un radio dado en km. */
     const updateWaveRings = (rings: WaveRing[], ex: number, ez: number, vKmS: number, elapsed: number) => {
@@ -497,12 +500,20 @@ export function Scene3D({
           // Destello amarillo brillante (atención); en reposo, gris (color de estación).
           mat.color.setHex(flashing ? 0xffee66 : 0x9ca3af);
 
-          // Etiqueta fija con el último tiempo de arribo mostrado (conserva "~").
-          // Color según la onda ya mostrada: S verde, P terracota; en reposo gris.
+          // Etiqueta: SOLO el código por defecto (para no encimar textos). El
+          // tiempo de arribo (P/S) se añade únicamente en la estación
+          // SELECCIONADA, que es la que interesa leer; así se evita el amontonar
+          // "CÓDIGO  P x.x s" en todas a la vez. El marcador de aproximada "~"
+          // ya viene en el textContent base (no se duplica aquí).
           if (el) {
-            const codeTxt = tt.approx ? `${tt.code} ~` : tt.code;
-            el.textContent = rec.tag ? `${codeTxt}  ${rec.tag}` : codeTxt;
-            el.style.color = rec.sShown ? '#3DA06F' : rec.pShown ? '#E07A5F' : '#cbd5e1';
+            const baseTxt = el.dataset.baseLabel ?? tt.code;
+            if (key === d.selectedStation && rec.tag) {
+              el.textContent = `${baseTxt}  ${rec.tag}`;
+              el.style.color = rec.sShown ? '#3DA06F' : rec.pShown ? '#E07A5F' : '#cbd5e1';
+            } else {
+              el.textContent = baseTxt;
+              el.style.color = key === d.selectedStation ? '#ffffff' : '#cbd5e1';
+            }
           }
         });
       }
@@ -530,19 +541,28 @@ export function Scene3D({
         const y = (-world.y * 0.5 + 0.5) * rect.height;
         projected.push({ code, el: label.element as HTMLElement, x, y, dist });
       });
-      // Prioridad de dibujo por cercanía a la cámara (las cercanas se colocan primero).
+      // Prioridad de dibujo por cercanía a la cámara (las cercanas se colocan
+      // primero y conservan su sitio). A las que chocan se les busca un hueco
+      // libre probando desplazamientos crecientes hacia arriba y hacia abajo;
+      // así se separan de verdad (TUM/TUM3C, BBAC/CPOP2, CRU/PAS2) en vez de
+      // apilarse. Si queda desplazada, baja un poco la opacidad.
       projected.sort((a, b) => a.dist - b.dist);
+      const COL_X = 46, COL_Y = 15;
+      const collides = (x: number, y: number) =>
+        placed.some(q => Math.abs(x - q.x) < COL_X && Math.abs(y - q.y) < COL_Y);
       for (const p of projected) {
         let shift = 0;
-        let displaced = false;
-        for (const q of placed) {
-          if (Math.abs(p.x - q.x) < 44 && Math.abs((p.y + shift) - q.y) < 13) {
-            shift -= 11; // desplazamiento reducido para no alejar del marcador
-            displaced = true;
+        if (collides(p.x, p.y)) {
+          // Probar offsets: ±16, ±32, ±48… hasta encontrar hueco.
+          for (let k = 1; k <= 5; k++) {
+            const up = -k * 16, down = k * 16;
+            if (!collides(p.x, p.y + up)) { shift = up; break; }
+            if (!collides(p.x, p.y + down)) { shift = down; break; }
           }
+          if (shift === 0) shift = -16 * 3; // último recurso
         }
         p.el.style.transform = `translate(-50%, -50%) translateY(${shift}px)`;
-        p.el.style.opacity = displaced ? '0.7' : '1';
+        p.el.style.opacity = shift !== 0 ? '0.82' : '1';
         placed.push({ x: p.x, y: p.y + shift });
       }
 
@@ -713,20 +733,24 @@ export function Scene3D({
       }
 
       // Etiqueta CSS2D anclada al cono. El sufijo "~" marca ubicación aproximada;
-      // "↗ fuera de Nariño" indica que la estación real está en otro departamento.
+      // "↗ XX km" indica que la estación real está fuera de Nariño (en el borde).
       const div = document.createElement('div');
       const outsideTag = outside ? ` ↗ ${outsideKm.toFixed(0)} km` : '';
-      div.textContent = (approx ? `${station.code} ~` : station.code) + outsideTag;
+      const baseLabel = (approx ? `${station.code} ~` : station.code) + outsideTag;
+      div.textContent = baseLabel;
+      // Guardamos el texto base para que el loop de animación lo reutilice al
+      // añadir/quitar el tiempo de arribo (evita duplicar el código, p. ej. "TU").
+      div.dataset.baseLabel = baseLabel;
       div.title = `${station.name}\nlat ${station.latitude}, lon ${station.longitude}` +
         (station.altitude_m != null ? `, alt ${station.altitude_m} m` : '') +
         `\nFuente: ${station.source}` +
         (approx ? '\nUbicación aproximada (casco urbano del municipio)' : '') +
         (outside ? `\nFuera del departamento de Nariño; se muestra en el borde, a ~${outsideKm.toFixed(0)} km de su ubicación real` : '');
-      div.style.cssText = 'font-family:monospace;font-size:10px;color:#ffb0b0;' +
-        'text-shadow:0 0 3px #000,0 0 3px #000;' +
-        'background:rgba(0,0,0,0.45);padding:1px 4px;border-radius:3px;white-space:nowrap;' +
+      div.style.cssText = "font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffd9d9;" +
+        'text-shadow:0 0 3px #000,0 0 4px #000;' +
+        'background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;' +
         'pointer-events:auto;cursor:help;transition:opacity 0.15s;' +
-        (approx || outside ? 'border:1px dashed rgba(255,176,176,0.6);' : '');
+        (approx || outside ? 'border:1px dashed rgba(255,200,200,0.6);' : '');
       const label = new CSS2DObject(div);
       label.position.set(0, LABEL_Y, 0);
       mesh.add(label);
@@ -789,8 +813,8 @@ export function Scene3D({
 
     // Etiqueta de profundidad del hipocentro
     const hdiv = document.createElement('div');
-    hdiv.textContent = `hipocentro · ${epicenter.depthKm} km`;
-    hdiv.style.cssText = 'font-family:monospace;font-size:9px;color:#ffe066;text-shadow:0 0 3px #000,0 0 3px #000;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px;white-space:nowrap;';
+    hdiv.textContent = `Hipocentro, ${epicenter.depthKm} km`;
+    hdiv.style.cssText = "font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;";
     const hlabel = new CSS2DObject(hdiv);
     hlabel.position.set(ex, ey - 0.7, ez);
     st.hypoGroup.add(hlabel);
@@ -871,8 +895,8 @@ export function Scene3D({
       const mid = pts[Math.floor(pts.length / 2)];
       const dHypo = Math.hypot(rayPath?.distancia_epicentral_km ?? horiz, epicenter.depthKm);
       const rdiv = document.createElement('div');
-      rdiv.textContent = `${isCurved ? 'rayo P (iasp91)' : 'rayo directo'} · ${dHypo.toFixed(0)} km`;
-      rdiv.style.cssText = `font-family:monospace;font-size:9px;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 3px #000;background:rgba(0,0,0,0.5);padding:1px 4px;border-radius:3px;white-space:nowrap;`;
+      rdiv.textContent = `${isCurved ? 'Rayo P (IASP91)' : 'Rayo directo'}, ${dHypo.toFixed(0)} km`;
+      rdiv.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;`;
       const rlabel = new CSS2DObject(rdiv);
       rlabel.position.copy(mid);
       group.add(rlabel);
@@ -901,14 +925,22 @@ export function Scene3D({
 
     // Objetivo: centro entre epicentro y estaciones (o centro del dominio).
     // Distancias amplias para dejar margen alrededor del bloque (ondas P/S).
+    //
+    // ORIENTACIÓN: el norte es −Z (ver domain.ts latToZ) y el oeste/Pacífico es
+    // −X. Para que el NORTE quede ARRIBA en pantalla, la cámara se ubica sobre
+    // el lado SUR del bloque (+Z) mirando hacia el norte; así el norte queda al
+    // fondo (arriba) y el Pacífico (−X) a la izquierda.
     const target = new THREE.Vector3(0, -1.5, 0);
-    let camPos = new THREE.Vector3(33, 30, 41);
+    let camPos = new THREE.Vector3(0, 34, 40);
     const R = 46;
 
     if (viewCommand.view === 'top') {
-      camPos = new THREE.Vector3(target.x + 0.01, 56, target.z);
+      // Planta casi vertical, con un leve corrimiento al SUR (+Z) para que la
+      // cámara no quede en posición degenerada y el norte (−Z) resuelva ARRIBA.
+      camPos = new THREE.Vector3(target.x, 60, target.z + 8);
     } else if (viewCommand.view === 'north') {
-      camPos = new THREE.Vector3(target.x, 24, target.z + R);
+      // Vista de frente desde el sur mirando al norte (norte al fondo/arriba).
+      camPos = new THREE.Vector3(target.x, 22, target.z + R);
     } else if (viewCommand.view === 'cut' && epicenter && selectedStation) {
       const stObj = stations.find(s => s.code === selectedStation);
       if (stObj) {
@@ -922,8 +954,8 @@ export function Scene3D({
         camPos = new THREE.Vector3(target.x + px * R, 22, target.z + pz * R);
       }
     } else {
-      // fit: vista isométrica por defecto
-      camPos = new THREE.Vector3(33, 30, 41);
+      // fit: vista por defecto en ángulo desde arriba y desde el sur (norte arriba).
+      camPos = new THREE.Vector3(0, 34, 40);
     }
 
     // Transición suave de 800 ms.

@@ -623,7 +623,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const genStepLabel = loadingTT
     ? 'Calculando tiempos de viaje…'
     : nextPending
-      ? `Generando estación ${nextPending.code}${nextPending.name ? ` · ${nextPending.name}` : ''}…`
+      ? `Generando estación ${nextPending.code}${nextPending.name ? `, ${nextPending.name}` : ''}…`
       : 'Preparando la reproducción…';
 
   // Al terminar de generar, arrancar la reproducción automáticamente desde el
@@ -637,7 +637,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // Terminó de generar (venía de calcular y ahora ya se puede reproducir).
     if (wasCalcRef.current && canPlay) {
       wasCalcRef.current = false;
-      setMessage(`Listo · ${stationsWithSignal} ${stationsWithSignal === 1 ? 'estacion' : 'estaciones'} con senal`);
+      setMessage(`Listo, ${stationsWithSignal} ${stationsWithSignal === 1 ? 'estación' : 'estaciones'} con señal`);
       // Autoplay: arrancar la reproducción desde el inicio en cuanto está lista.
       setElapsed(0);
       const play = setTimeout(() => setPlaying(true), 600);
@@ -660,14 +660,18 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const isErrorMessage = /no se pudo|no se pudieron|problema|demasiadas|inválid|no es válido/i.test(message);
 
   const loadedEvent = events.find(e => e.id === currentEventId) ?? null;
-  const magType = sourceType === 'volcanic' ? 'Md' : 'Ml';
+  const magType = sourceType === 'volcanic' ? 'MD' : 'ML';
+  // Descripción del evento sin puntos medios (se separan los campos con comas).
+  const eventWhere = loadedEvent
+    ? loadedEvent.label.split(' · ').slice(1).join(', ')
+    : `${epicenter?.lat.toFixed(2)}°, ${epicenter?.lon.toFixed(2)}°`;
   const currentEventTitle = epicenter
     ? [
-        loadedEvent ? loadedEvent.label.split(' · ').slice(1).join(' · ') : `${epicenter.lat.toFixed(2)}°, ${epicenter.lon.toFixed(2)}°`,
+        eventWhere,
         `${magType} ${magnitude.toFixed(1)}`,
         `Prof. ${epicenter.depthKm} km`,
         `${stationsWithSignal}/${travelTimes.length} estaciones con señal`,
-      ].join('  ·  ')
+      ].join(', ')
     : 'Sin evento seleccionado';
 
   return (
@@ -748,8 +752,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             : 'lg:grid-cols-[320px_1fr_300px]'
       }`}>
         {/* ── IZQUIERDA: Sismogramas ── */}
-        <div data-tour="m3d-sismogramas" className={`bg-black/30 rounded-xl border border-white/10 p-3 ${panelsCollapsed ? 'hidden' : ''}`}>
-          <div className="flex items-center gap-2 mb-2">
+        {/* Columna flex para que la sección de registros ocupe TODA la altura
+            disponible del panel (misma altura que el mapa y los controles). */}
+        <div data-tour="m3d-sismogramas" className={`bg-black/30 rounded-xl border border-white/10 p-3 flex flex-col ${panelsCollapsed ? 'hidden' : ''}`}>
+          <div className="flex items-center gap-2 mb-2 shrink-0">
             <Radio size={13} className="text-[#C4553A]" />
             <h2 className="text-xs font-bold text-stone-200">Sismogramas</h2>
             {travelTimes.length > 0 && (
@@ -803,7 +809,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               )}
             </div>
           ) : (
-            <div className="relative">
+            // flex-1 + min-h-0 permite que el SVG (altura 100%) se estire al
+            // alto real del panel; el ResizeObserver de RecordSection reacciona.
+            <div className="relative flex-1 min-h-0">
               <RecordSection
                 stations={travelTimes}
                 traces={traces}
@@ -818,7 +826,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         </div>
 
         {/* ── CENTRO: Escena 3D ── */}
-        <div ref={sceneContainerRef} data-tour="m3d-escena" className="relative bg-black/30 rounded-xl border border-white/10 overflow-hidden min-h-[560px]">
+        <div ref={sceneContainerRef} data-tour="m3d-escena" className="relative bg-black/30 rounded-xl border border-white/10 overflow-hidden min-h-[560px] lg:min-h-[640px]">
           <Scene3D
             stations={stations}
             epicenter={epicenter}
@@ -836,7 +844,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
           <div data-tour="m3d-hint" className="absolute top-2 left-2 z-10 text-[10px] text-stone-400 bg-black/40 rounded px-2 py-1">
-            Clic en el terreno para colocar el epicentro · clic en ▲ para seleccionar una estación
+            Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación
           </div>
           {/* Aviso cuando hay un MiniSEED subido asociado a una estación: su traza
               es dato real, pero el epicentro es un supuesto del usuario. */}
@@ -868,8 +876,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           {showTriaxial && selectedStation && (
             <div className="absolute bottom-0 left-0 right-0 z-10 bg-black/70 backdrop-blur-sm border-t border-white/10 p-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[11px] font-bold text-stone-200">
-                  Panel triaxial · {selectedStation} · {showReal[selectedStation] ? 'señal real (1–10 Hz)' : 'sintético FDM'}
+                <span className="text-[11px] font-bold text-stone-200">
+                  Panel triaxial, {selectedStation}, {showReal[selectedStation] ? 'señal real (1 a 10 Hz)' : 'sintético FDM'}
                 </span>
                 <button onClick={() => setShowTriaxial(false)} aria-label="Cerrar panel triaxial" title="Cerrar" className="text-stone-400"><X size={14} /></button>
               </div>
@@ -883,10 +891,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
         {/* ── DERECHA: Controles ── */}
         <div data-tour="m3d-controles" className={`bg-black/30 rounded-xl border border-white/10 p-3 space-y-3 ${panelsCollapsed ? 'hidden' : ''}`}>
-          {/* Transporte */}
+          {/* Transporte: botón Reproducir a ANCHO COMPLETO (su texto nunca se
+              corta) y, al lado, el botón de reiniciar como ícono. */}
           <div data-tour="m3d-transporte">
             <h2 className="text-xs font-bold text-stone-200 mb-2">Controles</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-stretch gap-2">
               <Tooltip
                 content={
                   isCalculating
@@ -895,12 +904,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 }
                 hoverOnly
                 disabled={canPlay}
-                className="flex-1"
+                className="flex-1 min-w-0"
+                block
               >
                 <button
                   onClick={() => setPlaying(p => !p)}
                   disabled={!canPlay}
-                  className={`w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${canPlay && !playing ? 'ready-glow' : ''}`}
+                  className={`w-full flex items-center justify-center gap-1.5 whitespace-nowrap bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${canPlay && !playing ? 'ready-glow' : ''}`}
                 >
                   {isCalculating ? (
                     <><Loader size={13} className="animate-spin" /> Generando…</>
@@ -909,8 +919,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   )}
                 </button>
               </Tooltip>
-              <button onClick={reset} aria-label="Reiniciar la reproducción" title="Volver al inicio de la reproducción" className="p-2 rounded-lg bg-white/5 border border-white/10 text-stone-300">
-                <RotateCcw size={13} />
+              <button onClick={reset} aria-label="Reiniciar la reproducción" title="Volver al inicio de la reproducción" className="shrink-0 px-3 rounded-lg bg-white/5 border border-white/10 text-stone-300">
+                <RotateCcw size={14} />
               </button>
             </div>
           </div>
@@ -924,18 +934,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             </div>
           </div>
 
-          {/* Tiempo transcurrido + velocidad de reproducción */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-black/40 rounded-lg px-2.5 py-2 border border-white/10">
-              <div className="text-[9px] text-stone-500">Tiempo transcurrido</div>
-              <div className="font-mono text-sm text-[#eab308] font-bold">{fmtTime(elapsed)}</div>
-            </div>
-            <div className="bg-black/40 rounded-lg px-2.5 py-2 border border-white/10">
-              <div className="text-[9px] text-stone-500">Velocidad de reproducción</div>
-              <div className="font-mono text-sm text-stone-200 font-bold">{speed}×</div>
-            </div>
+          {/* Tiempo transcurrido (la velocidad ya la indican los botones ×). */}
+          <div className="bg-black/40 rounded-lg px-2.5 py-2 border border-white/10 flex items-center justify-between">
+            <span className="text-[11px] text-stone-400">Tiempo transcurrido</span>
+            <span className="font-mono text-sm text-[#eab308] font-bold">{fmtTime(elapsed)}</span>
           </div>
-          <div data-tour="m3d-velocidad" className="flex gap-1.5">
+          <div data-tour="m3d-velocidad">
+            <div className="text-[11px] text-stone-400 mb-1">Velocidad de reproducción</div>
+            <div className="flex gap-1.5">
             {[1, 2, 5, 10, 20].map(s => (
               <button
                 key={s}
@@ -947,6 +953,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 {s}×
               </button>
             ))}
+            </div>
           </div>
 
           {/* Modelo de velocidades */}
@@ -955,12 +962,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             <div className="flex gap-1.5">
               {([
                 ['homogeneous', 'Velocidad constante'],
-                ['iasp91', 'IASP91 (modelo terrestre)'],
+                ['iasp91', 'IASP91'],
               ] as [TravelModel, string][]).map(([m, label]) => (
                 <button
                   key={m}
                   onClick={() => setModel(m)}
-                  className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border ${
+                  className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg border whitespace-nowrap ${
                     model === m ? 'bg-[#2D6A4F] text-white border-[#2D6A4F]' : 'bg-white/5 text-stone-400 border-white/10'
                   }`}
                 >
@@ -971,7 +978,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             <p className="mt-1.5 text-[10px] leading-snug text-stone-500">
               {model === 'homogeneous'
                 ? 'Las ondas viajan en línea recta con la Vp y la Vs que elijas.'
-                : 'La velocidad cambia con la profundidad según el modelo de referencia mundial IASP91 (Kennett y Engdahl, 1991).'}
+                : 'Modelo terrestre: la velocidad cambia con la profundidad según el modelo de referencia mundial IASP91 (Kennett y Engdahl, 1991).'}
             </p>
           </div>
 
@@ -1003,11 +1010,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               hoverOnly
               disabled={!!epicenter}
               className="w-full"
+              block
             >
               <button
                 onClick={() => epicenter && recomputeTravelTimes(epicenter)}
                 disabled={!epicenter}
-                className="w-full text-[10px] font-bold py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full text-[11px] font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Recalcular con estos valores
               </button>
@@ -1018,11 +1026,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               hoverOnly
               disabled={!!epicenter && travelTimes.length > 0}
               className="w-full"
+              block
             >
               <button
                 onClick={() => { setReportMsg(null); setShowReport(true); }}
                 disabled={!epicenter || travelTimes.length === 0}
-                className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold py-1.5 rounded-lg bg-[#2D6A4F] text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold py-2 rounded-lg bg-[#2D6A4F] text-white disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <FileDown size={12} /> Generar reporte
               </button>
@@ -1033,16 +1042,16 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           {selectedStation && stationDetail && (
             <div className="border-t border-white/10 pt-2 space-y-2">
               <div className="text-[11px] font-semibold text-stone-300">Estación {selectedStation}</div>
-              <div className="text-[10px] text-stone-300 space-y-0.5">
-                <div>tP: <span className="font-mono">{stationDetail.tP_detectado.toFixed(2)}</span> s · tS: <span className="font-mono">{stationDetail.tS_detectado.toFixed(2)}</span> s</div>
-                <div className="text-stone-500">Malla <span className="font-mono">{stationDetail.nx}×{stationDetail.nz}</span> · <span className="font-mono">{stationDetail.tiempo_computo_ms.toFixed(0)}</span> ms · CFL {stationDetail.cfl_ok ? 'ok' : 'ajustado'}</div>
+              <div className="text-[11px] text-stone-300 space-y-0.5">
+                <div>tP: <span className="font-mono">{stationDetail.tP_detectado.toFixed(2)}</span> s, tS: <span className="font-mono">{stationDetail.tS_detectado.toFixed(2)}</span> s</div>
+                <div className="text-stone-500">Malla <span className="font-mono">{stationDetail.nx}×{stationDetail.nz}</span>, <span className="font-mono">{stationDetail.tiempo_computo_ms.toFixed(0)}</span> ms, CFL {stationDetail.cfl_ok ? 'ok' : 'ajustado'}</div>
               </div>
               {/* Botón real / sintético */}
               <button
                 onClick={() => toggleReal(selectedStation)}
                 disabled={realAvailable[selectedStation] === false}
-                title={realAvailable[selectedStation] === false ? 'sin registro para este evento' : 'alternar señal real / sintética'}
-                className={`w-full text-[10px] font-bold py-1.5 rounded-lg border ${
+                title={realAvailable[selectedStation] === false ? 'Sin registro para este evento' : 'Alternar señal real o sintética'}
+                className={`w-full text-[11px] font-bold py-2 rounded-lg border ${
                   realAvailable[selectedStation] === false
                     ? 'bg-white/5 text-stone-600 border-white/10 cursor-not-allowed'
                     : showReal[selectedStation]
@@ -1050,11 +1059,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                       : 'bg-white/5 text-stone-300 border-white/10'
                 }`}
               >
-                {showReal[selectedStation] ? 'Mostrando: real' : 'Mostrar señal real'}
+                {showReal[selectedStation] ? 'Mostrando señal real' : 'Mostrar señal real'}
               </button>
               <button
                 onClick={() => setShowTriaxial(v => !v)}
-                className="w-full text-[10px] font-bold py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-300"
+                className="w-full text-[11px] font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300"
               >
                 {showTriaxial ? 'Ocultar panel triaxial' : 'Ver panel triaxial (N/E/Z)'}
               </button>

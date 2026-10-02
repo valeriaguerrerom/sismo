@@ -74,12 +74,15 @@ const LAYER_COLORS: Record<string, number> = {
 // Paradas de color para el degradado suave por profundidad de las paredes.
 // Corteza: tonos gris-azulados claros. Manto: más oscuro/cálido pero con
 // suficiente contraste frente al fondo de escena (0x0a0e1a) para no fundirse.
+// Paradas en gris-azulado que se oscurecen con la profundidad hasta fundirse
+// con el fondo de escena (0x0a0e1a). Se evita el tono café/marrón del fondo del
+// bloque, que desde arriba se leía como una "segunda silueta de Nariño" invertida.
 const DEPTH_GRADIENT: { km: number; color: number }[] = [
   { km: 0, color: 0xaeb8c4 },   // superficie: gris-azulado claro
   { km: 15, color: 0x8791a0 },  // base corteza superior
-  { km: 35, color: 0x6a5f6e },  // Moho: transición corteza→manto
-  { km: 80, color: 0x5a4a4e },  // manto superior (cálido, aún legible)
-  { km: 200, color: 0x4a3a3c }, // manto profundo (contraste sobre el fondo)
+  { km: 35, color: 0x5e6775 },  // Moho: transición corteza→manto
+  { km: 80, color: 0x3a4350 },  // manto superior (gris-azulado oscuro)
+  { km: 200, color: 0x1a2230 }, // manto profundo: casi el color del fondo
 ];
 
 /** Interpola el color del degradado de profundidad para una profundidad (km). */
@@ -225,8 +228,8 @@ export function buildTerrainBlock(
   for (const km of DEPTH_LAYERS) {
     const y = depthToY(km);
     const div = document.createElement('div');
-    div.textContent = km === 35 ? '35 km · Moho' : `${km} km`;
-    div.style.cssText = `font-family:monospace;font-size:9px;color:${km === 35 ? '#ffcc66' : '#c8d4e0'};text-shadow:0 0 3px #000,0 0 3px #000;background:rgba(0,0,0,0.4);padding:0 3px;border-radius:2px;white-space:nowrap;`;
+    div.textContent = km === 35 ? '35 km, Moho' : `${km} km`;
+    div.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
     const label = new CSS2DObject(div);
     label.position.set(cutX, y, BLOCK.depthXY / 2 + 0.5);
     axisGroup.add(label);
@@ -437,9 +440,12 @@ function buildSilhouetteBlock(
   capGeo.translate(0, yBottom, 0);
   // La tapa usa el color del degradado a profundidad máxima (coincide con la
   // base de las paredes) y comparte exactamente el anillo (sin sobresalir).
+  // La tapa inferior se funde con el fondo (color del manto profundo) y queda
+  // bastante transparente, para que desde arriba no se lea como una silueta
+  // café invertida de Nariño por debajo del terreno.
   const capMat = new THREE.MeshStandardMaterial({
-    color: gradientColorAtKm(DOMAIN.depthMax), transparent: true, opacity: 0.95,
-    side: THREE.DoubleSide, roughness: 0.9, metalness: 0,
+    color: gradientColorAtKm(DOMAIN.depthMax), transparent: true, opacity: 0.6,
+    side: THREE.DoubleSide, roughness: 0.95, metalness: 0,
   });
   group.add(new THREE.Mesh(capGeo, capMat));
   disposables.push(capGeo, capMat);
@@ -535,8 +541,8 @@ function buildSilhouetteBlock(
     disposables.push(tickGeo, tickMat);
 
     const div = document.createElement('div');
-    div.textContent = km === 35 ? '35 km · Moho' : `${km} km`;
-    div.style.cssText = `font-family:monospace;font-size:9px;color:${km === 35 ? '#ffcc66' : '#c8d4e0'};text-shadow:0 0 3px #000,0 0 3px #000;background:rgba(0,0,0,0.4);padding:0 3px;border-radius:2px;white-space:nowrap;`;
+    div.textContent = km === 35 ? '35 km, Moho' : `${km} km`;
+    div.style.cssText = `font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:11px;font-weight:600;color:${km === 35 ? '#ffcc66' : '#d4dde8'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);padding:0 4px;border-radius:3px;white-space:nowrap;`;
     const label = new CSS2DObject(div);
     label.position.set(axX, y, axZ + 0.75);
     axisGroupInner.add(label);

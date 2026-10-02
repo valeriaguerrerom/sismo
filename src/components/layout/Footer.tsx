@@ -119,10 +119,10 @@ export function Footer({ onNavigate, dark = false }: Props) {
           </div>
 
           <p className={`text-xs text-center leading-relaxed max-w-md ${dark ? 'text-stone-400' : 'text-[#5A5A5A]'}`}>
-            Desarrollado por Valeria Guerrero y Luisa Basante · Universidad Mariana · Pasto, Nariño
+            Desarrollado por Valeria Guerrero y Luisa Basante, Universidad Mariana, Pasto, Nariño
             {onNavigate && (
               <>
-                {' · '}
+                {'. '}
                 <button onClick={() => onNavigate('about')} className={`font-semibold hover:underline ${dark ? 'text-[#D4A853]' : 'text-[#2D6A4F]'}`}>
                   Acerca del proyecto
                 </button>
