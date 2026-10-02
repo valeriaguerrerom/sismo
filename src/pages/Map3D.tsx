@@ -844,19 +844,19 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={() => setShowEventList(true)}
-                        className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg"
+                        className="w-full flex items-center justify-center bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg"
                       >
-                        <List size={14} /> Cargar un evento
+                        Cargar un evento
                       </button>
                       <button
                         onClick={() => { setPlacingEpicenter(true); setView('top'); }}
-                        className={`w-full flex items-center justify-center gap-1.5 text-[12px] font-bold py-2.5 rounded-lg border transition-colors ${
+                        className={`w-full flex items-center justify-center text-[12px] font-bold py-2.5 rounded-lg border transition-colors ${
                           placingEpicenter
                             ? 'bg-[#2D6A4F]/20 border-[#2D6A4F] text-[#8fd3b4]'
                             : 'bg-white/5 border-white/15 text-stone-200'
                         }`}
                       >
-                        <MapPin size={14} /> Colocar epicentro en el mapa
+                        Colocar epicentro en el mapa
                       </button>
                     </div>
                   </div>
