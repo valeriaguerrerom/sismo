@@ -269,7 +269,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
                 {initials(user.full_name, user.email)}
               </div>
             )}
-            {/* Botón de cámara superpuesto para cambiar la foto. */}
+            {/* Botón de cámara superpuesto para cambiar/agregar la foto. */}
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -280,6 +280,19 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
             >
               <ImageIcon size={13} />
             </button>
+            {/* Botón para eliminar la foto (solo si hay una). */}
+            {user.avatar && (
+              <button
+                type="button"
+                onClick={removeAvatar}
+                disabled={avatarBusy}
+                title="Eliminar foto"
+                aria-label="Eliminar foto de perfil"
+                className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-stone-700 text-white flex items-center justify-center border-2 border-white shadow disabled:opacity-50 hover:bg-red-500 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            )}
             <input
               ref={fileRef}
               type="file"
