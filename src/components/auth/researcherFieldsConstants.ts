@@ -19,6 +19,19 @@ export const INSTITUTIONS = [
   'Otra',
 ];
 
+/** Áreas de investigación o interés sugeridas + "Otra". */
+export const RESEARCH_AREAS = [
+  'Sismología',
+  'Vulcanología',
+  'Geotecnia',
+  'Geofísica',
+  'Geología',
+  'Ingeniería civil / sísmica',
+  'Gestión del riesgo de desastres',
+  'Educación y divulgación',
+  'Otra',
+];
+
 /** Propósitos de uso sugeridos + "Otro". */
 export const USAGE_PURPOSES = [
   'Tesis o trabajo de grado',

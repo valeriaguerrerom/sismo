@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { User, Building, Briefcase, FlaskConical, MapPin, Globe, MessageSquare } from '../../lib/icons';
 import type { ResearcherSignUp } from '../../lib/authTypes';
 import {
-  OCCUPATIONS, INSTITUTIONS, USAGE_PURPOSES, COUNTRIES, CITIES, OTHER_VALUES, inputCls,
+  OCCUPATIONS, INSTITUTIONS, USAGE_PURPOSES, COUNTRIES, CITIES, RESEARCH_AREAS, OTHER_VALUES, inputCls,
 } from './researcherFieldsConstants';
 
 export function Field({ icon, label, children, optional }: { icon: React.ReactNode; label: string; children: React.ReactNode; optional?: boolean }) {
@@ -111,15 +111,12 @@ export function ResearcherFields({ form, onChange, showName = true }: Props) {
         </select>
       </Field>
       <Field icon={<FlaskConical size={16} />} label="Área de investigación o interés">
-        <input type="text" value={form.researchArea} onChange={e => onChange('researchArea', e.target.value)} placeholder="Sismología, vulcanología, geotecnia…" required className={inputCls} />
-      </Field>
-      <Field icon={<MapPin size={16} />} label="Ciudad">
         <SelectOrOther
-          value={form.city}
-          onChange={v => onChange('city', v)}
-          options={CITIES}
+          value={form.researchArea}
+          onChange={v => onChange('researchArea', v)}
+          options={RESEARCH_AREAS}
           otherLabel="Otra"
-          placeholder="Escribe tu ciudad"
+          placeholder="Escribe tu área de interés"
           required
         />
       </Field>
@@ -130,6 +127,16 @@ export function ResearcherFields({ form, onChange, showName = true }: Props) {
           options={COUNTRIES}
           otherLabel="Otro"
           placeholder="Escribe tu país"
+          required
+        />
+      </Field>
+      <Field icon={<MapPin size={16} />} label="Ciudad">
+        <SelectOrOther
+          value={form.city}
+          onChange={v => onChange('city', v)}
+          options={CITIES}
+          otherLabel="Otra"
+          placeholder="Escribe tu ciudad"
           required
         />
       </Field>
