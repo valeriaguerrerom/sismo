@@ -145,13 +145,22 @@ export function RecordSection({
               </g>
             );
           })}
-          {/* Nombres de las estaciones (marcadores de posición) */}
-          {SKELETON_STATIONS.map((code, i) => {
-            const x = n === 1 ? width / 2 : padX + (usableW * i) / (n - 1);
-            return (
-              <text key={code} x={x} y={height - 8} fontSize={11} fill="#475569" textAnchor="middle" opacity={0.5}>{code}</text>
-            );
-          })}
+          {/* Nombres de las estaciones (marcadores de posición). Si las
+              columnas quedan muy juntas (panel angosto del estado vacío), se
+              rotan 45° para que no se amontonen ("TUM3CCPOP2…"). */}
+          {(() => {
+            const gap = n > 1 ? usableW / (n - 1) : width;
+            const rot = gap < 42;
+            return SKELETON_STATIONS.map((code, i) => {
+              const x = n === 1 ? width / 2 : padX + (usableW * i) / (n - 1);
+              return rot ? (
+                <text key={code} x={x} y={height - 10} fontSize={10} fill="#475569" textAnchor="end" opacity={0.5}
+                  transform={`rotate(-45 ${x} ${height - 10})`}>{code}</text>
+              ) : (
+                <text key={code} x={x} y={height - 8} fontSize={11} fill="#475569" textAnchor="middle" opacity={0.5}>{code}</text>
+              );
+            });
+          })()}
         </svg>
       </div>
     );

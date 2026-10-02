@@ -171,6 +171,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [reportFormat, setReportFormat] = useState<'pdf' | 'csv'>('pdf');
   const [savingReport, setSavingReport] = useState(false);
   const [reportMsg, setReportMsg] = useState<string | null>(null);
+  // El reporte debe GUARDARSE antes de poder descargarlo (CSV/PDF). Este flag
+  // se pone en true cuando el guardado en "Mis Reportes" tuvo éxito. Para
+  // usuarios sin sesión no hay guardado, así que se permite descargar directo.
+  const [reportSaved, setReportSaved] = useState(false);
   // Contenedor de la escena 3D (para capturar su canvas en el reporte PDF).
   const sceneContainerRef = useRef<HTMLDivElement>(null);
   // Silueta del departamento de Nariño para el mapa del reporte (se carga una vez).
@@ -413,6 +417,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   };
 
   const applyEpicenter = (lat: number, lon: number) => {
+    setLoadingTT(true); // mostrar el loader de inmediato (evita el parpadeo del estado vacío)
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
     setPlacingEpicenter(false); // ya se colocó: salir del modo "colocar"
@@ -426,6 +431,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
     if (ev.sourceType === 'volcanic') { setVp(3.0); setVs(1.7); setDensity(2500); }
+    setLoadingTT(true); // loader inmediato (evita el parpadeo del estado vacío)
     setEpicenter({ lat: ev.lat, lon: ev.lon, depthKm: ev.depthKm });
     setCurrentEventId(ev.id);
     setPlacingEpicenter(false);
@@ -617,7 +623,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       setReportMsg('No se pudo guardar. Inténtalo de nuevo.');
       console.error('Guardar reporte Mapa 3D:', error.message);
     } else {
-      setReportMsg('¡Guardado! Míralo en "Mis Reportes".');
+      setReportMsg('¡Guardado! Ya puedes descargar el CSV o el PDF, y verlo en "Mis Reportes".');
+      setReportSaved(true); // habilita la descarga
     }
     setSavingReport(false);
   };
@@ -1080,7 +1087,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               block
             >
               <button
-                onClick={() => { setReportMsg(null); setShowReport(true); }}
+                onClick={() => { setReportMsg(null); setReportSaved(false); setShowReport(true); }}
                 disabled={!epicenter || travelTimes.length === 0}
                 className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold py-2 rounded-lg bg-[#2D6A4F] text-white disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -1362,7 +1369,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                           type="checkbox"
                           checked={reportOpts[key] && !disabled}
                           disabled={disabled}
-                          onChange={e => setReportOpts(o => ({ ...o, [key]: e.target.checked }))}
+                          onChange={e => { setReportOpts(o => ({ ...o, [key]: e.target.checked })); setReportSaved(false); }}
                           className="accent-[#2D6A4F]"
                         />
                         {label}
@@ -1397,28 +1404,41 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 </div>
               )}
 
-              {/* Acciones */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handleDownloadReport}
-                  className="flex-1 flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[11px] font-bold py-2 rounded-lg"
-                >
-                  <FileDown size={13} /> Descargar {reportFormat.toUpperCase()}
-                </button>
-                {user && (
+              {/* Acciones: PRIMERO guardar; la descarga (CSV/PDF) se habilita
+                  solo DESPUÉS de guardar. Si no hay sesión no se puede guardar,
+                  así que se permite descargar directo (con un aviso). */}
+              {user ? (
+                <div className="space-y-2 pt-1">
                   <button
                     onClick={handleSaveReport}
-                    disabled={savingReport}
-                    title="Guardar en Mis Reportes"
-                    className="flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 text-stone-200 text-[11px] font-bold px-3 py-2 rounded-lg disabled:opacity-50"
+                    disabled={savingReport || reportSaved}
+                    className="w-full flex items-center justify-center gap-1.5 bg-[#2D6A4F] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
                   >
-                    {reportMsg?.startsWith('¡Guardado') ? <Check size={13} /> : <Save size={13} />}
-                    {savingReport ? 'Guardando…' : 'Guardar'}
+                    {reportSaved ? <Check size={14} /> : <Save size={14} />}
+                    {savingReport ? 'Guardando…' : reportSaved ? 'Guardado' : '1. Guardar en Mis Reportes'}
                   </button>
-                )}
-              </div>
-              {!user && (
-                <p className="text-[9px] text-stone-500">Inicia sesión para guardar el reporte en "Mis Reportes".</p>
+                  <button
+                    onClick={handleDownloadReport}
+                    disabled={!reportSaved}
+                    title={!reportSaved ? 'Primero guarda el reporte' : undefined}
+                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <FileDown size={13} /> 2. Descargar {reportFormat.toUpperCase()}
+                  </button>
+                  {!reportSaved && (
+                    <p className="text-[10px] text-stone-500 text-center">Guarda el reporte para habilitar la descarga.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={handleDownloadReport}
+                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg"
+                  >
+                    <FileDown size={13} /> Descargar {reportFormat.toUpperCase()}
+                  </button>
+                  <p className="text-[10px] text-stone-500 text-center">Inicia sesión para guardar el reporte en "Mis Reportes".</p>
+                </div>
               )}
             </div>
           </div>
