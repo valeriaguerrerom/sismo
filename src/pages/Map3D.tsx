@@ -1135,16 +1135,16 @@ function TriaxialTraces({ syn, real }: { syn: SyntheticResult | null; real: Wave
           <svg viewBox={`0 0 ${w} ${h}`} className="flex-1 h-[54px] bg-black/30 rounded" preserveAspectRatio="none">
             <line x1={0} y1={h / 2} x2={w} y2={h / 2} stroke="#334155" strokeWidth={0.5} />
             {/* Marca P y S (solo si tenemos tiempos del sintético) */}
-            {tP != null && !real && <line x1={(tP / tMax) * w} y1={0} x2={(tP / tMax) * w} y2={h} stroke="#ff4d4d" strokeWidth={1} />}
-            {tS != null && !real && <line x1={(tS / tMax) * w} y1={0} x2={(tS / tMax) * w} y2={h} stroke="#22d3ee" strokeWidth={1} />}
+            {tP != null && !real && <line x1={(tP / tMax) * w} y1={0} x2={(tP / tMax) * w} y2={h} stroke="#E07A5F" strokeWidth={1} />}
+            {tS != null && !real && <line x1={(tS / tMax) * w} y1={0} x2={(tS / tMax) * w} y2={h} stroke="#3DA06F" strokeWidth={1} />}
             <path d={path(c.data, c.t)} fill="none" stroke={c.color} strokeWidth={0.8} />
           </svg>
         </div>
       ))}
       {!real && tP != null && (
         <div className="flex gap-3 font-mono text-[9px]">
-          <span className="text-[#ff4d4d]">P {tP.toFixed(2)} s</span>
-          <span className="text-[#22d3ee]">S {tS?.toFixed(2)} s</span>
+          <span className="text-[#E07A5F]">P {tP.toFixed(2)} s</span>
+          <span className="text-[#3DA06F]">S {tS?.toFixed(2)} s</span>
         </div>
       )}
     </div>

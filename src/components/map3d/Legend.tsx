@@ -7,6 +7,7 @@
  *
  * @module map3d/Legend
  */
+import { WAVE_COLORS } from '../../lib/waveColors';
 
 interface LegendProps {
   /** Barra de escala calculada por el backend {km, scene_units} o null. */
@@ -19,10 +20,10 @@ interface LegendProps {
 
 /** Símbolos principales de la escena (coherentes con Scene3D). */
 const ITEMS = [
-  { label: 'Estación', color: '#ff4d4d', shape: 'triangle' as const },
+  { label: 'Estación', color: '#9CA3AF', shape: 'triangle' as const },
   { label: 'Hipocentro', color: '#ffffff', shape: 'circle' as const },
-  { label: 'Ondas P', color: '#ff4d4d', shape: 'ring' as const },
-  { label: 'Ondas S', color: '#22d3ee', shape: 'ring' as const },
+  { label: 'Ondas P', color: WAVE_COLORS.P, shape: 'ring' as const },
+  { label: 'Ondas S', color: WAVE_COLORS.S, shape: 'ring' as const },
 ];
 
 /** Leyenda posicionada abajo a la derecha sobre la escena. */

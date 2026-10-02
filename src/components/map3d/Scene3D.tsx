@@ -2,8 +2,8 @@
  * Escena 3D del "Mapa 3D" (estilo Swaves) para Nariño.
  *
  * Dibuja un bloque de subsuelo con la cara superior como terreno y una cara
- * lateral como corte, marcadores de estaciones (triángulos rojos + etiqueta),
- * epicentro/hipocentro, y los frentes de onda P (rojo) y S (cian) que se
+ * lateral como corte, marcadores de estaciones (triángulos grises + etiqueta),
+ * epicentro/hipocentro, y los frentes de onda P (terracota) y S (verde) que se
  * expanden sobre la superficie según el tiempo de animación.
  *
  * No hay física aquí: los radios de los anillos se calculan con la velocidad
@@ -55,8 +55,12 @@ interface Props {
   onPlaceEpicenter?: (lat: number, lon: number) => void;
 }
 
-const COLOR_P = 0xff4d4d;
-const COLOR_S = 0x22d3ee;
+// Frentes de onda: mismo código de color por tipo que en todo el sitio
+// (ver src/lib/waveColors.ts). P terracota, S verde bosque.
+const COLOR_P = 0xc4553a;
+const COLOR_S = 0x2d6a4f;
+// Marcador de estación: gris neutro (no es una onda), para no confundir con la P.
+const COLOR_STATION = 0x9ca3af;
 
 /**
  * Componente de la escena 3D. Gestiona el ciclo de vida de Three.js y
@@ -490,13 +494,15 @@ export function Scene3D({
           const flashing = performance.now() < rec.flashUntil;
           const baseScale = key === d.selectedStation ? 1.4 : 1;
           mesh.scale.setScalar(flashing ? baseScale * 1.6 : baseScale);
-          mat.color.setHex(flashing ? 0xffee66 : 0xff4d4d);
+          // Destello amarillo brillante (atención); en reposo, gris (color de estación).
+          mat.color.setHex(flashing ? 0xffee66 : 0x9ca3af);
 
           // Etiqueta fija con el último tiempo de arribo mostrado (conserva "~").
+          // Color según la onda ya mostrada: S verde, P terracota; en reposo gris.
           if (el) {
             const codeTxt = tt.approx ? `${tt.code} ~` : tt.code;
             el.textContent = rec.tag ? `${codeTxt}  ${rec.tag}` : codeTxt;
-            el.style.color = rec.sShown ? '#22d3ee' : rec.pShown ? '#ffe066' : '#ffb0b0';
+            el.style.color = rec.sShown ? '#3DA06F' : rec.pShown ? '#E07A5F' : '#cbd5e1';
           }
         });
       }
@@ -641,7 +647,7 @@ export function Scene3D({
 
     stations.forEach(station => {
       const geo = new THREE.ConeGeometry(0.5, 1.0, 4); // "triángulo" 3D
-      const mat = new THREE.MeshBasicMaterial({ color: COLOR_P, transparent: true, opacity: 0.85 });
+      const mat = new THREE.MeshBasicMaterial({ color: COLOR_STATION, transparent: true, opacity: 0.85 });
       const mesh = new THREE.Mesh(geo, mat);
 
       // Preferir x/z del backend; el fallback recalcula con lonToX/latToZ.

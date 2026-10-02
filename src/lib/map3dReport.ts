@@ -15,7 +15,8 @@
  */
 import { jsPDF } from 'jspdf';
 import { sanitizeCell } from './csvSafe';
-import { PAGE_W, MARGIN, CONTENT_W, COLORS as BASE_COLORS, fmtDate, type RGB } from './pdfStyle';
+import { PAGE_W, MARGIN, CONTENT_W, COLORS as BASE_COLORS, fmtDate } from './pdfStyle';
+import { WAVE_COLORS_RGB } from './waveColors';
 
 // ─── Tipos de datos del reporte ───
 
@@ -110,8 +111,8 @@ export const DEFAULT_MAP3D_OPTIONS: Map3dReportOptions = {
 
 // ─── Estilo (compartido en pdfStyle.ts, coherente con reportPdfBuilder.ts) ───
 
-// Paleta base compartida + `cyan`, exclusivo de este reporte (marcas del Mapa 3D).
-const COLORS = { ...BASE_COLORS, cyan: [34, 211, 238] as RGB };
+// Paleta base compartida (las marcas P/S usan WAVE_COLORS_RGB).
+const COLORS = BASE_COLORS;
 
 const modelLabel = (m: string) => (m === 'iasp91' ? 'IASP91 (Tierra estratificada)' : 'Homogéneo (medio constante)');
 
@@ -228,7 +229,7 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     }
     y += imgH + 4;
     doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
-    doc.text('Captura de la escena 3D en el momento de generar el reporte. Ondas P (rojo) y S (cian) sobre el relieve de Nariño.', MARGIN, y);
+    doc.text('Captura de la escena 3D en el momento de generar el reporte. Ondas P (terracota) y S (verde) sobre el relieve de Nariño.', MARGIN, y);
     y += 6;
   }
 
@@ -369,13 +370,13 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
         if (prev) doc.line(prev[0], prev[1], cur[0], cur[1]);
         prev = cur;
       }
-      // Marcas P (verde) y S (cian)
+      // Marcas P (terracota) y S (verde) — mismo código de color de todo el sitio.
       if (tr.tP != null && tr.tP > 0 && tr.tP <= tMax) {
-        doc.setDrawColor(...COLORS.green); doc.setLineWidth(0.5);
+        doc.setDrawColor(...WAVE_COLORS_RGB.P); doc.setLineWidth(0.5);
         doc.line(cx - colW * 0.38, toY(tr.tP), cx + colW * 0.38, toY(tr.tP));
       }
       if (tr.tS != null && tr.tS > 0 && tr.tS <= tMax) {
-        doc.setDrawColor(...COLORS.cyan); doc.setLineWidth(0.5);
+        doc.setDrawColor(...WAVE_COLORS_RGB.S); doc.setLineWidth(0.5);
         doc.line(cx - colW * 0.38, toY(tr.tS), cx + colW * 0.38, toY(tr.tS));
       }
       // Etiqueta de estación
@@ -386,7 +387,7 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     });
     y = ry + rh + 4;
     doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
-    doc.text('Estaciones ordenadas por distancia epicentral. Marcas: P (verde), S (cian). Amplitud normalizada por traza.', MARGIN, y);
+    doc.text('Estaciones ordenadas por distancia epicentral. Marcas: P (terracota), S (verde). Amplitud normalizada por traza.', MARGIN, y);
     y += 6;
   }
 
@@ -470,8 +471,8 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
         doc.setDrawColor(...c); doc.setLineDashPattern([1, 1], 0);
         doc.line(px(t), y, px(t), y + traceH); doc.setLineDashPattern([], 0);
       };
-      marker(sg.tP, COLORS.green);
-      marker(sg.tS, COLORS.cyan);
+      marker(sg.tP, WAVE_COLORS_RGB.P);
+      marker(sg.tS, WAVE_COLORS_RGB.S);
       // Traza (submuestreada a ~600 puntos)
       doc.setDrawColor(...color); doc.setLineWidth(0.3);
       const step = Math.max(1, Math.floor(vals.length / 600));

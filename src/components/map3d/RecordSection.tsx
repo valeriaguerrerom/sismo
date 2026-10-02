@@ -3,7 +3,7 @@
  *
  * Una traza vertical por estación, ordenadas por distancia epicentral de
  * izquierda a derecha. Eje Y = tiempo hacia abajo. Marcas horizontales P
- * (rojo) y S (cian) en los tiempos que devuelve el backend. Las trazas se
+ * (terracota) y S (verde) en los tiempos que devuelve el backend. Las trazas se
  * revelan progresivamente según el reloj de la animación (`elapsed`).
  *
  * @module map3d/RecordSection
@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import type { StationTravelTime, SyntheticResult } from '../../lib/api3d';
 import { computeRecordLayout } from './recordLayout';
+import { WAVE_COLORS } from '../../lib/waveColors';
 
 interface Props {
   stations: StationTravelTime[];
@@ -26,8 +27,8 @@ interface Props {
   onSelectStation?: (code: string) => void;
 }
 
-const COLOR_P = '#ff4d4d';
-const COLOR_S = '#22d3ee';
+const COLOR_P = WAVE_COLORS.P;
+const COLOR_S = WAVE_COLORS.S;
 const TRACE_HALF_WIDTH = 26; // px a cada lado del eje de la traza
 
 /**

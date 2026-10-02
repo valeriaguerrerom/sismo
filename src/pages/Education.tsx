@@ -11,6 +11,7 @@ import { References } from '../components/education/References';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth } from '../lib/authContext';
+import { WAVE_COLORS } from '../lib/waveColors';
 import { startTour } from '../tours/useTour';
 import { buildEducacionSteps } from '../tours/educacion';
 
@@ -77,7 +78,7 @@ function WaveExplorer() {
   const waves = {
     P: {
       name: 'Onda P (Primaria)',
-      color: '#1A1A2E',
+      color: WAVE_COLORS.P,
       speed: '3–8 km/s',
       motion: 'Compresión-dilatación',
       icon: <Zap size={18} />,
@@ -88,7 +89,7 @@ function WaveExplorer() {
     },
     S: {
       name: 'Onda S (Secundaria)',
-      color: '#C4553A',
+      color: WAVE_COLORS.S,
       speed: '2–5 km/s',
       motion: 'Corte transversal',
       icon: <Waves size={18} />,
@@ -99,7 +100,7 @@ function WaveExplorer() {
     },
     Love: {
       name: 'Onda Love',
-      color: '#2D6A4F',
+      color: WAVE_COLORS.Love,
       speed: '2–4.5 km/s',
       motion: 'Cizalla horizontal',
       icon: <TrendingUp size={18} />,
@@ -110,7 +111,7 @@ function WaveExplorer() {
     },
     Rayleigh: {
       name: 'Onda Rayleigh',
-      color: '#C9A227',
+      color: WAVE_COLORS.Rayleigh,
       speed: '1–4 km/s',
       motion: 'Elíptico (rodamiento)',
       icon: <Globe size={18} />,
