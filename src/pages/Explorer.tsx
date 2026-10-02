@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SeismicMap, MapPoint, MapArea } from '../components/explorer/SeismicMap';
 import {
   Database, MapPin, Search, Waves, Flame, Clock, Activity, Radio,
-  X, ChevronLeft, ChevronRight, FileAudio, HelpCircle,
+  X, ChevronLeft, ChevronRight, Upload, HelpCircle,
 } from '../lib/icons';
 import { MseedUpload } from '../components/explorer/MseedUpload';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -607,7 +607,7 @@ export function Explorer({ onLoadRealData }: Props) {
               }`}
             >
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${source === 'upload' ? 'bg-[#1A1A2E] text-white' : 'bg-[#1A1A2E]/10 text-[#1A1A2E]'}`}>
-                <FileAudio size={20} />
+                <Upload size={20} />
               </div>
               <div>
                 <div className="font-bold text-[#1A1A2E] text-sm">Mi archivo MiniSEED</div>
