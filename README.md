@@ -100,7 +100,9 @@ servicios Docker) con **Supabase** de base de datos. Variables de seguridad del
 backend en producción: `APP_ENV=production`, `ALLOWED_ORIGINS` y
 `SUPABASE_SERVICE_ROLE_KEY`. También hay configuración alternativa para
 Render (backend) y Vercel/Netlify (frontend). Guía completa, incluidas las URLs
-de Supabase Auth y Google, en [docs/despliegue.md](docs/despliegue.md).
+de Supabase Auth y Google, en [docs/despliegue.md](docs/despliegue.md). Para pasar
+a las nuevas claves de Supabase (publishable/secret), ver
+[docs/rotacion-claves.md](docs/rotacion-claves.md).
 
 ## Administración (scripts locales)
 
