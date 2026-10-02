@@ -83,9 +83,9 @@ UPDATE profiles SET role = 'admin' WHERE email = 'tu-email@ejemplo.com';
 ## Pruebas
 
 ```bash
-npm run test            # vitest: 21 pruebas (parser QuakeML, PDF, interpretación, Mapa 3D)
+npm run test            # vitest: 57 pruebas (QuakeML, PDF, interpretación, Mapa 3D, derivación de contraseña, csvSafe)
 cd backend
-py -m pytest -q         # pytest: 25 pruebas (geo, tiempos de viaje, síntesis FDM, waveforms, QuakeML)
+py -m pytest -q         # pytest: 69 pruebas (geo, tiempos de viaje, síntesis FDM, waveforms, QuakeML, subida MiniSEED, rate limit)
 npm run typecheck && npm run lint
 ```
 
@@ -129,9 +129,12 @@ py scripts/admin/upload_mseed_storage.py
 ## Documentación
 
 ### Swagger UI (API Backend)
-Con el backend corriendo, abrir:
+Con el backend corriendo en desarrollo, abrir:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
+> En producción (`APP_ENV=production`) `/docs`, `/redoc` y `/openapi.json` quedan
+> deshabilitados por seguridad.
 
 ### Documentación del Frontend (TypeDoc)
 ```bash
@@ -151,13 +154,15 @@ Genera HTML en `docs/backend/`. Abrir `docs/backend/main.html`.
 ```
 ├── backend/                  # API REST (FastAPI + Python)
 │   ├── main.py              # Endpoints de la API + routers
-│   ├── core/                # geo.py, fdm.py (motor FDM 2D NumPy), stations.py
-│   ├── api/                 # travel_times, synthetic, waveforms, quakeml
+│   ├── core/                # config.py (entorno), rate_limit.py, geo.py, fdm.py, stations.py
+│   ├── api/                 # travel_times, synthetic, waveforms, quakeml, mseed_upload, account, feedback
+│   ├── scripts/admin/       # Herramientas locales (service key): reset de contraseña, gestión de cuentas, subida a Storage
 │   ├── tests/               # pytest
 │   ├── process_*.py         # Procesamiento MiniSEED (ObsPy) → public/data
 │   ├── Dockerfile           # Imagen del backend
+│   ├── railway.json         # Config de despliegue en Railway
 │   ├── requirements.txt     # Dependencias Python
-│   └── .env                 # Credenciales Supabase
+│   └── .env                 # Credenciales Supabase (no se versiona)
 ├── src/                     # Frontend (React + TypeScript)
 │   ├── components/          # Componentes reutilizables
 │   │   ├── layout/          # Navbar, Footer
