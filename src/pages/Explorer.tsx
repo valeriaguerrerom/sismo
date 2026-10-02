@@ -297,6 +297,9 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
   const [subtype, setSubtype] = useState('all');
   const [region, setRegion] = useState<string>('all');
   const [minMag, setMinMag] = useState('');
+  // Filtro por estación: al hacer clic en una estación del mapa (tectónico), se
+  // muestran solo los eventos que ESA estación registró. null = sin filtro.
+  const [mapStation, setMapStation] = useState<string | null>(null);
 
   // Selección + waveform
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -395,7 +398,11 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
     setGalerasWave(null);
     setSelectedStation(null);
     setCmWave(null);
-  }, [source, search, subtype, region, minMag]);
+  }, [source, search, subtype, region, minMag, mapStation]);
+
+  // Al cambiar de fuente, limpiar el filtro por estación del mapa (solo aplica
+  // a tectónico).
+  useEffect(() => { setMapStation(null); }, [source]);
 
   // ─── Filtrado ───
   const filteredGaleras = useMemo(() => {
@@ -413,12 +420,14 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
     let c = [...cm];
     if (region !== 'all') c = c.filter(e => e.folder === region);
     if (minMag) { const m = Number(minMag); if (!isNaN(m)) c = c.filter(e => e.magnitude >= m); }
+    // Filtro por estación del mapa: solo eventos registrados por esa estación.
+    if (mapStation) c = c.filter(e => e.stations.some(s => s.station === mapStation));
     if (search) {
       const q = search.toLowerCase();
       c = c.filter(e => e.date.includes(q) || e.stations.some(s => s.station.toLowerCase().includes(q)));
     }
     return c.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-  }, [cm, region, minMag, search]);
+  }, [cm, region, minMag, search, mapStation]);
 
   const activeList = source === 'volcanic' ? filteredGaleras : filteredCM;
   const pageItems = activeList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -455,10 +464,12 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
       lon: s.longitude,
       color: COLOR_TECTONIC,
       station: true,
-      highlighted: recording.has(s.code),
+      highlighted: recording.has(s.code) || mapStation === s.code,
       badge: s.code,
       label: `Estación ${s.code}${s.approx ? ' (ubicación aproximada)' : ''}`,
-      sublabel: recording.has(s.code) ? `${s.name} · registró este evento` : s.name,
+      sublabel: mapStation === s.code
+        ? `${s.name} · mostrando sus eventos (clic para quitar)`
+        : recording.has(s.code) ? `${s.name} · registró este evento` : `${s.name} · clic para ver sus eventos`,
     }));
     // Al abrir un evento, marcar su UBICACIÓN en el mapa. HONESTIDAD: el catálogo
     // no trae el epicentro real; la coordenada es el CENTROIDE de las estaciones
@@ -475,7 +486,7 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
       });
     }
     return pts;
-  }, [source, openCMEvent, stations]);
+  }, [source, openCMEvent, stations, mapStation]);
 
   const mapArea: MapArea | null = source === 'volcanic'
     ? { lat: GALERAS_CRATER.lat, lon: GALERAS_CRATER.lon, radiusMeters: 3000, color: COLOR_VOLCANIC, label: 'Zona de origen de la sismicidad volcánica según el OVSP' }
@@ -531,17 +542,25 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
   }, []);
 
   const handleMapSelect = useCallback((id: string) => {
-    // En volcánico solo hay cráter/estación (informativos). En tectónico, las
-    // estaciones son informativas también: la selección se hace desde la lista.
-    if (id === 'crater' || id.startsWith('station-')) return;
+    // Clic en una ESTACIÓN del mapa (tectónico): filtra los eventos por los que
+    // esa estación registró (toggle: volver a hacer clic lo quita). El cráter
+    // del Galeras es solo informativo.
+    if (id.startsWith('station-')) {
+      if (source === 'tectonic') {
+        const code = id.replace('station-', '');
+        setMapStation(prev => (prev === code ? null : code));
+      }
+      return;
+    }
+    if (id === 'crater') return;
     const idx = filteredGaleras.findIndex(e => e.id === id);
     if (idx >= 0) setPage(Math.floor(idx / PAGE_SIZE) + 1);
     const ev = filteredGaleras.find(e => e.id === id);
     if (ev) loadGalerasWave(ev);
-  }, [filteredGaleras, loadGalerasWave]);
+  }, [filteredGaleras, loadGalerasWave, source]);
 
-  const clearFilters = () => { setSearch(''); setSubtype('all'); setRegion('all'); setMinMag(''); };
-  const hasFilters = search || subtype !== 'all' || region !== 'all' || minMag;
+  const clearFilters = () => { setSearch(''); setSubtype('all'); setRegion('all'); setMinMag(''); setMapStation(null); };
+  const hasFilters = search || subtype !== 'all' || region !== 'all' || minMag || mapStation;
 
   // ─── Conteos por subtipo (para chips). "Sin clasificar" = sin subtipo. ───
   const subtypeCounts = useMemo(() => {
@@ -697,6 +716,21 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
             <button onClick={clearFilters} className="flex items-center gap-1 text-[11px] font-semibold text-stone-400 hover:text-[#C4553A] px-2 py-2">
               <X size={12} /> Limpiar
             </button>
+          )}
+
+          {/* Chip del filtro por estación (clic en el mapa). Ocupa toda la fila. */}
+          {source === 'tectonic' && mapStation && (
+            <div className="w-full flex items-center gap-2 mt-1">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#2D6A4F] bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-full px-2.5 py-1">
+                <MapPin size={12} /> Eventos registrados por {mapStation}
+                <button onClick={() => setMapStation(null)} aria-label="Quitar filtro de estación" className="hover:text-[#C4553A]"><X size={12} /></button>
+              </span>
+              <span className="text-[11px] text-stone-400">Haz clic en otra estación del mapa para cambiarla.</span>
+            </div>
+          )}
+          {/* Pista: en tectónico el mapa es interactivo. */}
+          {source === 'tectonic' && !mapStation && (
+            <span className="w-full text-[11px] text-stone-400 mt-0.5">Tip: haz clic en una estación del mapa para ver solo sus eventos.</span>
           )}
         </div>
         )}

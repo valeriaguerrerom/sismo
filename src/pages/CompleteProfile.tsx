@@ -24,7 +24,7 @@ export function CompleteProfile({ onDone }: Props) {
     institution: user?.institution ?? '',
     occupation: user?.occupation ?? '',
     researchArea: user?.research_area ?? '',
-    city: user?.city ?? '',
+    city: user?.city || 'Pasto',
     country: user?.country || 'Colombia',
     usagePurpose: user?.usage_purpose ?? '',
   });

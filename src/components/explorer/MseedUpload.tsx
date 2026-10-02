@@ -445,6 +445,11 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
                 : 'Lo elegiste manualmente. El archivo MiniSEED no indica el tipo de sismo; es tu decisión de modelado.'}
             </span>
           )}
+          <span className="block text-[10px] text-stone-400 mt-1 leading-snug">
+            Esto NO cambia tu registro real: solo define cómo lo recreará el
+            Simulador después (el mecanismo de la fuente y las velocidades del
+            medio). Tu grabación se mantiene igual.
+          </span>
         </label>
 
         <button

@@ -106,7 +106,7 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
   ctx.fillRect(0, 0, W, H);
 
   // Márgenes (dejan sitio a los ejes y etiquetas ≥12px).
-  const mL = 74 * scale, mR = 18 * scale, mT = 30 * scale, mB = 58 * scale;
+  const mL = 74 * scale, mR = 18 * scale, mT = 40 * scale, mB = 58 * scale;
   const availW = W - mL - mR, availH = H - mT - mB;
   // Proporción real: misma escala km/px en ambos ejes.
   const kmPerPx = Math.max(domainWkm / availW, domainHkm / availH);
@@ -178,9 +178,21 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
       ctx.strokeText(text, lx, ly);
       ctx.fillStyle = '#1A1A2E'; ctx.fillText(text, lx, ly);
     };
-    // "Capa superficial" arriba de la línea (si hay hueco) y "roca" debajo.
-    drawHalo(topName, x0 + plotW - 4 * scale - ctx.measureText(topName).width, iy - 4 * scale);
-    drawHalo(botName, x0 + plotW - 4 * scale - ctx.measureText(botName).width, iy + fs(12) + 2 * scale);
+    // Posición X: alineadas a la derecha del dominio.
+    const topX = x0 + plotW - 4 * scale - ctx.measureText(topName).width;
+    const botX = x0 + plotW - 4 * scale - ctx.measureText(botName).width;
+    // Si la capa superficial es MUY DELGADA, no cabe el rótulo encima de la
+    // línea sin salirse por arriba del dominio (chocaba con "Superficie libre"
+    // y "Estación"). En ese caso se ponen AMBOS rótulos DEBAJO de la línea,
+    // apilados; si hay hueco arriba, el superficial va encima como antes.
+    const room = iy - y0 > fs(12) + 6 * scale;
+    if (room) {
+      drawHalo(topName, topX, iy - 4 * scale);
+      drawHalo(botName, botX, iy + fs(12) + 2 * scale);
+    } else {
+      drawHalo(topName, topX, iy + fs(12) + 2 * scale);
+      drawHalo(botName, botX, iy + 2 * fs(12) + 6 * scale);
+    }
     ctx.restore();
   }
 

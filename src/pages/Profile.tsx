@@ -5,10 +5,10 @@
  * texto) con modo edición en el sitio, además de secciones de Seguridad,
  * Privacidad y eliminación permanente de la cuenta. Solo esta página.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ShieldCheck, Pencil, Check, X, Lock, Trash2, AlertTriangle, ArrowRight,
-  Calendar, Mail, Eye, EyeSlash, UserX,
+  Calendar, Mail, Eye, EyeSlash, UserX, Image as ImageIcon,
 } from '../lib/icons';
 import { useAuth } from '../lib/authContext';
 import { ROLE_LABELS } from '../lib/authTypes';
@@ -32,6 +32,37 @@ function initials(name: string, email: string): string {
   const parts = base.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return base.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Lee un archivo de imagen y lo convierte en un data URL JPEG cuadrado de
+ * `size` px (recorte centrado). Mantiene la foto ligera para guardarla como
+ * texto en la columna `avatar` de `profiles` sin usar Supabase Storage.
+ */
+function fileToAvatarDataUrl(file: File, size = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onerror = () => reject(new Error('El archivo no es una imagen válida.'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('No se pudo procesar la imagen.')); return; }
+        // Recorte centrado al cuadrado más grande posible.
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Fecha ISO -> "mes de año" en español (p. ej. "marzo de 2026"). */
@@ -61,7 +92,11 @@ function ReadField({ label, value }: { label: string; value: string }) {
 }
 
 export function Profile({ onDeleted, onDeactivated }: Props) {
-  const { user, updateProfile, updatePassword, deactivateOwnAccount } = useAuth();
+  const { user, updateProfile, updateAvatar, updatePassword, deactivateOwnAccount } = useAuth();
+
+  // Foto de perfil
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<ResearcherSignUp>(blankForm());
@@ -94,7 +129,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
       institution: user?.institution ?? '',
       occupation: user?.occupation ?? '',
       researchArea: user?.research_area ?? '',
-      city: user?.city ?? '',
+      city: user?.city || 'Pasto',
       country: user?.country || 'Colombia',
       usagePurpose: user?.usage_purpose ?? '',
     };
@@ -107,6 +142,41 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
 
   const startEdit = () => { setForm(blankForm()); setError(''); setToast(''); setEditing(true); };
   const cancelEdit = () => { setEditing(false); setError(''); };
+
+  /** El usuario eligió un archivo: redimensiona y lo guarda como avatar. */
+  const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Elige un archivo de imagen (JPG o PNG).'); return; }
+    setError('');
+    setAvatarBusy(true);
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file);
+      const err = await updateAvatar(dataUrl);
+      if (err) { setError(err); return; }
+      setToast('Foto de perfil actualizada');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo procesar la imagen.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  /** Quita la foto de perfil (vuelve a las iniciales). */
+  const removeAvatar = async () => {
+    setError('');
+    setAvatarBusy(true);
+    try {
+      const err = await updateAvatar(null);
+      if (err) { setError(err); return; }
+      setToast('Foto de perfil eliminada');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,11 +254,39 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
 
         {/* ── Tarjeta de identidad ── */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5 flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-black flex-shrink-0"
-            style={{ backgroundColor: C.ink, color: C.cream }}
-          >
-            {initials(user.full_name, user.email)}
+          <div className="relative shrink-0">
+            {user.avatar ? (
+              <img
+                src={user.avatar}
+                alt="Foto de perfil"
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-black"
+                style={{ backgroundColor: C.ink, color: C.cream }}
+              >
+                {initials(user.full_name, user.email)}
+              </div>
+            )}
+            {/* Botón de cámara superpuesto para cambiar la foto. */}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={avatarBusy}
+              title={user.avatar ? 'Cambiar foto' : 'Agregar foto'}
+              aria-label={user.avatar ? 'Cambiar foto de perfil' : 'Agregar foto de perfil'}
+              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#C4553A] text-white flex items-center justify-center border-2 border-white shadow disabled:opacity-50 hover:bg-[#a8482f] transition-colors"
+            >
+              <ImageIcon size={13} />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={onPickAvatar}
+              className="hidden"
+            />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-black truncate" style={{ color: C.ink }}>
@@ -198,12 +296,22 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               <Mail size={13} /> {user.email}
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2D6A4F] bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-full px-2.5 py-1">
-                <ShieldCheck size={12} /> {ROLE_LABELS[user.role]}
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2D6A4F] bg-[#2D6A4F]/10 border border-[#2D6A4F]/20 rounded-full px-2.5 py-1 whitespace-nowrap">
+                <ShieldCheck size={12} className="shrink-0" /> {ROLE_LABELS[user.role]}
               </span>
-              <span className="inline-flex items-center gap-1.5 text-xs text-stone-400">
-                <Calendar size={12} /> Usuaria desde {monthYear(user.created_at)}
+              <span className="inline-flex items-center gap-1.5 text-xs text-stone-400 whitespace-nowrap">
+                <Calendar size={12} className="shrink-0" /> Usuaria desde {monthYear(user.created_at)}
               </span>
+              {user.avatar && (
+                <button
+                  type="button"
+                  onClick={removeAvatar}
+                  disabled={avatarBusy}
+                  className="inline-flex items-center gap-1 text-xs text-stone-400 hover:text-[#C4553A] disabled:opacity-50 transition-colors whitespace-nowrap"
+                >
+                  <Trash2 size={12} className="shrink-0" /> Quitar foto
+                </button>
+              )}
             </div>
           </div>
         </div>

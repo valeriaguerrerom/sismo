@@ -107,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           provider,
           created_at: authUser.created_at ?? null,
           data_authorization_at: null,
+          avatar: null,
         };
       });
     };
@@ -118,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await withTimeout(
         supabase
           .from('profiles')
-          .select('id, email, full_name, role, institution, active, occupation, research_area, city, country, usage_purpose, tours_vistos, created_at, data_authorization_at, deactivated_by')
+          .select('id, email, full_name, role, institution, active, occupation, research_area, city, country, usage_purpose, tours_vistos, created_at, data_authorization_at, deactivated_by, avatar')
           .eq('id', authUser.id)
           .maybeSingle(),
         8000, 'perfil',
@@ -138,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         research_area: string | null; city: string | null; country: string | null;
         usage_purpose: string | null; tours_vistos: Record<string, number | boolean> | null;
         created_at: string | null; data_authorization_at: string | null;
-        deactivated_by: string | null;
+        deactivated_by: string | null; avatar: string | null;
       };
       // Cuenta desactivada (RF-05): no se entra a la plataforma.
       if (p.active === false) {
@@ -172,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         provider,
         created_at: p.created_at ?? authUser.created_at ?? null,
         data_authorization_at: p.data_authorization_at ?? null,
+        avatar: p.avatar ?? null,
       });
       // Registrar último acceso (RF-22). No bloquea la UI si falla.
       supabase.rpc('touch_last_login').then(() => { /* best-effort, sin log */ });
@@ -359,6 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         provider: prev?.provider ?? 'email',
         created_at: (saved.created_at as string) ?? prev?.created_at ?? null,
         data_authorization_at: (saved.data_authorization_at as string) ?? prev?.data_authorization_at ?? null,
+        avatar: (saved.avatar as string) ?? prev?.avatar ?? null,
       }));
 
       // Refresco en segundo plano (best-effort); no bloquea ni cuelga la UI.
@@ -509,6 +512,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Guarda (o quita, con `null`) la foto de perfil del usuario actual.
+   * El valor es un data URL ya redimensionado por la UI; aquí solo se
+   * persiste en la columna `avatar` de `profiles` y se refleja en memoria.
+   */
+  const updateAvatar = useCallback(async (dataUrl: string | null): Promise<string | null> => {
+    if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    try {
+      const { data: sess } = await withTimeout(supabase.auth.getSession(), 8000, 'sesión');
+      const authUser = sess.session?.user;
+      if (!authUser) return 'No hay una sesión activa. Vuelve a iniciar sesión.';
+      const { error } = await withTimeout(
+        supabase.from('profiles').update({ avatar: dataUrl }).eq('id', authUser.id),
+        12000, 'guardado de foto',
+      );
+      if (error) return translateError(error.message);
+      // Reflejar en memoria sin re-consultar (desbloquea la UI al instante).
+      setUser(prev => (prev ? { ...prev, avatar: dataUrl } : prev));
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'No se pudo guardar la foto. Revisa tu conexión.';
+    }
+  }, []);
+
   const clearRecovery = useCallback(() => setRecoveryMode(false), []);
 
   const markTourSeen = useCallback((module: string, version = 1) => {
@@ -532,7 +559,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, blockedMessage, deactivatedInfo, reactivateOwnAccount, deactivateOwnAccount, recoveryMode, signUp, signIn, signInWithGoogle, signOut, updateProfile, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
+    <AuthContext.Provider value={{ user, loading, blockedMessage, deactivatedInfo, reactivateOwnAccount, deactivateOwnAccount, recoveryMode, signUp, signIn, signInWithGoogle, signOut, updateProfile, updateAvatar, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
       {children}
     </AuthContext.Provider>
   );

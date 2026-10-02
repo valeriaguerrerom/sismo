@@ -32,6 +32,11 @@ export interface AuthContextType {
    * (para cuentas de Google que aceptan al completar el perfil).
    */
   updateProfile: (data: ResearcherSignUp, recordConsent?: boolean) => Promise<string | null>;
+  /**
+   * Guarda o quita (con `null`) la foto de perfil. Recibe un data URL ya
+   * redimensionado; se persiste en la columna `avatar` de `profiles`.
+   */
+  updateAvatar: (dataUrl: string | null) => Promise<string | null>;
   /** Envía el correo con el enlace para restablecer la contraseña. */
   sendPasswordReset: (email: string) => Promise<string | null>;
   /**
@@ -60,6 +65,7 @@ export const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => 'Auth no disponible',
   signOut: async () => {},
   updateProfile: async () => 'Auth no disponible',
+  updateAvatar: async () => 'Auth no disponible',
   sendPasswordReset: async () => 'Auth no disponible',
   updatePassword: async () => 'Auth no disponible',
   clearRecovery: () => {},

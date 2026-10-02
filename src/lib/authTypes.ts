@@ -54,6 +54,12 @@ export interface UserProfile {
   created_at: string | null;
   /** Fecha de autorización del tratamiento de datos (ISO) o null. */
   data_authorization_at: string | null;
+  /**
+   * Foto de perfil como data URL (JPEG redimensionado a ~128 px) o null.
+   * Se guarda en la columna `avatar` de `profiles` para no depender de
+   * Supabase Storage.
+   */
+  avatar: string | null;
 }
 
 /** Un perfil está completo cuando tiene institución y ocupación. */
