@@ -11,7 +11,7 @@
  *
  * @module map3d/Scene3D
  */
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
@@ -109,6 +109,10 @@ export function Scene3D({
   // Vista de cámara activa (para saber si estamos en "Corte" y mostrar el
   // frente de onda dentro del bloque). Se actualiza con cada viewCommand.
   const viewRef = useRef<'north' | 'cut' | 'top' | 'fit'>('fit');
+
+  // Contador que se incrementa cuando el terreno termina de construirse, para
+  // re-anclar las etiquetas de capa a la arista frontal REAL (no al fallback).
+  const [terrainReady, setTerrainReady] = useState(0);
 
   // El usuario puede arrastrar el mini globo para rotarlo (pausa el giro auto).
   const globeUserRotating = useRef(false);
@@ -217,6 +221,7 @@ export function Scene3D({
       }
       terrain = buildTerrainBlock(scene, null, hillshade, geo.coast, geo.border, heightData, terrainSeg.current, ring);
       terrainRef.current = terrain;
+      setTerrainReady(r => r + 1); // dispara el reanclado de etiquetas de capa a la arista real
       scene.remove(placeholder);
       placeholderGeo.dispose();
       placeholderMat.dispose();
@@ -571,7 +576,9 @@ export function Scene3D({
           if (!mesh) return;
           const mat = mesh.material as THREE.MeshBasicMaterial;
           const label = mesh.children.find(c => (c as CSS2DObject).element) as CSS2DObject | undefined;
-          const el = label?.element as HTMLElement | undefined;
+          // El texto/estilo vive en el <span> INTERNO (ver creación de la
+          // etiqueta): el externo lo controla el CSS2DRenderer.
+          const el = (label?.element as HTMLElement | undefined)?.firstElementChild as HTMLElement | undefined;
 
           // Detectar el instante de arribo P y S para disparar destello.
           const key = tt.code;
@@ -636,7 +643,10 @@ export function Scene3D({
 
       const addLabel = (obj: THREE.Object3D, anchor: THREE.Vector3, yOffsetScene: number) => {
         const css = obj as CSS2DObject;
-        const el = css.element as HTMLElement | undefined;
+        const outerEl = css.element as HTMLElement | undefined;
+        // El elemento que movemos es el <span> INTERNO (el externo lo reposiciona
+        // el CSS2DRenderer cada cuadro y pisaría nuestro translateY).
+        const el = outerEl?.firstElementChild as HTMLElement | undefined;
         if (!el) return;
         const world = anchor.clone();
         const dist = world.distanceTo(camPos);
@@ -690,10 +700,11 @@ export function Scene3D({
         }
         b.y = y;
         const dyPx = Math.round(y - b.ay);
-        b.el.style.transform = `translate(-50%, -50%) translateY(${dyPx}px)`;
-        // Al desplazarse hacia arriba, un pequeño borde punteado da pista visual
-        // de que la etiqueta se movió de su ancla.
-        b.el.style.opacity = dyPx !== 0 ? '0.92' : '1';
+        // Se mueve el <span> INTERNO (no el externo que controla el CSS2DRenderer).
+        // Solo un translateY vertical; sin translate(-50%,-50%) porque el inner
+        // es inline-block dentro del externo ya centrado por el renderer.
+        b.el.style.transform = dyPx !== 0 ? `translateY(${dyPx}px)` : '';
+        b.el.style.opacity = dyPx !== 0 ? '0.95' : '1';
         placed.push(b);
       }
 
@@ -865,24 +876,34 @@ export function Scene3D({
 
       // Etiqueta CSS2D anclada al cono. El sufijo "~" marca ubicación aproximada;
       // "↗ XX km" indica que la estación real está fuera de Nariño (en el borde).
-      const div = document.createElement('div');
+      //
+      // ESTRUCTURA EN DOS CAPAS (clave para la anticolisión): el CSS2DRenderer
+      // reescribe el `transform` del elemento EXTERNO en cada cuadro con la
+      // posición proyectada. Si la anticolisión escribiera ahí, se perdería. Por
+      // eso el externo es un contenedor "tonto" (sin estilo) y TODO el estilo +
+      // el texto van en un `<span>` INTERNO; la anticolisión mueve el interno
+      // con translateY, que el CSS2DRenderer no toca.
+      const outer = document.createElement('div');
+      outer.style.cssText = 'display:inline-block;'; // envuelve ajustado al inner
+      const inner = document.createElement('span');
       const outsideTag = outside ? ` ↗ ${outsideKm.toFixed(0)} km` : '';
       const baseLabel = (approx ? `${station.code} ~` : station.code) + outsideTag;
-      div.textContent = baseLabel;
+      inner.textContent = baseLabel;
       // Guardamos el texto base para que el loop de animación lo reutilice al
       // añadir/quitar el tiempo de arribo (evita duplicar el código, p. ej. "TU").
-      div.dataset.baseLabel = baseLabel;
-      div.title = `${station.name}\nlat ${station.latitude}, lon ${station.longitude}` +
+      inner.dataset.baseLabel = baseLabel;
+      outer.title = `${station.name}\nlat ${station.latitude}, lon ${station.longitude}` +
         (station.altitude_m != null ? `, alt ${station.altitude_m} m` : '') +
         `\nFuente: ${station.source}` +
         (approx ? '\nUbicación aproximada (casco urbano del municipio)' : '') +
         (outside ? `\nFuera del departamento de Nariño; se muestra en el borde, a ~${outsideKm.toFixed(0)} km de su ubicación real` : '');
-      div.style.cssText = "font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffd9d9;" +
+      inner.style.cssText = "display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffd9d9;" +
         'text-shadow:0 0 3px #000,0 0 4px #000;' +
         'background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;' +
-        'pointer-events:auto;cursor:help;transition:opacity 0.15s;' +
+        'pointer-events:auto;cursor:help;transition:opacity 0.15s,transform 0.12s;' +
         (approx || outside ? 'border:1px dashed rgba(255,200,200,0.6);' : '');
-      const label = new CSS2DObject(div);
+      outer.appendChild(inner);
+      const label = new CSS2DObject(outer);
       label.position.set(0, LABEL_Y, 0);
       mesh.add(label);
 
@@ -944,8 +965,11 @@ export function Scene3D({
 
     // Etiqueta de profundidad del hipocentro
     const hdiv = document.createElement('div');
-    hdiv.textContent = `Hipocentro, ${epicenter.depthKm} km`;
-    hdiv.style.cssText = "font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;";
+    hdiv.style.cssText = 'display:inline-block;';
+    const hInner = document.createElement('span');
+    hInner.textContent = `Hipocentro, ${epicenter.depthKm} km`;
+    hInner.style.cssText = "display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;transition:transform 0.12s;";
+    hdiv.appendChild(hInner);
     const hlabel = new CSS2DObject(hdiv);
     hlabel.position.set(ex, ey - 0.7, ez);
     st.hypoGroup.add(hlabel);
@@ -987,37 +1011,34 @@ export function Scene3D({
     group.children.slice().forEach(c => group.remove(c));
 
     const isIasp = model === 'iasp91';
-    // Cara −X del bloque (lado izquierdo), un poco afuera, para no tapar el relieve.
-    const faceX = -BLOCK.width / 2 - 0.3;
+    // Las etiquetas de capa se anclan a la ARISTA FRONTAL REAL del bloque (la
+    // misma del eje de profundidad), para quedar PEGADAS a una cara visible y
+    // NO flotar fuera de la silueta. Un pequeño desplazamiento en +X separa el
+    // texto del número de profundidad del eje. La NOTA del modelo homogéneo NO
+    // va en la escena (se muestra como texto fijo en una esquina del visor, en
+    // Map3D) para no encimarse con "Manto superior".
+    const edge = terrainRef.current?.frontEdge ?? { x: 0, z: BLOCK.depthXY / 2 };
     for (const layer of SUBSURFACE_LAYERS) {
       const yMid = (depthToY(layer.from) + depthToY(layer.to)) / 2;
       const div = document.createElement('div');
-      div.textContent = isIasp ? `${layer.name}, Vp ${layer.vp.toFixed(1)} km/s` : layer.name;
-      const color = isIasp ? '#d4dde8' : '#64748b';
+      div.style.cssText = 'display:inline-block;';
+      const span = document.createElement('span');
+      span.textContent = isIasp ? `${layer.name}, Vp ${layer.vp.toFixed(1)} km/s` : layer.name;
+      const color = isIasp ? '#e2e8f0' : '#94a3b8';
       const weight = isIasp ? 600 : 500;
-      const opacity = isIasp ? 1 : 0.5;
-      div.style.cssText =
-        `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:${weight};` +
+      const opacity = isIasp ? 1 : 0.55;
+      span.style.cssText =
+        `display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:${weight};` +
         `color:${color};opacity:${opacity};text-shadow:0 0 3px #000,0 0 4px #000;` +
-        'background:rgba(10,14,26,0.6);padding:1px 5px;border-radius:3px;white-space:nowrap;';
+        'background:rgba(10,14,26,0.66);padding:1px 5px;border-radius:3px;white-space:nowrap;';
+      div.appendChild(span);
       const label = new CSS2DObject(div);
-      label.position.set(faceX, yMid, 0);
+      // Pegada a la arista frontal, a la altura media de su capa, ligeramente
+      // adentro (−Z) para que se vea sobre la cara del bloque.
+      label.position.set(edge.x, yMid, edge.z - 0.6);
       group.add(label);
     }
-
-    // Nota del modelo homogéneo: todo el subsuelo con la misma velocidad.
-    if (!isIasp) {
-      const note = document.createElement('div');
-      note.textContent = 'En este modelo todo el subsuelo tiene la misma velocidad';
-      note.style.cssText =
-        "font-family:'Inter',system-ui,sans-serif;font-size:10px;font-weight:500;" +
-        'color:#94a3b8;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.6);' +
-        'padding:1px 6px;border-radius:3px;white-space:nowrap;max-width:220px;';
-      const label = new CSS2DObject(note);
-      label.position.set(faceX, depthToY(110), 0);
-      group.add(label);
-    }
-  }, [model]);
+  }, [model, terrainReady]);
 
   // ── Plano de corte + rayo (epicentro → estación seleccionada) ──
   useEffect(() => {
@@ -1069,8 +1090,11 @@ export function Scene3D({
       const mid = pts[Math.floor(pts.length / 2)];
       const dHypo = Math.hypot(rayPath?.distancia_epicentral_km ?? horiz, epicenter.depthKm);
       const rdiv = document.createElement('div');
-      rdiv.textContent = `${isCurved ? 'Rayo P (IASP91)' : 'Rayo directo'}, ${dHypo.toFixed(0)} km`;
-      rdiv.style.cssText = `font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;`;
+      rdiv.style.cssText = 'display:inline-block;';
+      const rInner = document.createElement('span');
+      rInner.textContent = `${isCurved ? 'Rayo P (IASP91)' : 'Rayo directo'}, ${dHypo.toFixed(0)} km`;
+      rInner.style.cssText = `display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:${isCurved ? '#66ff99' : '#ffcc44'};text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;transition:transform 0.12s;`;
+      rdiv.appendChild(rInner);
       const rlabel = new CSS2DObject(rdiv);
       rlabel.position.copy(mid);
       group.add(rlabel);

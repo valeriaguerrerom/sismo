@@ -36,6 +36,12 @@ export interface TerrainHandle {
    * Para el bloque rectangular devuelve el mismo punto con distancia 0.
    */
   nearestBorder: (x: number, z: number) => { x: number; z: number; dist: number };
+  /**
+   * Arista frontal del bloque (punto del anillo más cercano a la cámara por
+   * defecto), donde va el eje de profundidad. Las etiquetas de capa se anclan
+   * aquí para quedar PEGADAS a una cara real del bloque, no flotando fuera.
+   */
+  frontEdge: { x: number; z: number };
   dispose: () => void;
 }
 
@@ -264,6 +270,8 @@ export function buildTerrainBlock(
     // Bloque rectangular: todo el dominio es "terreno", nada queda fuera.
     isInside: () => true,
     nearestBorder: (x: number, z: number) => ({ x, z, dist: 0 }),
+    // Bloque rectangular: arista frontal = borde +Z central.
+    frontEdge: { x: 0, z: BLOCK.depthXY / 2 },
     dispose: () => {
       disposables.forEach(d => d.dispose());
       scene.remove(group);
@@ -506,11 +514,19 @@ function buildSilhouetteBlock(
   drawGeoLines(clipLinesToRing(coast), 0x66ccff, 0.06);
   drawGeoLines(clipLinesToRing(border), 0xffdd88, 0.05);
 
-  // ── Eje de profundidad en la ARISTA FRONTAL del bloque ──
-  // Arista frontal = punto del anillo con mayor Z de escena (más al frente
-  // hacia la cámara por defecto), lejos del reparto de estaciones.
+  // ── Eje de profundidad en la ARISTA FRONTAL-IZQUIERDA del bloque ──
+  // Entre los vértices que están al FRENTE (cerca del borde sur, z alto), se
+  // elige el de X más a la IZQUIERDA (oeste). Así los números de profundidad
+  // quedan abajo-izquierda y NUNCA bajo la leyenda (abajo-derecha).
+  const zMax = Math.max(...ringXZ.map(([, z]) => z));
+  const zMin = Math.min(...ringXZ.map(([, z]) => z));
+  const frontThreshold = zMin + (zMax - zMin) * 0.6; // mitad delantera
   let frontIdx = 0;
-  for (let i = 1; i < ringXZ.length; i++) if (ringXZ[i][1] > ringXZ[frontIdx][1]) frontIdx = i;
+  let bestX = Infinity;
+  for (let i = 0; i < ringXZ.length; i++) {
+    const [x, z] = ringXZ[i];
+    if (z >= frontThreshold && x < bestX) { bestX = x; frontIdx = i; }
+  }
   const [axX, axZ] = ringXZ[frontIdx];
   // El 0 km coincide con la superficie real del terreno en ese punto.
   const surfY0 = sampleHeightAt(axX, axZ);
@@ -555,6 +571,7 @@ function buildSilhouetteBlock(
     setTopView: (isTop: boolean) => { axisGroupInner.visible = !isTop; },
     isInside: (x: number, z: number) => pointInRing(x, z, ringXZ),
     nearestBorder: (x: number, z: number) => nearestPointOnRing(x, z, ringXZ),
+    frontEdge: { x: axX, z: axZ },
     dispose: () => {
       disposables.forEach(d => d.dispose());
       // Eliminar del DOM los elementos de las etiquetas CSS2D (eje de

@@ -42,8 +42,11 @@ const COLOR_P = WAVE_COLORS.P;
 const COLOR_S = WAVE_COLORS.S;
 const TRACE_HALF_WIDTH = 26; // px a cada lado del eje de la traza
 const LABEL_FONT = "'Inter', system-ui, sans-serif";
-// Reserva inferior para las dos líneas de etiqueta (estación + distancia).
-const LABEL_FOOTER = 34;
+// Reserva inferior para las etiquetas: dos líneas horizontales (código +
+// distancia) necesitan ~34 px; si se rotan 45° necesitan más alto para no
+// cortarse. Se elige según `rotateLabels`.
+const LABEL_FOOTER_FLAT = 34;
+const LABEL_FOOTER_ROT = 64;
 const PAD_TOP = 22;
 
 /**
@@ -75,23 +78,25 @@ export function RecordSection({
   }, []);
 
   const { width, height } = size;
+
+  // Separación entre columnas (depende solo de width y nº de estaciones). Si es
+  // pequeña, las etiquetas del pie no caben en horizontal y se rotan 45°, lo
+  // que exige RESERVAR más alto abajo para que no se corten.
+  const nStations = stations.length;
+  const padX = 40;
+  const colGap = nStations > 1 ? (width - 2 * padX) / (nStations - 1) : width;
+  const rotateLabels = colGap < 56;
+  const LABEL_FOOTER = rotateLabels ? LABEL_FOOTER_ROT : LABEL_FOOTER_FLAT;
+
   const layout = useMemo(
     () => computeRecordLayout(stations, { width, height: height - LABEL_FOOTER + 20, maxTime, paddingTop: PAD_TOP }),
-    [stations, width, height, maxTime],
+    [stations, width, height, maxTime, LABEL_FOOTER],
   );
 
   // Escala de tiempo: desde PAD_TOP hasta justo encima del pie de etiquetas.
   const axisBottom = height - LABEL_FOOTER;
   const tScale = maxTime > 0 ? (axisBottom - PAD_TOP) / maxTime : 0;
   const yNow = PAD_TOP + elapsed * tScale;
-
-  // Si las columnas quedan muy juntas, las etiquetas del pie (código y
-  // distancia) no caben en horizontal y se rotan 45° para no tocarse. El ancho
-  // mínimo para una etiqueta horizontal como "CPOP2 / 156 km" ronda los 56 px.
-  const colGap = layout.length > 1
-    ? Math.abs(layout[1].x - layout[0].x)
-    : width;
-  const rotateLabels = colGap < 56;
 
   /** Construye la polilínea de la forma de onda vertical de una estación. */
   function buildWavePath(code: string, x: number): string | null {
@@ -225,23 +230,20 @@ export function RecordSection({
                 </circle>
               )}
 
-              {/* Etiqueta de estación (línea 1) y distancia (línea 2), centradas
-                  bajo la traza. Si las columnas están muy juntas (poco ancho por
-                  traza), se rotan 45° para que nunca se toquen. */}
+              {/* Pie de cada traza: código (línea 1) y distancia (línea 2). Si
+                  las columnas están muy juntas se rotan 45° (hay reserva de
+                  LABEL_FOOTER_ROT px abajo para que no se corten). */}
               {rotateLabels ? (
-                <text
-                  x={tr.x} y={height - 20}
-                  fontSize={11} fill={isSel ? '#e2e8f0' : '#cbd5e1'}
-                  textAnchor="end"
-                  transform={`rotate(-45 ${tr.x} ${height - 20})`}
-                >
-                  <tspan fontWeight={isSel ? 700 : 600}>{tr.code}</tspan>
-                  <tspan fill="#94a3b8"> · {tr.distancia_km.toFixed(0)} km</tspan>
-                </text>
+                // Rotado: dos textos cortos, uno sobre otro, anclados por su
+                // extremo derecho en el eje de la traza, girados −45°.
+                <g transform={`rotate(-45 ${tr.x} ${axisBottom + 8})`}>
+                  <text x={tr.x} y={axisBottom + 8} fontSize={11} fontWeight={isSel ? 700 : 600} fill={isSel ? '#e2e8f0' : '#cbd5e1'} textAnchor="end">{tr.code}</text>
+                  <text x={tr.x} y={axisBottom + 20} fontSize={10} fill="#94a3b8" textAnchor="end">{tr.distancia_km.toFixed(0)} km</text>
+                </g>
               ) : (
                 <>
-                  <text x={tr.x} y={height - 16} fontSize={11} fontWeight={isSel ? 700 : 600} fill={isSel ? '#e2e8f0' : '#cbd5e1'} textAnchor="middle">{tr.code}</text>
-                  <text x={tr.x} y={height - 3} fontSize={11} fill="#94a3b8" textAnchor="middle">{tr.distancia_km.toFixed(0)} km</text>
+                  <text x={tr.x} y={axisBottom + 15} fontSize={11} fontWeight={isSel ? 700 : 600} fill={isSel ? '#e2e8f0' : '#cbd5e1'} textAnchor="middle">{tr.code}</text>
+                  <text x={tr.x} y={axisBottom + 28} fontSize={11} fill="#94a3b8" textAnchor="middle">{tr.distancia_km.toFixed(0)} km</text>
                 </>
               )}
             </g>

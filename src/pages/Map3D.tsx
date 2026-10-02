@@ -904,6 +904,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               ? 'Haz clic en el terreno para colocar el epicentro'
               : 'Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación'}
           </div>
+          {/* Nota del modelo homogéneo: texto FIJO en una esquina del visor (no
+              dentro de la escena 3D, para no encimarse con las etiquetas de capa). */}
+          {model === 'homogeneous' && (
+            <div className="absolute top-10 left-2 z-10 max-w-[220px] text-[10px] leading-snug text-stone-300 bg-black/45 rounded px-2 py-1">
+              En este modelo todo el subsuelo tiene la misma velocidad.
+            </div>
+          )}
           {/* Aviso cuando hay un MiniSEED subido asociado a una estación: su traza
               es dato real, pero el epicentro es un supuesto del usuario. */}
           {uploadedStation && (
@@ -912,8 +919,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               <b> epicentro que coloques es un supuesto</b> para ver la propagación.
             </div>
           )}
-          {/* Botones de vista de cámara */}
-          <div data-tour="m3d-vistas" className="absolute bottom-3 left-3 z-10 flex gap-1.5">
+          {/* Botones de vista de cámara (arriba al centro, para dejar la
+              esquina inferior izquierda libre al eje de profundidad del bloque). */}
+          <div data-tour="m3d-vistas" className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
             {([
               ['north', 'Norte', 'Mira el bloque de frente, desde el norte (ves la superficie y la profundidad).'],
               ['cut', 'Corte', 'Corte vertical hacia la estación seleccionada: muestra cómo baja la onda con la profundidad.'],
