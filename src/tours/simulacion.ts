@@ -20,8 +20,12 @@ import type { TourStep } from './useTour';
  * resaltar la SECCIÓN COMPLETA (tarjeta con su contenido).
  * v7: cada paso de resultados resalta su pestaña (Sismogramas/Mapa/Partícula) y
  * cambia a ella; el tour de resultados se dispara tras la primera simulación.
+ * v8: (sin nota)
+ * v9: el primer paso ("Propiedades del subsuelo") resalta el ENCABEZADO de la
+ * sección en vez de la sección completa, porque esa sección es la más alta y el
+ * recuadro no cabía en la ventana (el popover quedaba desconectado del foco).
  */
-export const SIMULACION_TOUR_VERSION = 8;
+export const SIMULACION_TOUR_VERSION = 9;
 
 /** Secciones de acordeón que el tour puede forzar a abrir. */
 export type ParamSectionId = 'elasticas' | 'fuente' | 'config';
@@ -53,8 +57,12 @@ export function buildSimulacionSteps({ openParam, openResult, showView, hasResul
   const steps: TourStep[] = resultsOnly ? [] : [
     {
       // Se empieza por "Variables elásticas", que es la sección abierta por
-      // defecto: así el primer paso ya coincide sin tener que abrir otra.
-      element: '[data-tour="params-elasticas"]',
+      // defecto. Esta sección es la MÁS ALTA (incluye subsuelo + capa), así que
+      // al resaltarla completa el recuadro no cabía en la ventana y el popover
+      // quedaba desconectado. Por eso este paso (y solo este) resalta el
+      // ENCABEZADO de la sección (altura fija), que sí enmarca limpio; la
+      // sección se abre igual para que se vea su contenido debajo.
+      element: '[data-tour="params-elasticas-h"]',
       onHighlightStarted: () => openParam('elasticas'),
       popover: {
         title: 'Propiedades del subsuelo',
