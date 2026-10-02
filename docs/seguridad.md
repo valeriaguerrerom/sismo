@@ -113,8 +113,9 @@ revisado, el estado y la corrección aplicada.
   con un trigger `BEFORE UPDATE` que rechaza (ERRCODE 42501) cualquier cambio de
   `role` si quien lo ejecuta no es admin. Se eligió trigger (no revocar la
   columna ni cambiar la policy) para no romper la autodesactivación de cuentas,
-  que sí actualiza `active`/`deactivated_by`. **Pendiente:** aplicar la migración
-  en el panel de Supabase (no hay CLI configurado).
+  que sí actualiza `active`/`deactivated_by`. **Aplicada y verificada** en el
+  panel de Supabase (SQL editor → "Success. No rows returned"): la función y el
+  trigger quedaron creados.
 - `feedback_messages`: sin INSERT para `anon`/`authenticated`; solo el backend
   escribe con la service key (migración `20260926_feedback_backend_only.sql`).
 
@@ -239,7 +240,8 @@ revisado, el estado y la corrección aplicada.
 
 ## Pendientes en el panel de Supabase
 
-- Aplicar la migración `20260930_prevent_role_self_escalation.sql`.
+- ~~Aplicar la migración `20260930_prevent_role_self_escalation.sql`.~~
+  **Hecho** (SQL editor: "Success. No rows returned").
 - Confirmar la configuración del bucket `mseed-raw` (lectura pública, 0 políticas
   de escritura).
 - Anotar los valores de rate limiting de Auth y la expiración del JWT.
