@@ -155,6 +155,53 @@ function HowToGetMseed() {
   );
 }
 
+/**
+ * Muestra el origen del sismo estimado por la diferencia S−P (una sola
+ * estación): distancia aproximada + clasificación local/regional/lejano, con el
+ * aviso honesto de que con una estación no se ubica el epicentro. Si no se
+ * detectaron P y S, muestra una nota en vez de inventar un número.
+ */
+function OriginEstimate({ result }: { result: MseedUploadResult }) {
+  const { origin_class, distance_km_est, sp_seconds, distance_note } = result;
+
+  if (origin_class === 'desconocido' || distance_km_est == null) {
+    return (
+      <div className="flex items-start gap-2 text-[11px] text-stone-500 bg-stone-50 border border-stone-200/60 rounded-lg p-2.5">
+        <Info size={13} className="flex-shrink-0 mt-0.5" />
+        <span>
+          No se pudo estimar la distancia al sismo en este registro (no se detectaron
+          llegadas P y S claras; es común en señales volcánicas o muy ruidosas). Con una
+          sola estación tampoco se puede ubicar el epicentro.
+        </span>
+      </div>
+    );
+  }
+
+  // Clasificación → color + etiqueta + si el epicentro cae dentro/fuera de Nariño.
+  const meta: Record<string, { label: string; color: string; where: string }> = {
+    local: { label: 'Sismo local', color: '#2D6A4F', where: 'epicentro probablemente en Nariño o su entorno cercano' },
+    regional: { label: 'Sismo regional', color: '#D4A853', where: 'epicentro en el sur de Colombia, Ecuador o la costa — fuera de Nariño' },
+    lejano: { label: 'Sismo lejano', color: '#C4553A', where: 'epicentro lejano, fuera de Nariño (sismo distante o telesismo)' },
+  };
+  const m = meta[origin_class] ?? meta.regional;
+
+  return (
+    <div className="rounded-lg border p-2.5 space-y-1" style={{ borderColor: `${m.color}44`, backgroundColor: `${m.color}0f` }}>
+      <div className="flex items-center gap-2 text-xs font-bold" style={{ color: m.color }}>
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+        {m.label} · ≈ {distance_km_est.toFixed(0)} km de la estación
+      </div>
+      <div className="text-[11px] text-stone-600 leading-snug">
+        {m.where}. S−P ≈ {sp_seconds?.toFixed(1)} s.
+      </div>
+      <div className="text-[10px] text-stone-400 leading-snug flex gap-1.5">
+        <Info size={11} className="flex-shrink-0 mt-0.5" />
+        {distance_note}
+      </div>
+    </div>
+  );
+}
+
 export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -237,6 +284,11 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
                   </span>
                 ))}
               </div>
+              <div className="text-[10px] text-stone-400 mt-1.5 leading-relaxed max-w-md mx-auto">
+                La <b>estación</b> debe ser de la red de Nariño; el <b>sismo</b> registrado puede
+                venir de cualquier parte (una estación capta sismos lejanos). Con la señal
+                estimamos la <b>distancia</b> al sismo, no su ubicación exacta.
+              </div>
             </>
           )}
         </div>
@@ -283,6 +335,9 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
                 <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" /> {result.orientation_note}
               </div>
             )}
+
+            {/* Origen del sismo estimado por la diferencia S−P (una sola estación). */}
+            <OriginEstimate result={result} />
             <div className="space-y-2 bg-stone-50/50 rounded-xl p-3 border border-stone-100">
               <WaveTrace data={result.waveData.north} label={result.horizontal_labels.north} color={WAVE_COLORS.north} />
               <WaveTrace data={result.waveData.east} label={result.horizontal_labels.east} color={WAVE_COLORS.east} />

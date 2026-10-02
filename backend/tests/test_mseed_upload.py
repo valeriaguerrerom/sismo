@@ -240,3 +240,39 @@ def test_endpoint_example_mseed_tipo_desconocido_es_404():
     client = TestClient(app)
     r = client.get("/api/examples/mseed/nosoyuntipo")
     assert r.status_code == 404
+
+
+def test_estimacion_distancia_sp_en_ejemplos():
+    # El ejemplo tectónico (CUM) tiene fases P/S detectables → distancia estimada.
+    # El volcánico (CUFP) no tiene fases claras → 'desconocido' (no se inventa).
+    from pathlib import Path
+    base = Path(__file__).resolve().parent.parent / "example_data"
+
+    tecto = process_mseed_bytes((base / "ejemplo_CUM_tectonico.mseed").read_bytes(), "t.mseed")
+    assert tecto.origin_class in ("local", "regional", "lejano")
+    assert tecto.distance_km_est is not None and tecto.distance_km_est > 0
+    assert tecto.sp_seconds is not None and tecto.sp_seconds > 0
+
+    volc = process_mseed_bytes((base / "ejemplo_CUFP_volcanico.mseed").read_bytes(), "v.mseed")
+    assert volc.origin_class == "desconocido"
+    assert volc.distance_km_est is None
+
+
+def test_estimacion_distancia_sinteticos():
+    # Señal sintética con P clara en vertical y S (más tarde) en horizontales:
+    # debe estimar una distancia > 0 y clasificar el origen.
+    import numpy as np
+    fs = 100.0
+    n = 3000
+    t = np.arange(n) / fs
+    rng = np.random.default_rng(0)
+    ruido = rng.normal(0, 0.01, n)
+    # P en t=5 s (fuerte en vertical), S en t=12 s (fuerte en horizontales).
+    def pulso(center, amp):
+        return amp * np.exp(-((t - center) ** 2) / 0.5)
+    vertical = (pulso(5.0, 1.0) + 0.3 * pulso(12.0, 1.0) + ruido).tolist()
+    horiz = (0.2 * pulso(5.0, 1.0) + pulso(12.0, 1.0) + ruido)
+    from api.mseed_upload import _estimate_distance_sp
+    sp, dist, origin, _ = _estimate_distance_sp(vertical, horiz.tolist(), horiz.tolist(), fs)
+    assert sp is not None and dist is not None
+    assert origin in ("local", "regional", "lejano")

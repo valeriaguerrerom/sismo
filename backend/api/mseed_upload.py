@@ -100,6 +100,23 @@ class MseedUploadResponse(BaseModel):
         default_factory=lambda: {"north": "Norte (N)", "east": "Este (E)"},
         description="Rótulos a mostrar para las dos horizontales.",
     )
+    # ── Estimación de la distancia al sismo por la diferencia S−P (una estación) ──
+    sp_seconds: float | None = Field(
+        default=None,
+        description="Diferencia de tiempo S−P en segundos (None si no se detectó).",
+    )
+    distance_km_est: float | None = Field(
+        default=None,
+        description="Distancia aproximada al foco en km, estimada por S−P (≈ 8·(tS−tP)).",
+    )
+    origin_class: str = Field(
+        default="desconocido",
+        description="Clasificación del origen: 'local' | 'regional' | 'lejano' | 'desconocido'.",
+    )
+    distance_note: str = Field(
+        default="",
+        description="Aviso honesto sobre la estimación de distancia con una sola estación.",
+    )
 
 
 def _decimate(values: list[float], max_points: int = MAX_POINTS) -> list[float]:
@@ -184,6 +201,73 @@ def _component_of(channel: str) -> str | None:
 def _sensor_kind(prefix: str) -> str:
     """Clasifica el prefijo de canal en velocímetro o acelerómetro."""
     return "acelerometro" if prefix.upper() in ("HN", "HL") else "velocimetro"
+
+
+# Relación de velocidades Vp/Vs ≈ 1.73 (roca de corteza). Con Vp≈6.3 km/s la
+# "constante S−P" clásica es ~8 km/s: distancia ≈ 8·(tS−tP). Es una regla
+# estándar de sismología para estimar la distancia con UNA sola estación.
+_SP_TO_KM = 8.0
+
+
+def _estimate_distance_sp(
+    vertical: list[float], north: list[float], east: list[float], fs: float,
+) -> tuple[float | None, float | None, str, str]:
+    """Estima la distancia al foco por la diferencia S−P en una sola estación.
+
+    Detecta la P en la componente vertical (donde la P es fuerte) y la S en la
+    envolvente horizontal (donde domina la S, y llega después). Con una sola
+    estación NO se puede ubicar el epicentro; solo estimar la DISTANCIA, y de
+    forma aproximada. Devuelve (sp_seconds, distance_km, origin_class, note).
+
+    origin_class:
+        'local'    (< ~70 km, S−P < ~9 s): probablemente de Nariño/entorno.
+        'regional' (~70–300 km): sur de Colombia / Ecuador / costa.
+        'lejano'   (> ~300 km): epicentro FUERA de Nariño (telesismo o lejano).
+        'desconocido': no se pudieron detectar P y S de forma fiable.
+    """
+    import numpy as np
+    from core.fdm import detect_arrival
+
+    dt = 1.0 / fs if fs > 0 else 0.0
+    note_fail = (
+        "No se pudieron detectar con fiabilidad las llegadas P y S en este "
+        "registro, así que no se estima la distancia. (Con una sola estación "
+        "la distancia es siempre aproximada y el epicentro no se puede ubicar.)"
+    )
+    if dt <= 0 or len(vertical) < 10:
+        return None, None, "desconocido", note_fail
+
+    v = np.asarray(vertical, dtype=float)
+    # Envolvente horizontal: magnitud del vector (N, E) muestra a muestra.
+    n = np.asarray(north, dtype=float)
+    e = np.asarray(east, dtype=float)
+    m = min(len(n), len(e))
+    horiz = np.sqrt(n[:m] ** 2 + e[:m] ** 2) if m > 0 else np.zeros(0)
+
+    tP = detect_arrival(v, dt, threshold=0.08)
+    tS = detect_arrival(horiz, dt, threshold=0.12) if len(horiz) else 0.0
+
+    # Validación física: ambas detectadas, S después de P, y S−P en rango
+    # razonable (0.5 s a 120 s → ~4 km a ~960 km).
+    if tP <= 0 or tS <= 0 or tS <= tP:
+        return None, None, "desconocido", note_fail
+    sp = tS - tP
+    if sp < 0.5 or sp > 120.0:
+        return None, None, "desconocido", note_fail
+
+    dist = round(sp * _SP_TO_KM, 1)
+    if dist < 70:
+        origin = "local"
+    elif dist < 300:
+        origin = "regional"
+    else:
+        origin = "lejano"
+    note = (
+        f"Distancia estimada por S−P (una sola estación): ≈ {dist:.0f} km. "
+        "Es aproximada; con una estación no se puede ubicar el epicentro, solo "
+        "estimar la distancia. La dirección y el punto exacto no se determinan."
+    )
+    return round(sp, 2), dist, origin, note
 
 
 def _pick_traces(st, station: str) -> tuple[dict[str, object], dict[str, str], str]:
@@ -341,6 +425,12 @@ def process_mseed_bytes(
         vertical=series("Z"),
     )
 
+    # Estimación de la distancia al sismo por S−P, con las series procesadas a su
+    # fs ORIGINAL (mejor resolución temporal que las decimadas de la vista).
+    sp_seconds, distance_km_est, origin_class, distance_note = _estimate_distance_sp(
+        processed.get("Z", []), processed.get("N", []), processed.get("E", []), fs,
+    )
+
     return MseedUploadResponse(
         filename=filename,
         stations=stations,
@@ -358,6 +448,10 @@ def process_mseed_bytes(
         orientation_confirmed=orientation_confirmed,
         orientation_note=orientation_note,
         horizontal_labels=horizontal_labels,
+        sp_seconds=sp_seconds,
+        distance_km_est=distance_km_est,
+        origin_class=origin_class,
+        distance_note=distance_note,
     )
 
 

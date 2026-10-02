@@ -36,6 +36,14 @@ export interface MseedUploadResult {
   orientation_note: string | null;
   /** Rótulos de las horizontales (Norte/Este o Horizontal 1/2). */
   horizontal_labels: { north: string; east: string };
+  /** Diferencia S−P en segundos (null si no se detectó). */
+  sp_seconds: number | null;
+  /** Distancia aproximada al foco en km (null si no se detectó). */
+  distance_km_est: number | null;
+  /** Clasificación: 'local' | 'regional' | 'lejano' | 'desconocido'. */
+  origin_class: string;
+  /** Aviso honesto sobre la estimación de distancia con una sola estación. */
+  distance_note: string;
 }
 
 export interface MseedUploadOptions {

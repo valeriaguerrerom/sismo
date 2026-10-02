@@ -55,17 +55,19 @@ STATIONS: list[Station] = [
             altitude_m=3420, approx=False, source=_BOLETIN),
     Station(code="BBAC", name="Balboa, Cauca", latitude=2.021, longitude=-77.248,
             altitude_m=1723, approx=False, source=_BOLETIN),
-    Station(code="CPOP2", name="Popayán, Cauca", latitude=2.540, longitude=-76.680,
-            altitude_m=1869, approx=False,
-            source=_BOLETIN + " — asumida igual a POP2 (Popayán)"),
-    # Aproximadas por municipio, pendientes de confirmación SGC.
+    # Ubicación aproximada al casco urbano del municipio (dato público
+    # verificable). No es la coordenada exacta del sensor, que vive en el
+    # StationXML oficial del SGC (no accesible desde la red local).
+    Station(code="CPOP2", name="Popayán, Cauca", latitude=2.4448, longitude=-76.6147,
+            altitude_m=1738, approx=True,
+            source="Ubicación aproximada: casco urbano de Popayán, Cauca (estación de la red CM del SGC)"),
     Station(code="PAS2", name="Pasto, Nariño", latitude=1.2136, longitude=-77.2811,
-            altitude_m=None, approx=True,
-            source="Aproximada por municipio (Pasto), pendiente confirmación SGC"),
-    # TUM3C es Tumaco; se desplaza ~2.5 km al NE de TUM para no compartir coordenada.
-    Station(code="TUM3C", name="Tumaco, Nariño", latitude=1.8620, longitude=-78.7100,
-            altitude_m=None, approx=True,
-            source="Aproximada por municipio (Tumaco), desplazada ~2.5 km de TUM; pendiente confirmación SGC"),
+            altitude_m=2527, approx=True,
+            source="Ubicación aproximada: casco urbano de Pasto, Nariño (estación de la red CM del SGC)"),
+    # TUM3C es Tumaco (zona costera, ~nivel del mar). Se mantiene cerca de TUM.
+    Station(code="TUM3C", name="Tumaco, Nariño", latitude=1.8060, longitude=-78.7640,
+            altitude_m=5, approx=True,
+            source="Ubicación aproximada: zona urbana costera de Tumaco, Nariño (estación de la red CM del SGC)"),
 ]
 
 
