@@ -527,7 +527,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from('profiles').update({ avatar: dataUrl }).eq('id', authUser.id),
         12000, 'guardado de foto',
       );
-      if (error) return translateError(error.message);
+      if (error) {
+        const m = error.message.toLowerCase();
+        // La columna aún no existe en la base: hay que aplicar la migración
+        // 20261002b_profile_avatar.sql en Supabase. Mensaje específico para no
+        // confundirlo con un error genérico.
+        if ((m.includes('avatar') && (m.includes('column') || m.includes('schema'))) ||
+            m.includes("could not find the 'avatar'")) {
+          return 'La foto de perfil aún no está habilitada en la base de datos. Pide al administrador que aplique la migración del avatar (columna "avatar" en profiles).';
+        }
+        return translateError(error.message);
+      }
       // Reflejar en memoria sin re-consultar (desbloquea la UI al instante).
       setUser(prev => (prev ? { ...prev, avatar: dataUrl } : prev));
       return null;
