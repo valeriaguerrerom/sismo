@@ -254,7 +254,7 @@ function AppContent() {
       >
         {renderPage()}
       </main>
-      <Footer onNavigate={navigate} />
+      <Footer onNavigate={navigate} dark={page === 'map3d'} />
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { LogoMark } from '../ui/Logo';
 
 interface Props {
   onNavigate?: (page: Page) => void;
+  /** Variante oscura (para páginas de fondo oscuro, p. ej. el Mapa 3D). */
+  dark?: boolean;
 }
 
 /** Evento real cuya forma de onda decimada alimenta la traza del footer. */
@@ -31,7 +33,7 @@ function usePrefersReducedMotion(): boolean {
  * gris con baja opacidad para no competir con el contenido. Con
  * prefers-reduced-motion aparece dibujada sin animación.
  */
-function FooterTrace() {
+function FooterTrace({ dark }: { dark?: boolean }) {
   const [path, setPath] = useState<string | null>(null);
   const [len, setLen] = useState(0);
   const [inView, setInView] = useState(false);
@@ -88,10 +90,10 @@ function FooterTrace() {
             ref={pathRef}
             d={path}
             fill="none"
-            stroke="#D4A853"
+            stroke={dark ? '#D4A853' : '#5A5A5A'}
             strokeWidth="1"
             strokeLinejoin="round"
-            opacity="0.45"
+            opacity={dark ? 0.45 : 0.28}
             style={{
               strokeDasharray: dash,
               strokeDashoffset: offset,
@@ -104,31 +106,31 @@ function FooterTrace() {
   );
 }
 
-export function Footer({ onNavigate }: Props) {
+export function Footer({ onNavigate, dark = false }: Props) {
   return (
-    <footer className="bg-[#1A1A2E] text-stone-300">
+    <footer className={dark ? 'bg-[#1A1A2E] text-stone-300' : 'bg-white border-t border-stone-200/60'}>
       {/* Traza sísmica real que atraviesa todo el ancho, se dibuja al entrar. */}
-      <FooterTrace />
+      <FooterTrace dark={dark} />
       <div className="app-container pb-6 pt-2">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <LogoMark size={26} rounded={0.32} />
-            <span className="font-bold text-sm text-white">SismoNariño</span>
+            <span className={`font-bold text-sm ${dark ? 'text-white' : 'text-[#1A1A2E]'}`}>SismoNariño</span>
           </div>
 
-          <p className="text-xs text-center text-stone-400 leading-relaxed max-w-md">
+          <p className={`text-xs text-center leading-relaxed max-w-md ${dark ? 'text-stone-400' : 'text-[#5A5A5A]'}`}>
             Desarrollado por Valeria Guerrero y Luisa Basante · Universidad Mariana · Pasto, Nariño
             {onNavigate && (
               <>
                 {' · '}
-                <button onClick={() => onNavigate('about')} className="text-[#D4A853] font-semibold hover:underline">
+                <button onClick={() => onNavigate('about')} className={`font-semibold hover:underline ${dark ? 'text-[#D4A853]' : 'text-[#2D6A4F]'}`}>
                   Acerca del proyecto
                 </button>
               </>
             )}
           </p>
 
-          <p className="text-xs text-stone-500 whitespace-nowrap">
+          <p className={`text-xs whitespace-nowrap ${dark ? 'text-stone-500' : 'text-[#5A5A5A]'}`}>
             Datos: SGC y OVSP
           </p>
         </div>
