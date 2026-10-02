@@ -127,7 +127,4 @@ export function defaultScenario(): Scenario {
   return SCENARIOS[0];
 }
 
-/** Devuelve un escenario por su id, o undefined si no existe. */
-export function scenarioById(id: string): Scenario | undefined {
-  return SCENARIOS.find(s => s.id === id);
-}
+

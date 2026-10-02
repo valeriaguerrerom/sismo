@@ -37,11 +37,6 @@ export function epicentralDistanceLabel(gridInfo: GridInfo): string {
   return `${epicentralDistanceKm(gridInfo).toFixed(1)} km`;
 }
 
-/** Texto completo de la estación virtual para leyendas y parámetros. */
-export function stationLabel(gridInfo: GridInfo): string {
-  return `Estación virtual a ${epicentralDistanceLabel(gridInfo)} del epicentro, en superficie`;
-}
-
 /**
  * Pico absoluto común de las tres componentes (N, E, Z). Es la referencia de la
  * "escala común": al normalizar las tres trazas contra este valor se aprecia que

@@ -15,6 +15,7 @@
  */
 import { jsPDF } from 'jspdf';
 import { sanitizeCell } from './csvSafe';
+import { PAGE_W, MARGIN, CONTENT_W, COLORS as BASE_COLORS, fmtDate, type RGB } from './pdfStyle';
 
 // ─── Tipos de datos del reporte ───
 
@@ -107,25 +108,10 @@ export const DEFAULT_MAP3D_OPTIONS: Map3dReportOptions = {
   sismograma: false,
 };
 
-// ─── Estilo (coherente con reportPdf.ts) ───
+// ─── Estilo (compartido en pdfStyle.ts, coherente con reportPdfBuilder.ts) ───
 
-const PAGE_W = 210;
-const MARGIN = 15;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-const COLORS = {
-  primary: [196, 85, 58] as [number, number, number],
-  green: [45, 106, 79] as [number, number, number],
-  gold: [212, 168, 83] as [number, number, number],
-  cyan: [34, 211, 238] as [number, number, number],
-  text: [26, 26, 46] as [number, number, number],
-  muted: [120, 113, 108] as [number, number, number],
-  line: [214, 211, 209] as [number, number, number],
-};
-
-function fmtDate(d?: string | Date): string {
-  const date = d ? new Date(d) : new Date();
-  return date.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' });
-}
+// Paleta base compartida + `cyan`, exclusivo de este reporte (marcas del Mapa 3D).
+const COLORS = { ...BASE_COLORS, cyan: [34, 211, 238] as RGB };
 
 const modelLabel = (m: string) => (m === 'iasp91' ? 'IASP91 (Tierra estratificada)' : 'Homogéneo (medio constante)');
 

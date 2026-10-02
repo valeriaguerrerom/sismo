@@ -10,6 +10,7 @@ import { interpretSimulation, sourceFreqAdjustedNote } from './interpretation';
 import { computeEventWindow } from './waveWindow';
 import { LOGO_MARK_DATA_URL } from './logoDataUrl';
 import { PLEX_REGULAR_B64, PLEX_BOLD_B64 } from './pdfFont';
+import { PAGE_W, MARGIN, CONTENT_W, COLORS, fmtDate } from './pdfStyle';
 import type { ReportInput } from './reportPdf';
 
 /** Nombre de la fuente Unicode incrustada (IBM Plex Sans) usada en todo el PDF. */
@@ -46,24 +47,6 @@ function registerFont(doc: jsPDF) {
   doc.addFileToVFS('PlexSans-Bold.ttf', PLEX_BOLD_B64);
   doc.addFont('PlexSans-Bold.ttf', FONT, 'bold');
   doc.setFont(FONT, 'normal');
-}
-
-const PAGE_W = 210;
-const MARGIN = 15;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-
-const COLORS = {
-  primary: [196, 85, 58] as [number, number, number],
-  green: [45, 106, 79] as [number, number, number],
-  gold: [212, 168, 83] as [number, number, number],
-  text: [26, 26, 46] as [number, number, number],
-  muted: [120, 113, 108] as [number, number, number],
-  line: [214, 211, 209] as [number, number, number],
-};
-
-function fmtDate(d?: string | Date): string {
-  const date = d ? new Date(d) : new Date();
-  return date.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' });
 }
 
 /**

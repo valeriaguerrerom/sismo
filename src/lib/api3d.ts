@@ -304,14 +304,6 @@ export async function getRayPath(req: {
 }
 
 /**
- * Obtiene las cifras reales para la página de inicio.
- * @returns Estadísticas del Home (total de eventos, años, magnitud máxima).
- */
-export async function getHomeStats(): Promise<HomeStats> {
-  return request<HomeStats>('/api/stats/home');
-}
-
-/**
  * Obtiene la geometría de escena del Mapa 3D con posiciones ya calculadas.
  * @returns Bloque, estaciones, eje de profundidad, Moho y escala.
  */
