@@ -45,6 +45,15 @@ function translateError(message: string): string {
   if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups are disabled')) {
     return 'El registro está deshabilitado temporalmente. Inténtalo más tarde o contacta al administrador.';
   }
+  // Cambio de contraseña: Supabase puede exigir reautenticación si "Secure
+  // password change" está activo y la sesión no es reciente (>24 h).
+  if (m.includes('reauthentication') || m.includes('reauthenticate') || m.includes('aal') || m.includes('not authenticated')) {
+    return 'Por seguridad, para cambiar la contraseña vuelve a iniciar sesión y hazlo enseguida; o usa "¿Olvidaste tu contraseña?" para recibir un enlace por correo.';
+  }
+  // La nueva contraseña es igual a la anterior (Supabase lo rechaza).
+  if (m.includes('different from the old password') || m.includes('same as the old') || m.includes('new password should be different')) {
+    return 'La nueva contraseña debe ser distinta de la actual.';
+  }
   if (m.includes('database error') || m.includes('saving new user')) {
     return 'No se pudo guardar la cuenta. Inténtalo de nuevo en un momento; si persiste, contacta al administrador.';
   }
