@@ -23,6 +23,11 @@ interface Props {
     label: string,
     eventMeta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic'; magnitude?: number; depth?: number; lat?: number; lon?: number },
   ) => void;
+  /** Lleva un MiniSEED subido al Mapa 3D, asociado a su estación real. */
+  onLoadMseedToMap3d?: (
+    waveData: { time: number[]; north: number[]; east: number[]; vertical: number[] },
+    meta: { station: string; filename: string; sourceType: 'tectonic' | 'volcanic' },
+  ) => void;
 }
 
 type SourceKind = 'volcanic' | 'tectonic' | 'upload';
@@ -260,7 +265,7 @@ function Pager({ page, total, pageSize, onChange, accent }: {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export function Explorer({ onLoadRealData }: Props) {
+export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
   const { user, markTourSeen } = useAuth();
 
   // ── Tour guiado (Driver.js) ──
@@ -618,7 +623,7 @@ export function Explorer({ onLoadRealData }: Props) {
         </div>
 
         {source === 'upload' && user && (
-          <MseedUpload onLoadRealData={onLoadRealData} />
+          <MseedUpload onLoadRealData={onLoadRealData} onLoadToMap3d={onLoadMseedToMap3d} />
         )}
 
         {/* ═══ SUB-FILTROS CONTEXTUALES ═══ */}

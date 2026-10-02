@@ -54,8 +54,15 @@ const SUBTYPE_LABELS: Record<string, string> = {
   lp: 'Largo Período', to: 'Tornillo', tr: 'Tremor', va: 'Volcano-Tectónico',
 };
 
+interface Map3DProps {
+  /** MiniSEED subido para asociar a su estación real (traza + estación). */
+  mseedLoad?: { waveData: { time: number[]; north: number[]; east: number[]; vertical: number[] }; station: string; filename: string; sourceType: 'tectonic' | 'volcanic'; nonce: number } | null;
+  /** Se llama tras consumir mseedLoad, para que App lo limpie. */
+  onMseedLoadUsed?: () => void;
+}
+
 /** Página principal del Mapa 3D. */
-export function Map3D() {
+export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // Datos base
   const [stations, setStations] = useState<Station[]>([]);
   const [events, setEvents] = useState<CatalogEvent[]>([]);
@@ -109,6 +116,9 @@ export function Map3D() {
     | { kind: 'event'; ev: CatalogEvent }
     | { kind: 'epicenter'; lat: number; lon: number };
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
+  // Coordenadas del clic en el terreno pendientes de CONFIRMAR como epicentro.
+  // Al hacer clic no se coloca de inmediato: primero se pregunta al usuario.
+  const [epicenterPrompt, setEpicenterPrompt] = useState<{ lat: number; lon: number } | null>(null);
   // Reporte del Mapa 3D (modal de opciones + formato + guardado).
   const { user, markTourSeen } = useAuth();
 
@@ -309,6 +319,38 @@ export function Map3D() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [travelTimes]);
 
+  // ── Consumir un MiniSEED subido desde el Explorador ──
+  // La traza se asocia a su estación real (que tiene coordenadas en el catálogo)
+  // como "señal real cargada por el usuario". NO trae epicentro: por eso se pide
+  // al usuario colocar uno (clic en el terreno) para ver la propagación. La traza
+  // se superpone en su estación igual que la señal real de un evento del catálogo.
+  const [uploadedStation, setUploadedStation] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mseedLoad) return;
+    const code = mseedLoad.station.toUpperCase();
+    const wd = mseedLoad.waveData;
+    // Convertir waveData {time,north,east,vertical} al formato WaveformResult.
+    const wf: WaveformResult = {
+      event_id: 'mseed-subido',
+      station: code,
+      t: wd.time,
+      canales: { Z: wd.vertical, N: wd.north, E: wd.east },
+      fs: wd.time.length > 1 ? 1 / (wd.time[1] - wd.time[0]) : 100,
+      starttime_utc: '',
+      filtro: { freqmin: 1, freqmax: 10 },
+    };
+    setSourceType(mseedLoad.sourceType);
+    if (mseedLoad.sourceType === 'volcanic') { setVp(3.0); setVs(1.7); setDensity(2500); }
+    setRealWave(w => ({ ...w, [code]: wf }));
+    setRealAvailable(a => ({ ...a, [code]: true }));
+    setShowReal(s => ({ ...s, [code]: true }));
+    setSelectedStation(code);
+    setUploadedStation(code);
+    setMessage(`Registro cargado en ${code}. Coloca un epicentro en el terreno para ver la propagación.`);
+    onMseedLoadUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mseedLoad?.nonce]);
+
   // ── Reloj de animación ──
   useEffect(() => {
     if (!playing) { cancelAnimationFrame(rafRef.current); return; }
@@ -367,12 +409,23 @@ export function Map3D() {
     applyEvent(ev);
   };
 
+  // Un clic en el terreno NO coloca el epicentro de inmediato: abre una
+  // confirmación con las coordenadas para que el usuario decida (sí/no).
   const placeEpicenter = (lat: number, lon: number) => {
+    setEpicenterPrompt({ lat, lon });
+  };
+
+  // Confirma el epicentro propuesto por el clic. Si hay una generación en curso,
+  // se encola como pendingRequest (misma lógica que cargar un evento).
+  const confirmEpicenter = () => {
+    const p = epicenterPrompt;
+    setEpicenterPrompt(null);
+    if (!p) return;
     if (isCalculating) {
-      setPendingRequest({ kind: 'epicenter', lat, lon });
+      setPendingRequest({ kind: 'epicenter', lat: p.lat, lon: p.lon });
       return;
     }
-    applyEpicenter(lat, lon);
+    applyEpicenter(p.lat, p.lon);
   };
 
   // Confirmar el reemplazo: aplica la solicitud pendiente y arranca la nueva
@@ -728,6 +781,14 @@ export function Map3D() {
           <div data-tour="m3d-hint" className="absolute top-2 left-2 z-10 font-mono text-[10px] text-stone-400 bg-black/40 rounded px-2 py-1">
             clic en el terreno = colocar epicentro · clic en ▲ = seleccionar estación
           </div>
+          {/* Aviso cuando hay un MiniSEED subido asociado a una estación: su traza
+              es dato real, pero el epicentro es un supuesto del usuario. */}
+          {uploadedStation && (
+            <div className="absolute top-2 right-2 z-10 max-w-[260px] font-mono text-[10px] text-stone-200 bg-[#C4553A]/80 rounded px-2.5 py-1.5 leading-snug">
+              Registro cargado por ti en <b>{uploadedStation}</b>. Su traza es real; el
+              <b> epicentro que coloques es un supuesto</b> para ver la propagación.
+            </div>
+          )}
           {/* Botones de vista de cámara */}
           <div data-tour="m3d-vistas" className="absolute bottom-3 left-3 z-10 flex gap-1.5 font-mono">
             {([['north', 'Norte'], ['cut', 'Corte'], ['top', 'Superior']] as const).map(([v, label]) => (
@@ -902,6 +963,42 @@ export function Map3D() {
           )}
         </div>
       </div>
+
+      {/* Modal de confirmación del epicentro: al hacer clic en el terreno se
+          pregunta antes de colocarlo (no se aplica de inmediato). */}
+      {epicenterPrompt && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => setEpicenterPrompt(null)}>
+          <div className="bg-[#0f1420] rounded-xl border border-white/10 w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-2 flex items-start gap-3">
+              <div className="mt-0.5 text-[#C4553A]"><MapPin size={20} /></div>
+              <div>
+                <h3 className="font-mono text-sm font-bold text-stone-100 mb-1">¿Seleccionar este epicentro?</h3>
+                <p className="text-[12px] leading-snug text-stone-300">
+                  Colocarás el epicentro en{' '}
+                  <span className="font-semibold text-stone-100 whitespace-nowrap">
+                    {epicenterPrompt.lat.toFixed(3)}°, {epicenterPrompt.lon.toFixed(3)}°
+                  </span>{' '}
+                  (profundidad {depthKm} km) y se calcularán los tiempos de viaje a cada estación.
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 flex gap-2">
+              <button
+                onClick={() => setEpicenterPrompt(null)}
+                className="flex-1 text-xs font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmEpicenter}
+                className="flex-1 text-xs font-bold py-2 rounded-lg bg-[#C4553A] text-white"
+              >
+                Sí, colocar aquí
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmación: hay una generación en curso y el usuario pidió
           cargar otro evento/epicentro. Puede reemplazarla o seguir con la actual. */}

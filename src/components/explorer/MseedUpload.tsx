@@ -22,7 +22,17 @@ const EXAMPLE_VOLCANICO_URL = `${API_BASE}/api/examples/mseed/volcanico`;
 
 interface Props {
   onLoadRealData?: (waveData: WaveData, label: string, meta: { date: string; duration: number; sourceType?: 'tectonic' | 'volcanic' }) => void;
+  /** Lleva la traza al Mapa 3D asociada a su estación real (solo si es ubicable). */
+  onLoadToMap3d?: (waveData: WaveData, meta: { station: string; filename: string; sourceType: 'tectonic' | 'volcanic' }) => void;
 }
+
+/**
+ * Estaciones con coordenadas conocidas en el Mapa 3D (catálogo backend
+ * core/stations.py → getStations). Solo con estas se puede ubicar la traza en
+ * el 3D. La estación del Galeras (CUFP) se acepta en la carga pero NO tiene
+ * coordenadas en el catálogo del 3D, así que no es ubicable ahí.
+ */
+const MAP3D_LOCATABLE = new Set(['TUM', 'TUM3C', 'CRU', 'CUM', 'PAS2', 'BBAC', 'CPOP2']);
 
 /** Colores de las componentes, iguales que en el Simulador. */
 const WAVE_COLORS = { north: '#C4553A', east: '#2D6A4F', vertical: '#D4A853' };
@@ -145,7 +155,7 @@ function HowToGetMseed() {
   );
 }
 
-export function MseedUpload({ onLoadRealData }: Props) {
+export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<MseedUploadResult | null>(null);
@@ -285,16 +295,36 @@ export function MseedUpload({ onLoadRealData }: Props) {
                 (necesita el StationXML con el azimut de los sensores).
               </div>
             ) : (
-            <button
-              onClick={() => onLoadRealData?.(
-                result.waveData,
-                `${result.filename} — ${result.network}.${result.station}`,
-                { date: result.starttime_utc.slice(0, 10), duration: result.duration, sourceType },
-              )}
-              className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
-            >
-              <Activity size={14} /> Cargar en Simulador
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => onLoadRealData?.(
+                  result.waveData,
+                  `${result.filename} — ${result.network}.${result.station}`,
+                  { date: result.starttime_utc.slice(0, 10), duration: result.duration, sourceType },
+                )}
+                className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
+              >
+                <Activity size={14} /> Cargar en Simulador
+              </button>
+              {/* "Ver en Mapa 3D" solo si la estación es ubicable en el 3D (tiene
+                  coordenadas en el catálogo). CUFP/Galeras no lo es. */}
+              {onLoadToMap3d && MAP3D_LOCATABLE.has(result.station.toUpperCase()) ? (
+                <button
+                  onClick={() => onLoadToMap3d(result.waveData, {
+                    station: result.station, filename: result.filename, sourceType,
+                  })}
+                  className="w-full flex items-center justify-center gap-2 bg-[#1A1A2E] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
+                >
+                  <Waves size={14} /> Ver en Mapa 3D
+                </button>
+              ) : onLoadToMap3d ? (
+                <p className="text-[10px] text-stone-400 leading-snug flex gap-1.5">
+                  <Info size={12} className="flex-shrink-0 mt-0.5" />
+                  La estación {result.station} no tiene coordenadas en el Mapa 3D, así que este
+                  registro solo se puede llevar al Simulador.
+                </p>
+              ) : null}
+            </div>
             )}
           </div>
         )}

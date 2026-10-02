@@ -88,10 +88,10 @@ function FooterTrace() {
             ref={pathRef}
             d={path}
             fill="none"
-            stroke="#5A5A5A"
+            stroke="#D4A853"
             strokeWidth="1"
             strokeLinejoin="round"
-            opacity="0.28"
+            opacity="0.45"
             style={{
               strokeDasharray: dash,
               strokeDashoffset: offset,
@@ -106,27 +106,29 @@ function FooterTrace() {
 
 export function Footer({ onNavigate }: Props) {
   return (
-    <footer className="bg-white border-t border-stone-200/60">
+    <footer className="bg-[#1A1A2E] text-stone-300">
       {/* Traza sísmica real que atraviesa todo el ancho, se dibuja al entrar. */}
       <FooterTrace />
       <div className="app-container pb-6 pt-2">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <LogoMark size={26} rounded={0.32} />
-            <span className="font-bold text-sm text-[#1A1A2E]">SismoNariño</span>
+            <span className="font-bold text-sm text-white">SismoNariño</span>
           </div>
-          <p className="text-[#5A5A5A] text-xs text-center">
-            Desarrollado por Valeria Guerrero y Luisa Basante, Universidad Mariana, Pasto, Nariño
+
+          <p className="text-xs text-center text-stone-400 leading-relaxed max-w-md">
+            Desarrollado por Valeria Guerrero y Luisa Basante · Universidad Mariana · Pasto, Nariño
             {onNavigate && (
               <>
-                {'. '}
-                <button onClick={() => onNavigate('about')} className="text-[#2D6A4F] font-semibold hover:underline">
+                {' · '}
+                <button onClick={() => onNavigate('about')} className="text-[#D4A853] font-semibold hover:underline">
                   Acerca del proyecto
                 </button>
               </>
             )}
           </p>
-          <p className="text-[#5A5A5A] text-xs">
+
+          <p className="text-xs text-stone-500 whitespace-nowrap">
             Datos: SGC y OVSP
           </p>
         </div>

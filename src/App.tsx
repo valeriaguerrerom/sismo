@@ -82,6 +82,9 @@ function AppContent() {
   // estación del mismo evento (mismos params) — clave para que no se quede
   // pegado en la primera estación.
   const [realLoad, setRealLoad] = useState<{ waveData: WaveData; label: string; params: Partial<SimulationParams>; nonce: number } | null>(null);
+  // Carga de un MiniSEED subido hacia el Mapa 3D (traza + estación real). El
+  // `nonce` fuerza que Map3D lo reconsuma en cada clic de "Ver en Mapa 3D".
+  const [mseed3dLoad, setMseed3dLoad] = useState<{ waveData: WaveData; station: string; filename: string; sourceType: 'tectonic' | 'volcanic'; nonce: number } | null>(null);
   const [transitioning, setTransitioning] = useState(false);
   // Nonce para reiniciar las animaciones del Home (registro real, barras y
   // contadores) al hacer clic en el logo estando ya en Inicio, sin recargar.
@@ -204,9 +207,12 @@ function AppContent() {
         setRealLoad({ waveData: wd, label, params, nonce: Date.now() });
         setPendingParams(params);
         navigate('simulation');
+      }} onLoadMseedToMap3d={(wd, meta) => {
+        setMseed3dLoad({ waveData: wd, station: meta.station, filename: meta.filename, sourceType: meta.sourceType, nonce: Date.now() });
+        navigate('map3d');
       }} />;
       case 'education': return <Education />;
-      case 'map3d': return <Map3D />;
+      case 'map3d': return <Map3D mseedLoad={mseed3dLoad} onMseedLoadUsed={() => setMseed3dLoad(null)} />;
       case 'reports': return <MyReports />;
       case 'profile': return <Profile onDeleted={handleAccountDeleted} onDeactivated={handleAccountDeactivated} />;
       case 'admin': return user?.role === 'admin' ? <AdminDashboard /> : <Home onNavigate={navigate} />;
