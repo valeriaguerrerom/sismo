@@ -843,22 +843,23 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       {/* Barra superior */}
       <div className="border-b border-white/10 px-4 py-2.5">
         <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-          <h1 className="text-sm font-bold text-stone-100 flex items-center gap-2">
-            <span className="text-[#C4553A]">◉</span> Mapa 3D de propagación de ondas en Nariño
-          </h1>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-stone-400 hidden md:inline">{currentEventTitle}</span>
-            {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
+          <h1 className="text-sm font-bold text-stone-100 flex items-center gap-2 min-w-0">
+            <span className="text-[#C4553A] shrink-0">◉</span>
+            <span className="truncate">Mapa 3D de propagación de ondas en Nariño</span>
+            {/* Botón de ayuda, pegado al título: repite el tour guiado. */}
             <Tooltip content="Ver guía" hoverOnly>
               <button
                 type="button"
                 onClick={launchTour}
                 aria-label="Ver guía"
-                className={`flex items-center justify-center w-8 h-8 rounded-full border border-white/25 bg-white/10 text-stone-100 hover:text-white hover:bg-[#C4553A] hover:border-[#C4553A] transition-colors ${user && !user.tours_vistos?.mapa3d ? 'help-pulse' : ''}`}
+                className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full border border-white/25 bg-white/10 text-stone-100 hover:text-white hover:bg-[#C4553A] hover:border-[#C4553A] transition-colors ${user && !user.tours_vistos?.mapa3d ? 'help-pulse' : ''}`}
               >
                 <HelpCircle size={16} />
               </button>
             </Tooltip>
+          </h1>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-stone-400 hidden md:inline">{currentEventTitle}</span>
             <button
               onClick={() => setPanelsCollapsed(c => !c)}
               className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-stone-300"
