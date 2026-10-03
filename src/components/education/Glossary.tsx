@@ -2,15 +2,19 @@
  * Glosario de términos sismológicos y numéricos.
  *
  * Lista compacta en dos columnas, ordenada alfabéticamente, con un índice de
- * letras para saltar y un buscador. La categoría de cada término se muestra
- * como texto pequeño de color, no como etiqueta. Cada término queda anclado por
- * su letra inicial para que el índice lo lleve directo.
+ * letras y un buscador. Para que el scroll no sea largo, se pagina: al tocar una
+ * letra del índice se salta a la página donde empieza esa letra. La categoría de
+ * cada término se muestra como texto pequeño de color, no como etiqueta.
  *
  * @module education/Glossary
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from '../../lib/icons';
+import { Pagination } from '../ui/Pagination';
 import { GLOSSARY, Term } from './glossaryData';
+
+/** Términos por página. */
+const TERMS_PER_PAGE = 12;
 
 /** Color de cada categoría (texto, no fondo). */
 const CAT_COLOR: Record<Term['cat'], string> = {
@@ -28,6 +32,7 @@ function initial(term: string): string {
 
 export function Glossary() {
   const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
 
   const sorted = useMemo(
     () => [...GLOSSARY].sort((a, b) => a.term.localeCompare(b.term, 'es')),
@@ -40,26 +45,35 @@ export function Glossary() {
     return sorted.filter(t => t.term.toLowerCase().includes(s) || t.def.toLowerCase().includes(s));
   }, [sorted, q]);
 
-  // Letras presentes en la lista filtrada (para habilitar/atenuar el índice).
-  const letters = useMemo(() => {
-    const set = new Set(filtered.map(t => initial(t.term)));
-    return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => ({ l, has: set.has(l) }));
+  // Al buscar, vuelve a la primera página.
+  useEffect(() => { setPage(1); }, [q]);
+
+  // Página actual de términos.
+  const paged = filtered.slice((page - 1) * TERMS_PER_PAGE, page * TERMS_PER_PAGE);
+
+  // Letras presentes en la lista filtrada; cada una guarda la página donde
+  // aparece su primer término, para que el índice salte a esa página.
+  const letterPage = useMemo(() => {
+    const map = new Map<string, number>();
+    filtered.forEach((t, i) => {
+      const l = initial(t.term);
+      if (!map.has(l)) map.set(l, Math.floor(i / TERMS_PER_PAGE) + 1);
+    });
+    return map;
   }, [filtered]);
 
-  // Agrupa por letra inicial para pintar encabezados y anclas.
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => ({ l, page: letterPage.get(l) }));
+
+  // Agrupa los términos de la página actual por letra inicial (encabezados).
   const groups = useMemo(() => {
     const map = new Map<string, Term[]>();
-    for (const t of filtered) {
+    for (const t of paged) {
       const l = initial(t.term);
       if (!map.has(l)) map.set(l, []);
       map.get(l)!.push(t);
     }
     return [...map.entries()];
-  }, [filtered]);
-
-  const jump = (l: string) => {
-    document.getElementById(`glosario-${l}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  }, [paged]);
 
   return (
     <div>
@@ -70,15 +84,15 @@ export function Glossary() {
           className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-stone-200 bg-white text-sm focus:outline-none focus:border-[#C4553A]" />
       </div>
 
-      {/* Índice de letras */}
+      {/* Índice de letras: salta a la página donde empieza cada letra */}
       <div className="flex flex-wrap gap-1 mb-4">
-        {letters.map(({ l, has }) => (
+        {letters.map(({ l, page: lp }) => (
           <button
             key={l}
-            onClick={() => has && jump(l)}
-            disabled={!has}
+            onClick={() => lp && setPage(lp)}
+            disabled={!lp}
             className={`w-6 h-6 rounded text-[11px] font-bold transition-colors ${
-              has ? 'text-[#C4553A] hover:bg-[#C4553A]/10' : 'text-stone-300 cursor-default'
+              lp ? 'text-[#C4553A] hover:bg-[#C4553A]/10' : 'text-stone-300 cursor-default'
             }`}
           >
             {l}
@@ -89,27 +103,34 @@ export function Glossary() {
       {filtered.length === 0 ? (
         <p className="text-center text-stone-400 text-sm py-10">Sin resultados para "{q}".</p>
       ) : (
-        <div className="space-y-5">
-          {groups.map(([letter, terms]) => (
-            <div key={letter} id={`glosario-${letter}`} className="scroll-mt-20">
-              <div className="text-xs font-black text-stone-300 mb-1.5">{letter}</div>
-              <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
-                {terms.map(t => (
-                  <div key={t.term}>
-                    <dt className="text-sm font-bold text-[#1A1A2E]">
-                      {t.term}
-                      <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: CAT_COLOR[t.cat] }}>{t.cat}</span>
-                    </dt>
-                    <dd className="text-xs text-stone-500 leading-relaxed mt-0.5">{t.def}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="space-y-5">
+            {groups.map(([letter, terms]) => (
+              <div key={letter}>
+                <div className="text-xs font-black text-stone-300 mb-1.5">{letter}</div>
+                <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+                  {terms.map(t => (
+                    <div key={t.term}>
+                      <dt className="text-sm font-bold text-[#1A1A2E]">
+                        {t.term}
+                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: CAT_COLOR[t.cat] }}>{t.cat}</span>
+                      </dt>
+                      <dd className="text-xs text-stone-500 leading-relaxed mt-0.5">{t.def}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+          <Pagination
+            page={page}
+            totalItems={filtered.length}
+            pageSize={TERMS_PER_PAGE}
+            onChange={setPage}
+            className="mt-5"
+          />
+        </>
       )}
-
-      <p className="text-xs text-stone-400 mt-4">{filtered.length} de {GLOSSARY.length} términos</p>
     </div>
   );
 }
