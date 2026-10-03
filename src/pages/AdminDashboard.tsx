@@ -24,6 +24,10 @@ import {
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
+import { Pagination } from '../components/ui/Pagination';
+
+/** Filas por página en las tablas/listas del panel admin. */
+const ADMIN_PAGE_SIZE = 10;
 import { importQuakeml, ImportResult } from '../lib/quakeml';
 import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf } from '../lib/adminExport';
 import {
@@ -383,6 +387,7 @@ function UsersTab({ users, meId, onChange, notify }: {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState<AdminUser | null>(null);
   // Confirmación de rol (cambiar/quitar admin) — modal simple.
   const [confirm, setConfirm] = useState<{ u: AdminUser } | null>(null);
@@ -421,6 +426,12 @@ function UsersTab({ users, meId, onChange, notify }: {
       return [u.full_name, u.email, u.institution].some(v => (v ?? '').toLowerCase().includes(q));
     });
   }, [users, search, roleFilter, occFilter, stateFilter, fromDate, toDate]);
+
+  // Página actual de la tabla de usuarios.
+  const paged = filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
+  useEffect(() => {
+    setPage(1);
+  }, [search, roleFilter, occFilter, stateFilter, fromDate, toDate, users.length]);
 
   const run = async (id: string, fn: () => Promise<void>, ok: string) => {
     setBusy(id);
@@ -513,7 +524,7 @@ function UsersTab({ users, meId, onChange, notify }: {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(u => (
+            {paged.map(u => (
               <tr key={u.id} className="border-b border-stone-100 hover:bg-stone-50/60 cursor-pointer align-top" onClick={() => setDrawer(u)}>
                 <td className="px-4 py-3">
                   <div className="font-medium text-[#1A1A2E] truncate">{u.full_name ? titleCase(u.full_name) : <span className="text-stone-300">Sin nombre</span>}{u.id === meId && <span className="ml-1 text-[10px] text-stone-400">(tú)</span>}</div>
@@ -547,6 +558,8 @@ function UsersTab({ users, meId, onChange, notify }: {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} totalItems={filtered.length} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />
 
       {drawer && <UserDrawer u={drawer} onClose={() => setDrawer(null)} />}
 
@@ -673,6 +686,7 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
   const [search, setSearch] = useState('');
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<ImportResult | null>(null);
+  const [page, setPage] = useState(1);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -730,6 +744,8 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
 
   const q = search.trim().toLowerCase();
   const filtered = q ? events.filter(ev => ev.location_name.toLowerCase().includes(q) || ev.event_date.includes(q) || String(ev.magnitude).includes(q)) : events;
+  const paged = filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, events.length]);
 
   return (
     <div className="space-y-4">
@@ -793,7 +809,7 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
               <tr><td colSpan={8} className="px-4 py-8 text-center text-stone-400">
                 {events.length === 0 ? 'La tabla seismic_events está vacía. Crea un evento o importa un catálogo QuakeML del SGC.' : 'Sin resultados para la búsqueda.'}
               </td></tr>
-            ) : filtered.map(ev => (
+            ) : paged.map(ev => (
               <tr key={ev.id} className="border-b border-stone-100">
                 <td className="px-4 py-2.5 whitespace-nowrap text-stone-600">{ev.event_date} <span className="text-stone-300">{ev.event_time?.slice(0, 5)}</span></td>
                 <td className="px-4 py-2.5 font-medium text-[#1A1A2E] max-w-[220px] truncate">{ev.location_name}</td>
@@ -813,6 +829,7 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
           </tbody>
         </table>
       </div>
+      <Pagination page={page} totalItems={filtered.length} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />
       <p className="text-[11px] text-stone-400">{events.length} eventos en la base de datos. Los registros MiniSEED del explorador se gestionan con los scripts del backend.</p>
     </div>
   );
@@ -917,6 +934,7 @@ function TimelineEditor({ row, onSave, onCancel }: { row: Partial<TimelineRow>; 
 
 function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void }) {
   const [sub, setSub] = useState<EduTab>('quiz');
+  const [page, setPage] = useState(1);
   const [quiz, setQuiz] = useState<QuizRow[]>([]);
   const [facts, setFacts] = useState<WaveFactRow[]>([]);
   const [timeline, setTimeline] = useState<TimelineRow[]>([]);
@@ -940,6 +958,15 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
   };
 
   const confirmDel = (label: string) => window.confirm(`¿Eliminar "${label}"?`);
+
+  // Total de la sub-lista activa y páginas (una sola barra para las tres).
+  const subTotal = sub === 'quiz' ? quiz.length : sub === 'facts' ? facts.length : timeline.length;
+  const start = (page - 1) * ADMIN_PAGE_SIZE;
+  const end = page * ADMIN_PAGE_SIZE;
+  const pagedQuiz = quiz.slice(start, end);
+  const pagedFacts = facts.slice(start, end);
+  const pagedTimeline = timeline.slice(start, end);
+  useEffect(() => { setPage(1); }, [sub, quiz.length, facts.length, timeline.length]);
 
   const subTabs: { id: EduTab; label: string; count: number }[] = [
     { id: 'quiz', label: 'Preguntas del quiz', count: quiz.length },
@@ -967,7 +994,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
 
       {loading ? <div className="py-10"><VolcanoLoader size={40} /></div> : (
         <div className="bg-white rounded-2xl border border-stone-200/60 divide-y divide-stone-100">
-          {sub === 'quiz' && quiz.map(q => (
+          {sub === 'quiz' && pagedQuiz.map(q => (
             <div key={q.id} className={`p-4 flex items-start gap-3 ${!q.active ? 'opacity-50' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-[#1A1A2E]">{q.question}</div>
@@ -976,14 +1003,14 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
               <RowActions onEdit={() => setEditing({ kind: 'quiz', row: q })} onDelete={() => confirmDel(q.question) && wrap(() => deleteQuizRow(q.id), 'Pregunta eliminada')} />
             </div>
           ))}
-          {sub === 'facts' && facts.map(f => (
+          {sub === 'facts' && pagedFacts.map(f => (
             <div key={f.id} className={`p-4 flex items-start gap-3 ${!f.active ? 'opacity-50' : ''}`}>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-[#2D6A4F]/10 text-[#2D6A4F] flex-shrink-0 w-16 text-center">{f.wave_type}</span>
               <div className="flex-1 text-sm text-stone-700">{f.fact}{!f.active && <span className="text-xs text-stone-400"> · inactivo</span>}</div>
               <RowActions onEdit={() => setEditing({ kind: 'facts', row: f })} onDelete={() => confirmDel(f.fact.slice(0, 40)) && wrap(() => deleteFactRow(f.id), 'Dato eliminado')} />
             </div>
           ))}
-          {sub === 'timeline' && timeline.map(t => (
+          {sub === 'timeline' && pagedTimeline.map(t => (
             <div key={t.id} className={`p-4 flex items-start gap-3 ${!t.active ? 'opacity-50' : ''}`}>
               <span className="font-mono font-bold text-[#1A1A2E] w-14 flex-shrink-0">{t.year}</span>
               <div className="flex-1 min-w-0">
@@ -999,6 +1026,7 @@ function EducationTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => v
           )}
         </div>
       )}
+      {!loading && <Pagination page={page} totalItems={subTotal} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />}
     </div>
   );
 }
@@ -1019,6 +1047,7 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
   const [to, setTo] = useState('');
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -1028,6 +1057,9 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
   }, [from, to, notify]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  const paged = reports.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [reports.length]);
 
   const remove = async (r: AdminReport) => {
     if (!window.confirm(`¿Eliminar el reporte "${r.title}"?`)) return;
@@ -1062,7 +1094,7 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
           <tbody>
             {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">Cargando…</td></tr>
             : reports.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">No hay reportes en el período</td></tr>
-            : reports.map(r => {
+            : paged.map(r => {
               const p = r.params as { sourceType?: string; magnitude?: number; depth?: number };
               return (
                 <tr key={r.id} className="border-b border-stone-100">
@@ -1081,6 +1113,7 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
           </tbody>
         </table>
       </div>
+      {!loading && <Pagination page={page} totalItems={reports.length} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />}
     </div>
   );
 }
@@ -1164,6 +1197,7 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
   const [statusFilter, setStatusFilter] = useState<'' | FeedbackStatus>('');
   const [drawer, setDrawer] = useState<FeedbackMessage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(1);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -1179,6 +1213,9 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
     if (statusFilter && m.status !== statusFilter) return false;
     return true;
   }), [messages, typeFilter, statusFilter]);
+
+  const paged = filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [typeFilter, statusFilter, messages.length]);
 
   // Al abrir un mensaje "nuevo", pasarlo a "leído".
   const openDrawer = async (m: FeedbackMessage) => {
@@ -1246,7 +1283,7 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200/60 divide-y divide-stone-100">
-          {filtered.map(m => (
+          {paged.map(m => (
             <button
               key={m.id} onClick={() => openDrawer(m)}
               className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-stone-50/60 transition-colors"
@@ -1264,6 +1301,10 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
             </button>
           ))}
         </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <Pagination page={page} totalItems={filtered.length} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />
       )}
 
       {drawer && (
