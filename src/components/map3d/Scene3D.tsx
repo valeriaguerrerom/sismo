@@ -291,11 +291,25 @@ export function Scene3D({
 
     // (Las aristas, estratos y etiquetas de profundidad las dibuja TerrainBlock.)
 
-    // ── Frentes de onda como anillos que siguen el relieve ──
-    // Cada frente es una LineLoop cuyos vértices se proyectan sobre la altura
-    // del terreno. Se mantiene una estela de anillos previos (opacidad decreciente).
+    // ── Frentes de onda ──
+    // La onda nace en el HIPOCENTRO (en profundidad) y se propaga como una
+    // esfera. Para que se vea correctamente la profundidad, dibujamos:
+    //   (a) una SEMIESFERA semitransparente centrada en el hipocentro (crece
+    //       dentro del bloque, visible en cualquier vista);
+    //   (b) el ANILLO sobre la superficie, que es la INTERSECCIÓN de esa esfera
+    //       con el terreno: su radio es sqrt(r² − prof²) y SOLO aparece cuando
+    //       el frente esférico ya alcanzó la superficie (r > profundidad). Así,
+    //       a más profundidad, el anillo aparece más tarde y nace más grande.
+    // Las escalas horizontal (kmToSceneUnits) y vertical (depthToY) difieren, por
+    // eso cada eje se convierte con su propio factor y la "esfera" se construye
+    // en km y se escala por eje (se ve como un casquete coherente con el bloque).
     const RING_SEGMENTS = 96;
-    const TRAIL = 3; // anillos de estela
+    const TRAIL = 3; // anillos de estela en superficie
+
+    // Factores de conversión km→escena por eje (horizontal vs vertical).
+    const UX_PER_KM = kmToSceneUnits(1);       // X y Z (horizontal)
+    const UY_PER_KM = Math.abs(depthToY(1));   // Y (profundidad)
+
     type WaveRing = { line: THREE.LineLoop; mat: THREE.LineBasicMaterial };
     const makeWaveRings = (color: number): WaveRing[] => {
       const rings: WaveRing[] = [];
@@ -313,11 +327,55 @@ export function Scene3D({
     const pRings = makeWaveRings(COLOR_P);
     const sRings = makeWaveRings(COLOR_S);
 
+    // Semiesfera (casquete) del frente dentro del bloque. Una SphereGeometry
+    // recortada al hemisferio superior (phiStart..phiLength) no sirve porque el
+    // hipocentro puede estar poco profundo; usamos la esfera completa recortada
+    // por el propio bloque (depthWrite:false para no tapar). Se escala por eje.
+    type WaveShell = { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial };
+    const makeWaveShell = (color: number): WaveShell => {
+      // Esfera unitaria (radio 1 km equivalente); el radio real se aplica por
+      // escala en cada eje en updateWaveShell.
+      const geo = new THREE.SphereGeometry(1, 32, 24);
+      const mat = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.12, side: THREE.DoubleSide,
+        depthWrite: false, wireframe: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      mesh.renderOrder = 4;
+      scene.add(mesh);
+      return { mesh, mat };
+    };
+    const pShell = makeWaveShell(COLOR_P);
+    const sShell = makeWaveShell(COLOR_S);
+
+    /**
+     * Actualiza el casquete esférico del frente, centrado en el hipocentro.
+     * El radio crece con el tiempo; se escala por eje (horizontal vs vertical).
+     * Se recorta por debajo de la superficie dejándolo semitransparente, y se
+     * atenúa al llenar el bloque.
+     */
+    const updateWaveShell = (
+      shell: WaveShell, ex: number, ey: number, ez: number,
+      vKmS: number, elapsed: number,
+    ) => {
+      const rKm = vKmS * elapsed;
+      const { mesh, mat } = shell;
+      if (elapsed <= 0 || rKm < 1) { mesh.visible = false; return; }
+      mesh.position.set(ex, ey, ez);
+      mesh.scale.set(rKm * UX_PER_KM, rKm * UY_PER_KM, rKm * UX_PER_KM);
+      // Atenúa cuando el radio supera el tamaño del dominio (horizontal).
+      const maxKm = DOMAIN_WIDTH_KM * 0.55;
+      mat.opacity = rKm <= maxKm ? 0.12 : Math.max(0, 0.12 * (1 - (rKm - maxKm) / (maxKm * 0.6)));
+      mesh.visible = mat.opacity > 0.01;
+    };
+
     // ── Frente de onda DENTRO del bloque (vista Corte) ──
-    // Semicircunferencias P y S que nacen en el hipocentro y crecen hacia abajo
-    // y a los lados, contenidas en el plano vertical del corte (epicentro →
-    // estación). Solo se dibujan en la vista "Corte". A diferencia de los
-    // anillos de superficie, estos muestran la onda propagándose en profundidad.
+    // Circunferencias P y S que nacen en el hipocentro y crecen en el plano
+    // vertical del corte (epicentro → estación), recortadas en la superficie
+    // (y=0). Solo se dibujan en la vista "Corte". A diferencia de los anillos de
+    // superficie, estas muestran la onda propagándose en profundidad y cruzando
+    // las capas hacia la superficie y hacia la estación.
     const ARC_SEGMENTS = 64;
     const makeCutArc = (color: number): { line: THREE.Line; mat: THREE.LineBasicMaterial } => {
       const geo = new THREE.BufferGeometry();
@@ -333,10 +391,10 @@ export function Scene3D({
     const sCutArc = makeCutArc(COLOR_S);
 
     /**
-     * Actualiza una semicircunferencia del frente de onda en el plano de corte.
-     * El arco va de −90° (hacia la superficie, pero recortado a y≤0) a +90°
-     * cubriendo el semiplano inferior, y se abre también hacia los lados en el
-     * eje horizontal (u) del corte. Centro = hipocentro (ex,ey,ez).
+     * Actualiza la circunferencia del frente de onda en el plano de corte.
+     * Es un círculo centrado en el hipocentro que crece con el tiempo; los
+     * puntos que superarían la superficie se recortan a y=0. Cada eje usa su
+     * escala (horizontal vs profundidad). Centro = hipocentro (ex,ey,ez).
      */
     const updateCutArc = (
       arc: { line: THREE.Line; mat: THREE.LineBasicMaterial },
@@ -344,26 +402,30 @@ export function Scene3D({
       vKmS: number, elapsed: number,
     ) => {
       const rKm = vKmS * elapsed;
-      const r = kmToSceneUnits(rKm);
       const { line, mat } = arc;
-      if (viewRef.current !== 'cut' || elapsed <= 0 || r < 0.05) { line.visible = false; return; }
+      if (viewRef.current !== 'cut' || elapsed <= 0 || rKm < 1) { line.visible = false; return; }
+      // Círculo COMPLETO del frente en el plano del corte, centrado en el
+      // hipocentro. Cada eje usa su propia escala (horizontal vs profundidad),
+      // así el frente cruza las capas con la misma proporción que el bloque.
+      // Los puntos que quedarían sobre la superficie (y>0) se recortan a y=0,
+      // de modo que, al llegar arriba, el arco "toca" la superficie.
+      const rX = rKm * kmToSceneUnits(1); // escala horizontal
+      const rY = rKm * Math.abs(depthToY(1)); // escala vertical (profundidad)
       const posAttr = line.geometry.attributes.position as THREE.BufferAttribute;
-      // Ángulo de −PI/2 (horizontal −u) a +PI/2 (horizontal +u) pasando por el
-      // fondo (ángulo 0 = hacia abajo, −Y). Así el frente baja por el bloque.
       for (let s = 0; s <= ARC_SEGMENTS; s++) {
-        const a = -Math.PI / 2 + (s / ARC_SEGMENTS) * Math.PI; // [-PI/2, PI/2]
-        const horizComp = Math.sin(a) * r; // a lo largo de u (horizontal del corte)
-        const downComp = Math.cos(a) * r;  // hacia abajo (−Y)
+        const a = (s / ARC_SEGMENTS) * Math.PI * 2; // círculo completo
+        const horizComp = Math.sin(a) * rX; // a lo largo de u (horizontal del corte)
+        const vertComp = Math.cos(a) * rY;  // vertical
         const x = ex + ux * horizComp;
         const z = ez + uz * horizComp;
-        let y = ey - downComp;             // ey es negativo; bajar resta más
-        if (y > 0) y = 0;                  // no asomar sobre la superficie
+        let y = ey + vertComp;              // puede subir o bajar desde el hipocentro
+        if (y > 0) y = 0;                   // no asomar sobre la superficie
         posAttr.setXYZ(s, x, y, z);
       }
       posAttr.needsUpdate = true;
       // Atenuar cuando el frente ya llenó el bloque en profundidad.
-      const maxR = kmToSceneUnits(200);
-      mat.opacity = r <= maxR * 0.7 ? 0.9 : Math.max(0, 0.9 * (1 - (r - maxR * 0.7) / (maxR * 0.3)));
+      const maxKm = DOMAIN.depthMax;
+      mat.opacity = rKm <= maxKm * 0.8 ? 0.95 : Math.max(0, 0.95 * (1 - (rKm - maxKm * 0.8) / (maxKm * 0.4)));
       line.visible = mat.opacity > 0.03;
     };
 
@@ -375,15 +437,27 @@ export function Scene3D({
     const WAVE_FADE_START = BLOCK.width * 0.5; // borde del terreno: empieza a atenuar
     const WAVE_FADE_END = BLOCK.width * 0.95;  // poco más allá del borde: desaparece
 
-    /** Actualiza un conjunto de anillos (frente + estela) a un radio dado en km. */
-    const updateWaveRings = (rings: WaveRing[], ex: number, ez: number, vKmS: number, elapsed: number) => {
+    /**
+     * Actualiza los anillos de superficie (frente + estela). El anillo es la
+     * INTERSECCIÓN del frente esférico (centrado en el hipocentro, a `depthKm`)
+     * con la superficie: radio en superficie = sqrt(rHip² − depth²), definido
+     * solo cuando el frente ya llegó arriba (rHip ≥ depth). Antes de eso, el
+     * anillo no existe (la onda aún viaja por el subsuelo).
+     */
+    const updateWaveRings = (
+      rings: WaveRing[], ex: number, ez: number, depthKm: number, vKmS: number, elapsed: number,
+    ) => {
       const th = terrainRef.current;
       for (let k = 0; k < rings.length; k++) {
         const tLag = elapsed - k * 0.6; // estela: 0.6 s de retraso por anillo
-        const rKm = vKmS * tLag;
-        const r = kmToSceneUnits(rKm);
+        const rHipKm = vKmS * tLag;      // radio hipocentral recorrido (km)
         const { line, mat } = rings[k];
-        if (tLag <= 0 || r < 0.05 || r > WAVE_FADE_END) { line.visible = false; continue; }
+        // Radio del anillo en superficie (km). Si el frente aún no sube, nada.
+        const surfKm2 = rHipKm * rHipKm - depthKm * depthKm;
+        if (tLag <= 0 || surfKm2 <= 0.5) { line.visible = false; continue; }
+        const surfKm = Math.sqrt(surfKm2);
+        const r = kmToSceneUnits(surfKm);
+        if (r < 0.05 || r > WAVE_FADE_END) { line.visible = false; continue; }
         const posAttr = line.geometry.attributes.position as THREE.BufferAttribute;
         for (let s = 0; s <= RING_SEGMENTS; s++) {
           const a = (s / RING_SEGMENTS) * Math.PI * 2;
@@ -547,12 +621,19 @@ export function Scene3D({
         }
       }
 
-      // Actualizar frentes de onda (siguen el relieve) según elapsed
+      // Actualizar frentes de onda según elapsed. El frente nace en el
+      // hipocentro: los anillos de superficie son su intersección con el
+      // terreno, y los casquetes esféricos muestran la propagación en profundidad.
       if (d.epicenter && d.elapsed > 0) {
         const ex = lonToX(d.epicenter.lon);
         const ez = latToZ(d.epicenter.lat);
-        updateWaveRings(pRings, ex, ez, d.vpKmS, d.elapsed);
-        updateWaveRings(sRings, ex, ez, d.vsKmS, d.elapsed);
+        const ey = depthToY(d.epicenter.depthKm);
+        const depthKm = d.epicenter.depthKm;
+        updateWaveRings(pRings, ex, ez, depthKm, d.vpKmS, d.elapsed);
+        updateWaveRings(sRings, ex, ez, depthKm, d.vsKmS, d.elapsed);
+        // Casquete esférico semitransparente dentro del bloque (todas las vistas).
+        updateWaveShell(pShell, ex, ey, ez, d.vpKmS, d.elapsed);
+        updateWaveShell(sShell, ex, ey, ez, d.vsKmS, d.elapsed);
 
         // Frente de onda dentro del bloque (solo en vista Corte): usa la
         // dirección epicentro→estación seleccionada como eje horizontal del corte.
@@ -562,7 +643,6 @@ export function Scene3D({
           const dxc = sx - ex, dzc = sz - ez;
           const h = Math.hypot(dxc, dzc) || 1e-6;
           const ux = dxc / h, uz = dzc / h;
-          const ey = depthToY(d.epicenter.depthKm);
           updateCutArc(pCutArc, ex, ey, ez, ux, uz, d.vpKmS, d.elapsed);
           updateCutArc(sCutArc, ex, ey, ez, ux, uz, d.vsKmS, d.elapsed);
         } else {
@@ -572,6 +652,8 @@ export function Scene3D({
       } else {
         pRings.forEach(r => (r.line.visible = false));
         sRings.forEach(r => (r.line.visible = false));
+        pShell.mesh.visible = false;
+        sShell.mesh.visible = false;
         pCutArc.line.visible = false;
         sCutArc.line.visible = false;
       }
@@ -842,11 +924,26 @@ export function Scene3D({
       let arrowAngle = 0; // ángulo en el plano XZ hacia la ubicación real
       if (th && !th.isInside(sx, sz)) {
         const nb = th.nearestBorder(sx, sz);
-        arrowAngle = Math.atan2(sx - nb.x, sz - nb.z); // dirección borde→estación
-        outsideKm = (nb.dist / BLOCK.width) * DOMAIN_WIDTH_KM;
-        outside = true;
-        sx = nb.x;
-        sz = nb.z;
+        const borderKm = (nb.dist / BLOCK.width) * DOMAIN_WIDTH_KM;
+        // Tolerancia costera: estaciones justo en el borde (p. ej. TUM en la
+        // costa de Tumaco) caen "fuera" del polígono de Natural Earth por el
+        // recorte grueso de la línea de costa (~2 km). Si están a menos de
+        // BORDER_TOLERANCE_KM del borde, se tratan como DENTRO y se pegan al
+        // borde SIN flecha (son de Nariño). Más lejos (p. ej. Popayán) sí es
+        // una estación de otro departamento y conserva su flecha.
+        const BORDER_TOLERANCE_KM = 6;
+        if (borderKm <= BORDER_TOLERANCE_KM) {
+          // Dentro (con tolerancia): acercar ligeramente al interior para que el
+          // cono quede sobre el terreno, pero sin marcarla como externa.
+          sx = nb.x;
+          sz = nb.z;
+        } else {
+          arrowAngle = Math.atan2(sx - nb.x, sz - nb.z); // dirección borde→estación
+          outsideKm = borderKm;
+          outside = true;
+          sx = nb.x;
+          sz = nb.z;
+        }
       }
 
       const surfY = th ? th.sampleHeightAt(sx, sz) : 0;
@@ -962,21 +1059,28 @@ export function Scene3D({
     const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xffee88, transparent: true, opacity: 0.8 }));
     st.hypoGroup.add(line);
 
-    // Hipocentro (esfera blanca con halo, claramente por debajo de la superficie)
+    // Hipocentro (esfera semitransparente con halo, claramente por debajo de la
+    // superficie). Semitransparente para que se vea DENTRO del bloque (el
+    // terreno y las paredes quedan por delante) y se entienda que está enterrado.
     const hypo = new THREE.Mesh(
       new THREE.SphereGeometry(0.5, 20, 20),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffaa44, emissiveIntensity: 0.6 }),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff, emissive: 0xffaa44, emissiveIntensity: 0.6,
+        transparent: true, opacity: 0.75, depthWrite: false,
+      }),
     );
+    hypo.renderOrder = 6;
     hypo.position.set(ex, ey, ez);
     st.hypoGroup.add(hypo);
     const halo = new THREE.Mesh(
       new THREE.SphereGeometry(0.85, 20, 20),
-      new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.18 }),
+      new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.18, depthWrite: false }),
     );
     halo.position.set(ex, ey, ez);
     st.hypoGroup.add(halo);
 
-    // Etiqueta de profundidad del hipocentro
+    // Etiqueta de profundidad del hipocentro, pegada junto al marcador (a su
+    // derecha y un poco abajo) para que no "flote" lejos sobre el terreno.
     const hdiv = document.createElement('div');
     hdiv.style.cssText = 'display:inline-block;';
     const hInner = document.createElement('span');
@@ -984,7 +1088,7 @@ export function Scene3D({
     hInner.style.cssText = "display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;transition:transform 0.12s;";
     hdiv.appendChild(hInner);
     const hlabel = new CSS2DObject(hdiv);
-    hlabel.position.set(ex, ey - 0.7, ez);
+    hlabel.position.set(ex, ey - 0.45, ez);
     st.hypoGroup.add(hlabel);
   }, [epicenter]);
 
@@ -1024,13 +1128,12 @@ export function Scene3D({
     group.children.slice().forEach(c => group.remove(c));
 
     const isIasp = model === 'iasp91';
-    // Las etiquetas de capa se anclan a la ARISTA FRONTAL REAL del bloque (la
-    // misma del eje de profundidad), para quedar PEGADAS a una cara visible y
-    // NO flotar fuera de la silueta. Un pequeño desplazamiento en +X separa el
-    // texto del número de profundidad del eje. La NOTA del modelo homogéneo NO
-    // va en la escena (se muestra como texto fijo en una esquina del visor, en
-    // Map3D) para no encimarse con "Manto superior".
-    const edge = terrainRef.current?.frontEdge ?? { x: 0, z: BLOCK.depthXY / 2 };
+    // Los NOMBRES de capa se anclan a la ARISTA TRASERA del bloque (cara
+    // OPUESTA al eje de profundidad), para que NUNCA se superpongan con los
+    // números de km (que viven en la cara frontal). Un pequeño desplazamiento
+    // hacia afuera (+Z) los despega de la cara. La NOTA del modelo homogéneo NO
+    // va en la escena (se muestra como texto fijo en una esquina del visor).
+    const edge = terrainRef.current?.backEdge ?? { x: 0, z: -BLOCK.depthXY / 2 };
     for (const layer of SUBSURFACE_LAYERS) {
       const yMid = (depthToY(layer.from) + depthToY(layer.to)) / 2;
       const div = document.createElement('div');
@@ -1046,8 +1149,8 @@ export function Scene3D({
         'background:rgba(10,14,26,0.66);padding:1px 5px;border-radius:3px;white-space:nowrap;';
       div.appendChild(span);
       const label = new CSS2DObject(div);
-      // Pegada a la arista frontal, a la altura media de su capa, ligeramente
-      // adentro (−Z) para que se vea sobre la cara del bloque.
+      // Pegada a la arista trasera, a la altura media de su capa, ligeramente
+      // afuera (−Z) para que se vea sobre la cara trasera del bloque.
       label.position.set(edge.x, yMid, edge.z - 0.6);
       group.add(label);
     }

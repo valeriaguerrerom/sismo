@@ -927,9 +927,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               <b> epicentro que coloques es un supuesto</b> para ver la propagación.
             </div>
           )}
-          {/* Botones de vista de cámara (arriba al centro, para dejar la
-              esquina inferior izquierda libre al eje de profundidad del bloque). */}
-          <div data-tour="m3d-vistas" className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
+          {/* Botones de vista de cámara en la esquina INFERIOR IZQUIERDA del
+              visor, para no tapar la frase de ayuda superior. El panel triaxial
+              (cuando está abierto) ocupa la franja inferior; por eso se suben
+              con bottom-16 si hay estación seleccionada y panel visible. */}
+          <div
+            data-tour="m3d-vistas"
+            className={`absolute left-2 z-20 flex gap-1.5 ${showTriaxial && selectedStation ? 'bottom-16' : 'bottom-2'}`}
+          >
             {([
               ['north', 'Norte', 'Mira el bloque de frente, desde el norte (ves la superficie y la profundidad).'],
               ['cut', 'Corte', 'Corte vertical hacia la estación seleccionada: muestra cómo baja la onda con la profundidad.'],
@@ -938,7 +943,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               <Tooltip key={v} content={help} hoverOnly>
                 <button
                   onClick={() => setView(v)}
-                  className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/15 text-stone-200 hover:bg-black/70"
+                  className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/15 text-stone-200 hover:bg-black/80"
                 >
                   {label}
                 </button>

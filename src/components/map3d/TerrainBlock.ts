@@ -38,10 +38,15 @@ export interface TerrainHandle {
   nearestBorder: (x: number, z: number) => { x: number; z: number; dist: number };
   /**
    * Arista frontal del bloque (punto del anillo más cercano a la cámara por
-   * defecto), donde va el eje de profundidad. Las etiquetas de capa se anclan
-   * aquí para quedar PEGADAS a una cara real del bloque, no flotando fuera.
+   * defecto), donde va el eje de profundidad (números de km).
    */
   frontEdge: { x: number; z: number };
+  /**
+   * Arista trasera del bloque (lado opuesto a `frontEdge`), donde se anclan los
+   * NOMBRES de las capas, para que NUNCA se superpongan con los números de km
+   * del eje de profundidad (que viven en la cara frontal).
+   */
+  backEdge: { x: number; z: number };
   dispose: () => void;
 }
 
@@ -270,8 +275,9 @@ export function buildTerrainBlock(
     // Bloque rectangular: todo el dominio es "terreno", nada queda fuera.
     isInside: () => true,
     nearestBorder: (x: number, z: number) => ({ x, z, dist: 0 }),
-    // Bloque rectangular: arista frontal = borde +Z central.
+    // Bloque rectangular: arista frontal = borde +Z central; trasera = −Z.
     frontEdge: { x: 0, z: BLOCK.depthXY / 2 },
+    backEdge: { x: 0, z: -BLOCK.depthXY / 2 },
     dispose: () => {
       disposables.forEach(d => d.dispose());
       scene.remove(group);
@@ -531,6 +537,18 @@ function buildSilhouetteBlock(
   // El 0 km coincide con la superficie real del terreno en ese punto.
   const surfY0 = sampleHeightAt(axX, axZ);
 
+  // Arista TRASERA (lado opuesto): vértice en la mitad trasera (z bajo) y más al
+  // ESTE (x máximo). Ahí van los NOMBRES de las capas, en la cara contraria al
+  // eje de profundidad, para que no se superpongan con los números de km.
+  const backThreshold = zMin + (zMax - zMin) * 0.4; // mitad trasera
+  let backIdx = 0;
+  let bestXBack = -Infinity;
+  for (let i = 0; i < ringXZ.length; i++) {
+    const [x, z] = ringXZ[i];
+    if (z <= backThreshold && x > bestXBack) { bestXBack = x; backIdx = i; }
+  }
+  const [backX, backZ] = ringXZ[backIdx];
+
   // Línea vertical del eje (de la superficie al fondo) sobre la arista frontal.
   const axisLineGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(axX, surfY0, axZ + 0.05),
@@ -572,6 +590,7 @@ function buildSilhouetteBlock(
     isInside: (x: number, z: number) => pointInRing(x, z, ringXZ),
     nearestBorder: (x: number, z: number) => nearestPointOnRing(x, z, ringXZ),
     frontEdge: { x: axX, z: axZ },
+    backEdge: { x: backX, z: backZ },
     dispose: () => {
       disposables.forEach(d => d.dispose());
       // Eliminar del DOM los elementos de las etiquetas CSS2D (eje de
