@@ -145,6 +145,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [speed, setSpeed] = useState(5);
   const rafRef = useRef<number>(0);
   const lastTsRef = useRef<number>(0);
+  // true cuando el próximo cálculo que termine debe arrancar la animación sola
+  // (lo activan colocar epicentro / cargar evento, NO cambiar el modelo o Vp/Vs).
+  const autoplayPendingRef = useRef(false);
 
   // UI
   const [showEventList, setShowEventList] = useState(false);
@@ -474,6 +477,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setLoadingTT(true); // mostrar el loader de inmediato (evita el parpadeo del estado vacío)
     setDepthAssumed(true); // epicentro manual: la profundidad es la que elige el usuario
     setCoordIsZone(false); // el usuario eligió la ubicación: no es un punto por zona
+    autoplayPendingRef.current = true; // acción deliberada: autoplay al terminar
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
     setPlacingEpicenter(false); // ya se colocó: salir del modo "colocar"
@@ -490,6 +494,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setCoordIsZone(ev.coordIsZone);   // ubicación por zona, no epicentro real
     if (ev.sourceType === 'volcanic') { setVp(3.0); setVs(1.7); setDensity(2500); }
     setLoadingTT(true); // loader inmediato (evita el parpadeo del estado vacío)
+    autoplayPendingRef.current = true; // acción deliberada: autoplay al terminar
     setEpicenter({ lat: ev.lat, lon: ev.lon, depthKm: ev.depthKm });
     setCurrentEventId(ev.id);
     setPlacingEpicenter(false);
@@ -709,8 +714,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       ? `Generando estación ${nextPending.code}${nextPending.name ? `, ${nextPending.name}` : ''}…`
       : 'Preparando la reproducción…';
 
-  // Al terminar de generar, arrancar la reproducción automáticamente desde el
-  // inicio (autoplay) y dejar un mensaje final para no dejar "Generando…" pegado.
+  // Al terminar de generar, arrancar la reproducción automáticamente SOLO si el
+  // cálculo vino de colocar un epicentro o cargar un evento (acción deliberada
+  // de "nuevo sismo"). Un recálculo por cambiar el modelo (Velocidad constante /
+  // IASP91) o Vp/Vs NO debe arrancar la animación sola.
   const wasCalcRef = useRef(false);
   useEffect(() => {
     if (isCalculating) {
@@ -721,10 +728,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     if (wasCalcRef.current && canPlay) {
       wasCalcRef.current = false;
       setMessage(`Listo, ${stationsWithSignal} ${stationsWithSignal === 1 ? 'estación' : 'estaciones'} con señal`);
-      // Autoplay: arrancar la reproducción desde el inicio en cuanto está lista.
-      setElapsed(0);
-      const play = setTimeout(() => setPlaying(true), 600);
-      return () => clearTimeout(play);
+      // Autoplay solo si estaba pendiente por una acción del usuario.
+      if (autoplayPendingRef.current) {
+        autoplayPendingRef.current = false;
+        setElapsed(0);
+        const play = setTimeout(() => setPlaying(true), 600);
+        return () => clearTimeout(play);
+      }
     }
   }, [isCalculating, canPlay, stationsWithSignal]);
 
