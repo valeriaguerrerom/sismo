@@ -72,6 +72,11 @@ export function startTour(steps: TourStep[], opts: StartTourOptions = {}): void 
     stagePadding: 6,
     stageRadius: 12,
     allowClose: true,
+    // Sin botón de cerrar (X): dejamos solo navegación. "Omitir" (inyectado en
+    // el pie) y la tecla Esc cierran el tour. Al quitar 'close' de showButtons,
+    // Driver.js no renderiza la X y el título ya no deja el hueco que ocupaba.
+    showButtons: ['next', 'previous'],
+    allowKeyboardControl: true,
     steps,
     // Tras resaltar cada paso, aseguramos que el elemento quede COMPLETAMENTE
     // visible dentro de su contenedor con scroll (las columnas de parámetros y
