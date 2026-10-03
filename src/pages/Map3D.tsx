@@ -40,6 +40,10 @@ import {
   downloadMap3dPdf, downloadMap3dCsv, DEFAULT_MAP3D_OPTIONS,
   type Map3dReportData, type Map3dReportOptions,
 } from '../lib/map3dReport';
+import { Pagination } from '../components/ui/Pagination';
+
+/** Eventos por página en la lista del catálogo del Mapa 3D. */
+const EVENTS_PER_PAGE = 12;
 
 interface CatalogEvent {
   id: string;
@@ -221,6 +225,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // src/lib/eventFilters.ts). Orden aparte (no es un filtro).
   const [evFilters, setEvFilters] = useState<EventFilters>(EMPTY_FILTERS);
   const [evSort, setEvSort] = useState<'date' | 'magnitude'>('date');
+  const [evPage, setEvPage] = useState(1);
   // En móvil arrancamos con los paneles ocultos para que la escena 3D ocupe
   // todo el ancho; en escritorio se muestran de entrada.
   const [panelsCollapsed, setPanelsCollapsed] = useState(
@@ -244,6 +249,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       : (b.event_date + b.event_time).localeCompare(a.event_date + a.event_time));
     return rows;
   }, [catalogRows, evFilters, evSort]);
+
+  // Eventos de la página actual del catálogo (la lista completa es larga).
+  const pagedRows = filteredRows.slice((evPage - 1) * EVENTS_PER_PAGE, evPage * EVENTS_PER_PAGE);
+
+  // Al cambiar filtros, orden o abrir la lista, vuelve a la página 1.
+  useEffect(() => {
+    setEvPage(1);
+  }, [evFilters, evSort, showEventList]);
 
   // Mapa id → CatalogEvent (para cargar en la escena al elegir una fila).
   const eventById = useMemo(() => {
@@ -1425,7 +1438,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               </div>
             </div>
             <div className="overflow-y-auto divide-y divide-white/5">
-              {filteredRows.map(row => {
+              {pagedRows.map(row => {
                 const ev = eventById.get(row.event_id);
                 // Campos de la fila SIN puntos medios (separados por comas):
                 // magnitud con su tipo, fecha, región y profundidad asumida.
@@ -1454,6 +1467,18 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 <div className="px-4 py-6 text-center text-[11px] text-stone-500">Ningún evento coincide con los filtros.</div>
               )}
             </div>
+            {/* Paginación fija al pie del modal (fuera del área con scroll). */}
+            {filteredRows.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-white/10">
+                <Pagination
+                  page={evPage}
+                  totalItems={filteredRows.length}
+                  pageSize={EVENTS_PER_PAGE}
+                  onChange={setEvPage}
+                  theme="dark"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
