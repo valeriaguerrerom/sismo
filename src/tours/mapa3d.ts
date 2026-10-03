@@ -44,22 +44,13 @@ export function buildMapa3dSteps(): TourStep[] {
 
   return [
     {
-      element: '[data-tour="m3d-escena"]',
+      // Primer paso: popover centrado (sin resaltar la escena, que se veía
+      // "mal señalado"). Reúne la bienvenida a la escena 3D y el porqué del
+      // bloque hasta 200 km. Centrado se ve bien en escritorio y en móvil.
       popover: {
-        title: 'Escena 3D',
+        title: 'Bienvenido a la escena 3D',
         description:
-          'Este es el terreno de Nariño en 3D. Arrastra para girar, usa dos dedos (o la rueda) para acercar y explora la propagación de las ondas.',
-        side: mobile ? 'bottom' : 'left',
-        align: 'center',
-      },
-    },
-    {
-      // Sin `element`: popover centrado (nota general), para NO volver a
-      // resaltar toda la escena como el paso anterior (se veía "mal señalado").
-      popover: {
-        title: '¿Por qué el bloque llega a 200 km?',
-        description:
-          'En Nariño la placa de Nazca se hunde bajo la de Sudamérica (subducción). Eso genera sismos no solo superficiales, sino también intermedios, de decenas hasta ~200 km de profundidad. Por eso el bloque llega tan hondo.',
+          'Este es el terreno de Nariño en 3D: arrastra para girar y usa dos dedos (o la rueda) para acercar. El bloque llega hasta ~200 km de profundidad porque en Nariño la placa de Nazca se hunde bajo la de Sudamérica (subducción) y genera sismos no solo superficiales, sino también intermedios.',
       },
     },
     {
@@ -100,8 +91,17 @@ export function buildMapa3dSteps(): TourStep[] {
       'Acelera la animación de 1× hasta 20× para ver el recorrido más rápido.', 'left'),
     panelStep('[data-tour="m3d-modelo"]', 'Modelo de velocidades',
       'Elige cómo viajan las ondas: con velocidad constante o con el modelo terrestre IASP91 (cambia con la profundidad).', 'left'),
-    panelStep('[data-tour="m3d-sismogramas"]', 'Sismogramas',
-      'Compara las llegadas de las ondas P y S en cada estación mientras avanza la simulación.', 'right'),
+    // El panel de sismogramas ocupa casi toda la altura; anclar el popover a su
+    // lado lo desbordaba por arriba (tapaba el navbar). Lo mostramos centrado,
+    // que se ve limpio en cualquier tamaño de pantalla.
+    {
+      popover: {
+        title: 'Sismogramas',
+        description:
+          'En el panel de la izquierda puedes comparar las llegadas de las ondas P y S en cada estación mientras avanza la simulación.',
+        align: 'center',
+      },
+    },
     panelStep('[data-tour="m3d-evento"]', 'Cargar un evento real',
       'Elige un sismo del catálogo para simular su propagación con datos reales.', 'top', 'end'),
   ];
