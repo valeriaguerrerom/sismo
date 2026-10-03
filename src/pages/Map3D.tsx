@@ -221,7 +221,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // src/lib/eventFilters.ts). Orden aparte (no es un filtro).
   const [evFilters, setEvFilters] = useState<EventFilters>(EMPTY_FILTERS);
   const [evSort, setEvSort] = useState<'date' | 'magnitude'>('date');
-  const [panelsCollapsed, setPanelsCollapsed] = useState(false);
+  // En móvil arrancamos con los paneles ocultos para que la escena 3D ocupe
+  // todo el ancho; en escritorio se muestran de entrada.
+  const [panelsCollapsed, setPanelsCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024,
+  );
   // Modo "colocar epicentro": resalta el mapa y cambia la ayuda superior para
   // indicar que el usuario ya puede hacer clic en el terreno. Se activa desde el
   // estado vacío del panel de sismogramas y se apaga al colocar un epicentro.
@@ -847,9 +851,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 type="button"
                 onClick={launchTour}
                 aria-label="Ver guía"
-                className={`flex items-center justify-center w-6 h-6 rounded-full border border-white/10 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.mapa3d ? 'help-pulse' : ''}`}
+                className={`flex items-center justify-center w-8 h-8 rounded-full border border-white/25 bg-white/10 text-stone-100 hover:text-white hover:bg-[#C4553A] hover:border-[#C4553A] transition-colors ${user && !user.tours_vistos?.mapa3d ? 'help-pulse' : ''}`}
               >
-                <HelpCircle size={14} />
+                <HelpCircle size={16} />
               </button>
             </Tooltip>
             <button
@@ -971,7 +975,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         <div
           ref={sceneContainerRef}
           data-tour="m3d-escena"
-          className={`relative bg-black/30 rounded-xl overflow-hidden min-h-[560px] lg:min-h-[640px] transition-all ${
+          className={`relative bg-black/30 rounded-xl overflow-hidden min-h-[360px] sm:min-h-[480px] lg:min-h-[640px] transition-all ${
             placingEpicenter ? 'border-2 border-[#2D6A4F] ring-2 ring-[#2D6A4F]/40' : 'border border-white/10'
           }`}
         >
@@ -992,7 +996,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             onPlaceEpicenter={placeEpicenter}
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
-          <div data-tour="m3d-hint" className={`absolute top-2 left-2 z-10 text-[10px] rounded px-2 py-1 transition-colors ${
+          <div data-tour="m3d-hint" className={`absolute top-2 left-2 z-10 max-w-[55%] sm:max-w-[60%] text-[10px] leading-snug rounded px-2 py-1 transition-colors ${
             placingEpicenter ? 'text-white bg-[#2D6A4F]/80 font-semibold' : 'text-stone-400 bg-black/40'
           }`}>
             {placingEpicenter
@@ -1002,14 +1006,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           {/* Nota del modelo homogéneo: texto FIJO en una esquina del visor (no
               dentro de la escena 3D, para no encimarse con las etiquetas de capa). */}
           {model === 'homogeneous' && (
-            <div className="absolute top-10 left-2 z-10 max-w-[220px] text-[10px] leading-snug text-stone-300 bg-black/45 rounded px-2 py-1">
+            <div className="absolute top-12 left-2 z-10 max-w-[55%] sm:max-w-[220px] text-[10px] leading-snug text-stone-300 bg-black/45 rounded px-2 py-1">
               En este modelo todo el subsuelo tiene la misma velocidad.
             </div>
           )}
           {/* Aviso cuando hay un MiniSEED subido asociado a una estación: su traza
               es dato real, pero el epicentro es un supuesto del usuario. */}
           {uploadedStation && (
-            <div className="absolute top-2 right-2 z-10 max-w-[260px] text-[10px] text-stone-200 bg-[#C4553A]/80 rounded px-2.5 py-1.5 leading-snug">
+            <div className="absolute top-2 right-2 z-10 max-w-[40%] sm:max-w-[260px] text-[10px] text-stone-200 bg-[#C4553A]/80 rounded px-2.5 py-1.5 leading-snug">
               Registro cargado por ti en <b>{uploadedStation}</b>. Su traza es real; el
               <b> epicentro que coloques es un supuesto</b> para ver la propagación.
             </div>
