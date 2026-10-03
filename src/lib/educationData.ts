@@ -53,6 +53,12 @@ export interface TimelineEvent {
   event_type: 'tectonic' | 'volcanic';
   /** Fecha exacta (YYYY-MM-DD) o año si no se conoce el día. */
   event_date: string | null;
+  /** Latitud del epicentro/cráter, o null si no se ubica en el mapa. */
+  lat: number | null;
+  /** Longitud del epicentro/cráter, o null si no se ubica en el mapa. */
+  lon: number | null;
+  /** Nota sobre el origen de las coordenadas. */
+  location_note: string | null;
   /** Fuente del evento (cita). */
   source: string;
   /** Enlace a la fuente (opcional). */
@@ -71,6 +77,7 @@ const fallbackQuizVerified: QuizQuestion[] = QUIZ.map(q => ({
 const fallbackTimelineVerified: TimelineEvent[] = TIMELINE.map(t => ({
   id: t.id, year: t.year, magnitude: t.magnitude, title: t.title,
   description: t.description, event_type: t.event_type, event_date: t.date,
+  lat: t.lat, lon: t.lon, location_note: t.locationNote,
   source: t.source.cita, source_url: t.source.url ?? null,
 }));
 
@@ -147,6 +154,9 @@ export async function loadTimelineEvents(): Promise<TimelineEvent[]> {
         title: d.title as string, description: d.description as string,
         event_type: d.event_type as 'tectonic' | 'volcanic',
         event_date: (d.event_date as string) ?? null,
+        lat: (d.lat as number | null) ?? null,
+        lon: (d.lon as number | null) ?? null,
+        location_note: (d.location_note as string | null) ?? null,
         source: (d.source as string) || '', source_url: (d.source_url as string) ?? null,
       }));
     }

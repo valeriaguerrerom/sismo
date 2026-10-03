@@ -60,6 +60,14 @@ export const SRC = {
   kennett1991: {
     cita: 'Kennett, B. L. N., & Engdahl, E. R. (1991). Traveltimes for global earthquake location and phase identification (IASP91). Geophysical Journal International, 105(2), 429–465.',
   },
+  hanksKanamori1979: {
+    cita: 'Hanks, T. C., & Kanamori, H. (1979). A moment magnitude scale. Journal of Geophysical Research, 84(B5), 2348–2350.',
+    url: 'https://doi.org/10.1029/JB084iB05p02348',
+  },
+  vargasMann2013: {
+    cita: 'Vargas, C. A., & Mann, P. (2013). Tearing and breaking off of subducted slabs as the result of collision of the Panama arc-indenter with northwestern South America. Bulletin of the Seismological Society of America, 103(3), 2025–2046.',
+    url: 'https://doi.org/10.1785/0120120328',
+  },
 } satisfies Record<string, Source>;
 
 // ─── Línea de tiempo: eventos verificados ───
@@ -74,6 +82,12 @@ export interface TimelineItem {
   title: string;
   description: string;
   event_type: 'tectonic' | 'volcanic';
+  /** Latitud del epicentro/cráter, o null si no se ubica en el mapa. */
+  lat: number | null;
+  /** Longitud del epicentro/cráter, o null si no se ubica en el mapa. */
+  lon: number | null;
+  /** Nota sobre el origen de las coordenadas (p. ej. "epicentro estimado"). */
+  locationNote: string | null;
   source: Source;
 }
 
@@ -93,6 +107,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Magnitud Mw 6.7 estimada a partir de los daños (no por registro instrumental). Sismo superficial asociado al sistema de fallas de Afiladores. Alcanzó intensidad VIII (EMS-98) en Pasto.',
     event_type: 'tectonic',
+    lat: 1.2, lon: -77.1, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -104,6 +119,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Uno de los mayores sismos instrumentales del mundo, en la zona de subducción frente a la costa pacífica de Colombia y Ecuador. Magnitud Mw 8.4 según el Sistema de Información de Sismicidad Histórica del SGC.',
     event_type: 'tectonic',
+    lat: 1.5, lon: -80.0, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -114,6 +130,7 @@ export const TIMELINE: TimelineItem[] = [
     title: 'Sismo de Tangua',
     description: 'Sismo cortical en el sur de Nariño, cerca de Tangua.',
     event_type: 'tectonic',
+    lat: 1.06, lon: -77.35, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -124,6 +141,7 @@ export const TIMELINE: TimelineItem[] = [
     title: 'Sismo de Imués (falla de Romeral)',
     description: 'Sismo cortical asociado al sistema de fallas de Romeral, cerca de Imués.',
     event_type: 'tectonic',
+    lat: 1.1, lon: -77.5, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -134,6 +152,7 @@ export const TIMELINE: TimelineItem[] = [
     title: 'Sismo de Túquerres',
     description: 'Sismo cortical en el altiplano de Túquerres, sur de Nariño.',
     event_type: 'tectonic',
+    lat: 1.1, lon: -77.6, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -145,6 +164,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Sismo cortical asociado a la falla de Romeral. Alcanzó intensidad VIII en Pasto; se reportó la demolición de unas 500 casas de adobe o ladrillo sin refuerzo.',
     event_type: 'tectonic',
+    lat: 1.2, lon: -77.3, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.sarabia2018,
   },
   {
@@ -156,6 +176,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Sismo de subducción frente a la costa pacífica, a unos 25 km de profundidad. Generó un tsunami que afectó la costa de Nariño.',
     event_type: 'tectonic',
+    lat: 1.6, lon: -79.36, locationNote: 'epicentro estimado (SISH, SGC)',
     source: SRC.usgsTumaco1979,
   },
   {
@@ -167,6 +188,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Erupción súbita durante un taller científico internacional (programa Decade Volcano). Fallecieron 9 personas: 6 científicos y 3 visitantes que se encontraban en el cráter. Marcó un cambio en los protocolos de seguridad en vulcanología.',
     event_type: 'volcanic',
+    lat: 1.2288, lon: -77.3592, locationNote: 'cráter del Galeras (SGC)',
     source: SRC.baxter1997,
   },
   {
@@ -178,6 +200,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Erupción explosiva con una columna eruptiva de alrededor de 8 km de altura, según el boletín semestral del OVSP (II semestre de 2006).',
     event_type: 'volcanic',
+    lat: 1.2288, lon: -77.3592, locationNote: 'cráter del Galeras (SGC)',
     source: SRC.ovsp,
   },
   {
@@ -189,6 +212,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Entre 2004 y 2009 el Galeras tuvo 17 erupciones explosivas, 10 de ellas en 2009, según el SGC. Fue uno de los periodos de mayor actividad reciente del volcán.',
     event_type: 'volcanic',
+    lat: 1.2288, lon: -77.3592, locationNote: 'cráter del Galeras (SGC)',
     source: SRC.ovsp,
   },
   {
@@ -200,6 +224,7 @@ export const TIMELINE: TimelineItem[] = [
     description:
       'Enjambre en el campo volcánico Guamuez–Sibundoy (sector de La Cocha). El SGC reportó 966 sismos, 34 de ellos con magnitud M ≥ 2.0 (boletín del 23 de agosto de 2024).',
     event_type: 'volcanic',
+    lat: null, lon: null, locationNote: null,
     source: SRC.sgcCocha2024,
   },
 ];
@@ -294,7 +319,7 @@ export interface QuizItem {
   correct_index: number;
   explanation: string;
   source: Source;
-  category: 'ondas' | 'volcanes' | 'tectonica' | 'general';
+  category: 'ondas' | 'volcanes' | 'tectonica' | 'general' | 'magnitud' | 'profundidad';
 }
 
 /**
@@ -378,5 +403,55 @@ export const QUIZ: QuizItem[] = [
     explanation: 'El Galeras hizo erupción mientras un grupo científico estaba en el cráter durante un taller internacional; fallecieron 9 personas (6 científicos y 3 visitantes).',
     source: SRC.baxter1997,
     category: 'volcanes',
+  },
+  {
+    id: 'q-energia-magnitud',
+    question: 'Un sismo de magnitud 7 frente a uno de magnitud 6 libera, aproximadamente,',
+    options: ['2 veces más energía', '10 veces más energía', '32 veces más energía', 'la misma energía'],
+    correct_index: 2,
+    explanation: 'Cada unidad de magnitud multiplica la energía por unas 32 veces (log10 E = 1.5 Mw + 4.8). La amplitud, en cambio, se multiplica por diez.',
+    source: SRC.hanksKanamori1979,
+    category: 'magnitud',
+  },
+  {
+    id: 'q-magnitud-intensidad',
+    question: '¿Cuál es la diferencia entre magnitud e intensidad?',
+    options: [
+      'Son lo mismo medido en escalas distintas',
+      'La magnitud mide la energía en el origen; la intensidad, qué tan fuerte se sintió en un lugar',
+      'La intensidad siempre es mayor que la magnitud',
+      'La magnitud cambia de un sitio a otro',
+    ],
+    correct_index: 1,
+    explanation: 'La magnitud es un solo número por sismo (energía en el origen). La intensidad describe los efectos en cada sitio y varía con la distancia, el suelo y las construcciones. El sismo de Pasto de 1947 tuvo Mw 6.1 e intensidad VIII en Pasto.',
+    source: SRC.sarabia2018,
+    category: 'magnitud',
+  },
+  {
+    id: 'q-visual-trayectoria-rayleigh',
+    question: 'Observa la trayectoria de la partícula. ¿Qué onda es?',
+    options: ['Onda P', 'Onda S', 'Onda Love', 'Onda Rayleigh'],
+    correct_index: 3,
+    explanation: 'La partícula describe una elipse en el plano vertical: es una onda Rayleigh, de movimiento elíptico retrógrado en la superficie.',
+    source: SRC.shearer2019,
+    category: 'ondas',
+  },
+  {
+    id: 'q-visual-sismograma-s',
+    question: 'Observa el sismograma. El movimiento es perpendicular a la propagación. ¿Qué onda es?',
+    options: ['Onda P', 'Onda S', 'Onda Love', 'Onda Rayleigh'],
+    correct_index: 1,
+    explanation: 'El movimiento transversal, perpendicular a la dirección de avance y sin componente longitudinal, corresponde a una onda S.',
+    source: SRC.shearer2019,
+    category: 'ondas',
+  },
+  {
+    id: 'q-visual-profundidad',
+    question: 'Un sismo tiene su foco a 120 km de profundidad. ¿Cómo se clasifica?',
+    options: ['Superficial', 'Intermedio', 'Profundo', 'No se puede clasificar'],
+    correct_index: 1,
+    explanation: 'Entre 70 y 300 km el sismo es intermedio. A 120 km cae en esa franja, típica de la zona de subducción.',
+    source: SRC.stein2003,
+    category: 'profundidad',
   },
 ];
