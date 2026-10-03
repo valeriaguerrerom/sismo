@@ -1,9 +1,13 @@
 /**
  * Glosario de términos sismológicos y numéricos (RF-24).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from '../../lib/icons';
+import { Pagination } from '../ui/Pagination';
 import { GLOSSARY, Term } from './glossaryData';
+
+/** Términos por página en el glosario. */
+const TERMS_PER_PAGE = 12;
 
 
 const CATS: { id: Term['cat'] | 'todos'; label: string; color: string }[] = [
@@ -17,6 +21,7 @@ const CATS: { id: Term['cat'] | 'todos'; label: string; color: string }[] = [
 export function Glossary() {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<Term['cat'] | 'todos'>('todos');
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -25,6 +30,12 @@ export function Glossary() {
       .filter(t => !s || t.term.toLowerCase().includes(s) || t.def.toLowerCase().includes(s))
       .sort((a, b) => a.term.localeCompare(b.term, 'es'));
   }, [q, cat]);
+
+  // Al cambiar la búsqueda o la categoría, vuelve a la primera página.
+  useEffect(() => { setPage(1); }, [q, cat]);
+
+  // Términos de la página actual.
+  const paged = filtered.slice((page - 1) * TERMS_PER_PAGE, page * TERMS_PER_PAGE);
 
   return (
     <div>
@@ -46,7 +57,7 @@ export function Glossary() {
       </div>
       <p className="text-xs text-stone-400 mb-3">{filtered.length} de {GLOSSARY.length} términos</p>
       <div className="grid md:grid-cols-2 gap-3">
-        {filtered.map(t => {
+        {paged.map(t => {
           const c = CATS.find(x => x.id === t.cat)!;
           return (
             <div key={t.term} className="bg-white rounded-xl border border-stone-200/60 p-4 card-hover">
@@ -62,6 +73,13 @@ export function Glossary() {
           <div className="col-span-full text-center text-stone-400 text-sm py-10">Sin resultados para "{q}".</div>
         )}
       </div>
+      <Pagination
+        page={page}
+        totalItems={filtered.length}
+        pageSize={TERMS_PER_PAGE}
+        onChange={setPage}
+        className="mt-4"
+      />
     </div>
   );
 }
