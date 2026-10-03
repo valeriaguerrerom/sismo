@@ -150,6 +150,9 @@ export function Scene3D({
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Clipping local: lo usa el frente de onda para no dibujarse por encima de
+    // la superficie (plano horizontal en y≈0).
+    renderer.localClippingEnabled = true;
     mount.appendChild(renderer.domElement);
 
     // Renderer de etiquetas (CSS2D) superpuesto
@@ -327,18 +330,24 @@ export function Scene3D({
     const pRings = makeWaveRings(COLOR_P);
     const sRings = makeWaveRings(COLOR_S);
 
-    // Semiesfera (casquete) del frente dentro del bloque. Una SphereGeometry
-    // recortada al hemisferio superior (phiStart..phiLength) no sirve porque el
-    // hipocentro puede estar poco profundo; usamos la esfera completa recortada
-    // por el propio bloque (depthWrite:false para no tapar). Se escala por eje.
+    // Casquete del frente dentro del bloque: una CÁSCARA de líneas (wireframe)
+    // del HEMISFERIO INFERIOR de la esfera, con opacidad baja, para que el
+    // terreno y las capas se vean a través. NO es un volumen relleno (eso
+    // "tapaba" la escena de color). Un plano de recorte en y≈0 impide que se
+    // dibuje por encima de la superficie (nada de cúpula sobre el terreno).
+    // Plano de recorte compartido: normal hacia abajo (0,−1,0) con constante 0,
+    // así solo se conserva lo que está en y ≤ 0 (bajo la superficie).
+    const surfaceClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
     type WaveShell = { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial };
     const makeWaveShell = (color: number): WaveShell => {
-      // Esfera unitaria (radio 1 km equivalente); el radio real se aplica por
-      // escala en cada eje en updateWaveShell.
-      const geo = new THREE.SphereGeometry(1, 32, 24);
+      // Hemisferio INFERIOR: phiStart=PI/2, phiLength=PI/2 cubre de "ecuador"
+      // hacia el polo sur (hacia −Y una vez posicionado). Radio unitario; el
+      // radio real se aplica por escala en cada eje. Pocas divisiones → malla de
+      // líneas limpia.
+      const geo = new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
       const mat = new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.12, side: THREE.DoubleSide,
-        depthWrite: false, wireframe: false,
+        color, transparent: true, opacity: 0.1, wireframe: true,
+        depthWrite: false, clippingPlanes: [surfaceClip],
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.visible = false;
@@ -350,10 +359,11 @@ export function Scene3D({
     const sShell = makeWaveShell(COLOR_S);
 
     /**
-     * Actualiza el casquete esférico del frente, centrado en el hipocentro.
-     * El radio crece con el tiempo; se escala por eje (horizontal vs vertical).
-     * Se recorta por debajo de la superficie dejándolo semitransparente, y se
-     * atenúa al llenar el bloque.
+     * Actualiza el casquete del frente, centrado en el hipocentro. El radio
+     * crece con el tiempo y se escala por eje (horizontal vs profundidad). El
+     * plano de recorte deja solo la parte bajo la superficie. Se deja de dibujar
+     * cuando el frente ya salió por completo del bloque (su borde superior
+     * superó el dominio en profundidad y en horizontal).
      */
     const updateWaveShell = (
       shell: WaveShell, ex: number, ey: number, ez: number,
@@ -362,12 +372,15 @@ export function Scene3D({
       const rKm = vKmS * elapsed;
       const { mesh, mat } = shell;
       if (elapsed <= 0 || rKm < 1) { mesh.visible = false; return; }
+      // El frente ya salió del bloque cuando su radio supera a la vez el ancho
+      // del dominio (horizontal) y la profundidad máxima: deja de dibujarse.
+      const outOfBlock = rKm > DOMAIN_WIDTH_KM * 0.6 && rKm > DOMAIN.depthMax;
+      if (outOfBlock) { mesh.visible = false; return; }
       mesh.position.set(ex, ey, ez);
       mesh.scale.set(rKm * UX_PER_KM, rKm * UY_PER_KM, rKm * UX_PER_KM);
-      // Atenúa cuando el radio supera el tamaño del dominio (horizontal).
-      const maxKm = DOMAIN_WIDTH_KM * 0.55;
-      mat.opacity = rKm <= maxKm ? 0.12 : Math.max(0, 0.12 * (1 - (rKm - maxKm) / (maxKm * 0.6)));
-      mesh.visible = mat.opacity > 0.01;
+      // Cáscara tenue y constante (no se acumula al crecer, al ser wireframe).
+      mat.opacity = 0.14;
+      mesh.visible = true;
     };
 
     // ── Frente de onda DENTRO del bloque (vista Corte) ──
@@ -1079,8 +1092,17 @@ export function Scene3D({
     halo.position.set(ex, ey, ez);
     st.hypoGroup.add(halo);
 
-    // Etiqueta de profundidad del hipocentro, pegada junto al marcador (a su
-    // derecha y un poco abajo) para que no "flote" lejos sobre el terreno.
+    // Etiqueta de profundidad del hipocentro, DESPLAZADA lateralmente hacia el
+    // ESTE (+X) con una línea guía corta, para que no se monte con el eje de
+    // profundidad (números 0/15 km), que vive en la arista frontal-OESTE.
+    const labelDX = 1.4;  // desplazamiento lateral de la etiqueta (unidades escena)
+    const guideGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(ex, ey, ez),
+      new THREE.Vector3(ex + labelDX, ey, ez),
+    ]);
+    const guide = new THREE.Line(guideGeo, new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.6 }));
+    st.hypoGroup.add(guide);
+
     const hdiv = document.createElement('div');
     hdiv.style.cssText = 'display:inline-block;';
     const hInner = document.createElement('span');
@@ -1088,7 +1110,7 @@ export function Scene3D({
     hInner.style.cssText = "display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;color:#ffe066;text-shadow:0 0 3px #000,0 0 4px #000;background:rgba(10,14,26,0.72);padding:1px 5px;border-radius:4px;white-space:nowrap;transition:transform 0.12s;";
     hdiv.appendChild(hInner);
     const hlabel = new CSS2DObject(hdiv);
-    hlabel.position.set(ex, ey - 0.45, ez);
+    hlabel.position.set(ex + labelDX, ey, ez);
     st.hypoGroup.add(hlabel);
   }, [epicenter]);
 

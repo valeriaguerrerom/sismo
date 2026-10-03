@@ -12,19 +12,42 @@
  * @module map3d/Legend
  */
 import { WAVE_COLORS } from '../../lib/waveColors';
-import { kmToSceneUnits, depthToY, TERRAIN_EXAGGERATION } from './domain';
+import { kmToSceneUnits, depthToY, TERRAIN_EXAGGERATION, DOMAIN_WIDTH_KM, DOMAIN } from './domain';
 
 // Factores de escala REALES, calculados desde las constantes de domain.ts (no
 // escritos a mano). Si cambian las constantes, estos valores se actualizan solos.
-//   DEPTH_COMPRESSION: cuántas veces está más comprimida la escala vertical
-//     (profundidad) frente a la horizontal = (u/km horizontal)/(u/km vertical).
+//   HORIZ_PER_DEPTH_KM: cuántos km horizontales ocupa en el dibujo 1 km de
+//     profundidad = (u/km profundidad)/(u/km horizontal). <1 porque la
+//     profundidad está comprimida respecto a la horizontal.
 //   RELIEF_EXAGGERATION: exageración vertical del relieve de la superficie.
-const DEPTH_COMPRESSION = kmToSceneUnits(1) / Math.abs(depthToY(1));
+const HORIZ_PER_DEPTH_KM = Math.abs(depthToY(1)) / kmToSceneUnits(1);
 const RELIEF_EXAGGERATION = TERRAIN_EXAGGERATION;
 
-/** Redondea a 1 decimal y quita el ".0" sobrante (1.5 → "1.5", 2.0 → "2"). */
-function fmtFactor(v: number): string {
-  return Number(v.toFixed(1)).toString();
+/** Redondea a 2 decimales y quita ceros sobrantes (0.67 → "0.67", 2.0 → "2"). */
+function fmtNum(v: number, dec = 2): string {
+  return Number(v.toFixed(dec)).toString();
+}
+
+/**
+ * Barra de escala de respaldo (cuando el backend no la entrega): elige un
+ * número "redondo" de km ~1/4 del ancho del dominio (50, 100, 20…) para que la
+ * barra ocupe una fracción legible del ancho total.
+ */
+function fallbackScaleKm(): number {
+  const quarter = DOMAIN_WIDTH_KM / 4;
+  const candidates = [10, 20, 25, 50, 100, 150, 200];
+  // El mayor candidato que no supere ~1/3 del dominio.
+  const limit = DOMAIN_WIDTH_KM / 3;
+  let best = candidates[0];
+  for (const c of candidates) if (c <= limit && Math.abs(c - quarter) <= Math.abs(best - quarter)) best = c;
+  return best;
+}
+
+/** Rampa de profundidad de respaldo (etiquetas derivadas de DOMAIN.depthMax). */
+function fallbackDepthRamp(): { label: string; color: string }[] {
+  const max = DOMAIN.depthMax;
+  const stops = [0, Math.round(max / 3), Math.round((2 * max) / 3), max];
+  return stops.map(km => ({ label: `${km}`, color: '' }));
 }
 
 interface LegendProps {
@@ -56,9 +79,14 @@ const LABEL_FONT = "'Inter', system-ui, sans-serif";
 
 /** Leyenda posicionada abajo a la derecha sobre la escena. */
 export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
-  // La barra se dibuja a un ancho fijo en px; el rótulo usa los km del backend.
+  // La barra se dibuja a un ancho fijo en px; el rótulo usa los km del backend
+  // o, si no llegó, un valor de respaldo calculado desde el dominio (así la
+  // barra NUNCA desaparece aunque el backend no responda).
   const BAR_PX = 80;
-  const barKm = scaleBar?.km ?? null;
+  const barKm = scaleBar?.km ?? fallbackScaleKm();
+  const widthKm = domainWidthKm ?? DOMAIN_WIDTH_KM;
+  // Rampa de profundidad: la del backend o la de respaldo. Siempre presente.
+  const ramp = (depthRamp && depthRamp.length > 0) ? depthRamp : fallbackDepthRamp();
 
   return (
     <div
@@ -105,40 +133,37 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
         </span>
       </div>
 
-      {/* Rampa de profundidad de los hipocentros del catálogo (colores en azul
-          y púrpura para no confundirse con los frentes P/S). */}
-      {depthRamp && depthRamp.length > 0 && (
-        <div className="mt-2.5 pt-2 border-t border-white/10">
-          <div className="text-[10px] text-stone-300 mb-1">Profundidad</div>
-          <div className="flex h-2.5 rounded overflow-hidden">
-            {depthRamp.map((r, i) => (
-              <span
-                key={r.label}
-                className="flex-1"
-                style={{ backgroundColor: DEPTH_PALETTE[i] ?? DEPTH_PALETTE[DEPTH_PALETTE.length - 1] }}
-                title={r.label}
-              />
-            ))}
-          </div>
-          <div className="flex justify-between mt-0.5">
-            {depthRamp.map(r => (
-              <span key={r.label} className="text-[9px] text-stone-300">{r.label}</span>
-            ))}
-          </div>
+      {/* Rampa de profundidad de los hipocentros del catálogo (azul secuencial,
+          para no confundirse con los frentes P/S). Siempre presente: usa la del
+          backend o, si no llegó, la de respaldo derivada de DOMAIN.depthMax. */}
+      <div className="mt-2.5 pt-2 border-t border-white/10">
+        <div className="text-[10px] text-stone-300 mb-1">Profundidad (km)</div>
+        <div className="flex h-2.5 rounded overflow-hidden">
+          {ramp.map((r, i) => (
+            <span
+              key={r.label}
+              className="flex-1"
+              style={{ backgroundColor: DEPTH_PALETTE[i] ?? DEPTH_PALETTE[DEPTH_PALETTE.length - 1] }}
+              title={r.label}
+            />
+          ))}
         </div>
-      )}
+        <div className="flex justify-between mt-0.5">
+          {ramp.map(r => (
+            <span key={r.label} className="text-[9px] text-stone-300">{r.label}</span>
+          ))}
+        </div>
+      </div>
 
       {/* Barra de escala + flecha norte (más grandes y legibles) */}
       <div className="mt-2.5 pt-2 border-t border-white/10 flex items-end justify-between gap-3">
-        {barKm != null && (
-          <div
-            className="flex flex-col items-start"
-            title={domainWidthKm != null ? `Dominio ≈ ${Math.round(domainWidthKm)} km de ancho` : undefined}
-          >
-            <div className="h-2 bg-stone-100 rounded-sm" style={{ width: `${BAR_PX}px` }} />
-            <span className="text-[11px] font-semibold text-stone-100 mt-1">{barKm} km</span>
-          </div>
-        )}
+        <div
+          className="flex flex-col items-start"
+          title={`Dominio ≈ ${Math.round(widthKm)} km de ancho`}
+        >
+          <div className="h-2 bg-stone-100 rounded-sm" style={{ width: `${BAR_PX}px` }} />
+          <span className="text-[11px] font-semibold text-stone-100 mt-1">{barKm} km</span>
+        </div>
         {/* Flecha norte: en la vista por defecto y superior el norte queda arriba. */}
         <div className="flex flex-col items-center">
           <span className="text-[#D4A853] text-2xl leading-none">↑</span>
@@ -150,7 +175,7 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
           la profundidad está comprimida respecto a la horizontal y que el
           relieve está exagerado, para no leer la escena como si fuera a escala. */}
       <div className="mt-2 pt-2 border-t border-white/10 text-[9px] leading-snug text-stone-400">
-        Profundidad comprimida a {fmtFactor(DEPTH_COMPRESSION)} veces la escala horizontal; relieve exagerado {fmtFactor(RELIEF_EXAGGERATION)} veces.
+        1 km de profundidad se dibuja como {fmtNum(HORIZ_PER_DEPTH_KM)} km horizontales; relieve exagerado {fmtNum(RELIEF_EXAGGERATION, 1)} veces.
       </div>
     </div>
   );

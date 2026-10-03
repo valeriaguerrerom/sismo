@@ -226,11 +226,22 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     return m;
   }, [events]);
 
-  // Tiempo máximo del eje de sismogramas = mayor tS + margen
+  // Tiempo máximo del eje de sismogramas: el mayor tS + margen, PERO acotado a
+  // la duración real de las trazas ya cargadas, para que el eje no termine en
+  // 120 s si los datos acaban antes (dejando media sección vacía). Si aún no
+  // hay trazas, se usa solo el tS teórico.
   const maxTime = useMemo(() => {
     const maxTs = travelTimes.reduce((m, t) => Math.max(m, t.tS ?? 0), 0);
-    return Math.max(20, Math.ceil(maxTs * 1.15));
-  }, [travelTimes]);
+    const theoretical = Math.max(20, Math.ceil(maxTs * 1.15));
+    // Duración real máxima de las trazas disponibles (último t de cada una).
+    let traceEnd = 0;
+    for (const code of Object.keys(traces)) {
+      const syn = traces[code];
+      if (syn && syn.t.length > 0) traceEnd = Math.max(traceEnd, syn.t[syn.t.length - 1]);
+    }
+    // Si hay trazas, el eje no pasa de donde terminan los datos (ni del teórico).
+    return traceEnd > 0 ? Math.max(20, Math.min(theoretical, Math.ceil(traceEnd))) : theoretical;
+  }, [travelTimes, traces]);
 
   // ── Carga inicial: estaciones + catálogo de eventos (seismic_events) ──
   // La lista de eventos viene del catálogo (misma fuente que Explorer y Home).
@@ -1486,7 +1497,27 @@ function TriaxialTraces({ syn, real }: { syn: SyntheticResult | null; real: Wave
   const tP = syn?.tP_detectado ?? null;
   const tS = syn?.tS_detectado ?? null;
   const w = 900, h = 54;
-  const tMax = comps[0].t[comps[0].t.length - 1] || 1;
+
+  // Fin ÚTIL de la señal: el registro puede durar más que la señal (p. ej. 120 s
+  // de ventana con energía hasta ~72 s), dejando media sección vacía. El eje se
+  // recorta al último instante con amplitud significativa (≥1% del máximo) en
+  // cualquier componente, más un 8% de margen, para que la traza llene el ancho.
+  const tMax = (() => {
+    const fullT = comps[0].t[comps[0].t.length - 1] || 1;
+    let lastSignalT = 0;
+    for (const c of comps) {
+      let maxAbs = 1e-9;
+      for (const v of c.data) maxAbs = Math.max(maxAbs, Math.abs(v));
+      const thr = maxAbs * 0.01;
+      for (let i = c.data.length - 1; i >= 0; i--) {
+        if (Math.abs(c.data[i]) >= thr) { lastSignalT = Math.max(lastSignalT, c.t[i]); break; }
+      }
+    }
+    // Asegurar que se vea al menos hasta S (si existe) y no recortar de más.
+    const floor = Math.max(tS ?? 0, lastSignalT) * 1.08;
+    const capped = floor > 0 ? Math.min(fullT, floor) : fullT;
+    return Math.max(1, capped);
+  })();
 
   const path = (data: number[], t: number[]) => {
     let maxAbs = 1e-9;
@@ -1494,6 +1525,7 @@ function TriaxialTraces({ syn, real }: { syn: SyntheticResult | null; real: Wave
     const pts: string[] = [];
     const step = Math.max(1, Math.floor(data.length / w));
     for (let i = 0; i < data.length; i += step) {
+      if (t[i] > tMax) break; // no dibujar más allá del eje recortado
       const x = (t[i] / tMax) * w;
       const y = h / 2 - (data[i] / maxAbs) * (h / 2 - 3);
       pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
