@@ -12,6 +12,20 @@
  * @module map3d/Legend
  */
 import { WAVE_COLORS } from '../../lib/waveColors';
+import { kmToSceneUnits, depthToY, TERRAIN_EXAGGERATION } from './domain';
+
+// Factores de escala REALES, calculados desde las constantes de domain.ts (no
+// escritos a mano). Si cambian las constantes, estos valores se actualizan solos.
+//   DEPTH_COMPRESSION: cuántas veces está más comprimida la escala vertical
+//     (profundidad) frente a la horizontal = (u/km horizontal)/(u/km vertical).
+//   RELIEF_EXAGGERATION: exageración vertical del relieve de la superficie.
+const DEPTH_COMPRESSION = kmToSceneUnits(1) / Math.abs(depthToY(1));
+const RELIEF_EXAGGERATION = TERRAIN_EXAGGERATION;
+
+/** Redondea a 1 decimal y quita el ".0" sobrante (1.5 → "1.5", 2.0 → "2"). */
+function fmtFactor(v: number): string {
+  return Number(v.toFixed(1)).toString();
+}
 
 interface LegendProps {
   /** Barra de escala calculada por el backend {km, scene_units} o null. */
@@ -130,6 +144,13 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
           <span className="text-[#D4A853] text-2xl leading-none">↑</span>
           <span className="text-[12px] font-bold text-stone-100">N</span>
         </div>
+      </div>
+
+      {/* Nota de escalas reales (valores calculados desde domain.ts). Aclara que
+          la profundidad está comprimida respecto a la horizontal y que el
+          relieve está exagerado, para no leer la escena como si fuera a escala. */}
+      <div className="mt-2 pt-2 border-t border-white/10 text-[9px] leading-snug text-stone-400">
+        Profundidad comprimida a {fmtFactor(DEPTH_COMPRESSION)} veces la escala horizontal; relieve exagerado {fmtFactor(RELIEF_EXAGGERATION)} veces.
       </div>
     </div>
   );
