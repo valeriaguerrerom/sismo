@@ -80,7 +80,9 @@ export function DepthLab({ onChallengeDone }: Props) {
 /* ─── Corte longitud vs profundidad ─── */
 function DepthCrossSection({ cat, hover, setHover }: { cat: UsgsCatalog; hover: UsgsEvent | null; setHover: (e: UsgsEvent | null) => void }) {
   const W = 640, H = 320;
-  const padL = 44, padR = 16, padT = 16, padB = 36;
+  // padR amplio: deja una franja a la derecha para las etiquetas de las bandas,
+  // fuera del área de puntos (así no quedan tapadas por los hipocentros).
+  const padL = 44, padR = 104, padT = 16, padB = 36;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
@@ -100,17 +102,28 @@ function DepthCrossSection({ cat, hover, setHover }: { cat: UsgsCatalog; hover: 
     <div className="bg-white rounded-xl border border-stone-200/60 p-3 relative">
       <div className="text-[11px] font-semibold text-stone-500 mb-1">Corte longitud contra profundidad (hipocentros reales)</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ display: 'block' }}>
-        {/* Franjas de profundidad */}
+        {/* Franjas de profundidad (solo el sombreado dentro del área de datos) */}
         {bands.map(b => (
-          <g key={b.label}>
-            <rect x={padL} y={y(b.from)} width={plotW} height={y(b.to) - y(b.from)} fill={b.color} opacity={0.06} />
-            <text x={padL + 4} y={y(b.from) + 12} fontSize={9} fill={b.color}>{b.label} ({b.from}–{b.to} km)</text>
-          </g>
+          <rect key={b.label} x={padL} y={y(b.from)} width={plotW} height={y(b.to) - y(b.from)} fill={b.color} opacity={0.06} />
         ))}
-        {/* Líneas de referencia 70, 300 km */}
+        {/* Etiquetas de las franjas FUERA del área de puntos (gutter derecho),
+            centradas verticalmente en cada banda. */}
+        {bands.map(b => {
+          const toKm = Math.min(b.to, maxDepth);
+          const cy = (y(b.from) + y(toKm)) / 2;
+          return (
+            <g key={`lbl-${b.label}`}>
+              <text x={W - padR + 8} y={cy - 4} fontSize={9} fontWeight={700} fill={b.color}>{b.label}</text>
+              <text x={W - padR + 8} y={cy + 8} fontSize={8} fill="#a8a29e">{b.from}–{b.to} km</text>
+            </g>
+          );
+        })}
+        {/* Líneas de referencia 70, 300 km (hasta el borde del área de datos) */}
         {[70, 300].map(d => d <= maxDepth && (
           <line key={d} x1={padL} y1={y(d)} x2={W - padR} y2={y(d)} stroke="#d6d3d1" strokeWidth={0.5} strokeDasharray="3 3" />
         ))}
+        {/* Separador del gutter de etiquetas */}
+        <line x1={W - padR} y1={padT} x2={W - padR} y2={H - padB} stroke="#e7e5e4" strokeWidth={1} />
 
         {/* Eje de profundidad (etiquetas) */}
         {[0, 70, 150, 300].map(d => (

@@ -87,21 +87,22 @@ export function HistoryLab({ onChallengeDone }: Props) {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 items-stretch">
-        {/* Mapa */}
-        <div className="rounded-xl border border-stone-200/60 overflow-hidden h-[320px] lg:h-auto lg:min-h-[420px]">
+      <div className="grid lg:grid-cols-2 gap-4">
+        {/* Mapa: altura fija en todos los tamaños para que Leaflet tenga un
+            tamaño resuelto al montar (evita teselas cortadas y mal encuadre). */}
+        <div className="rounded-xl border border-stone-200/60 overflow-hidden h-[360px] lg:h-[460px]">
           <SeismicMap
             points={points}
             selectedId={sel}
             onSelect={(id) => select(id, true)}
             center={[1.4, -78.0]}
-            zoom={8}
+            zoom={7}
             bounds={bounds}
           />
         </div>
 
         {/* Línea de tiempo */}
-        <div className="rounded-xl border border-stone-200/60 bg-white p-2 max-h-[420px] overflow-y-auto scrollbar-thin">
+        <div className="rounded-xl border border-stone-200/60 bg-white p-2 h-[360px] lg:h-[460px] overflow-y-auto scrollbar-thin">
           <ol className="relative border-l border-stone-200 ml-3">
             {filtered.map(e => {
               const on = e.id === sel;

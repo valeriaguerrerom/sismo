@@ -45,24 +45,40 @@ function MapController({ center, zoom, bounds }: { center: LatLngExpression; zoo
   const map = useMap();
   useEffect(() => {
     let alive = true;
-    // Reencuadre sin animación: una animación en curso puede seguir tras el
-    // desmontaje y tocar nodos internos ya destruidos (_leaflet_pos → crash).
-    try {
-      if (bounds) {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12, animate: false });
-      } else {
-        map.setView(center, zoom, { animate: false });
-      }
-    } catch { /* mapa en proceso de desmontaje */ }
 
-    // Leaflet necesita recalcular tamaño cuando el contenedor cambia de layout.
-    // Se cancela al desmontar para no operar sobre un mapa ya destruido.
-    const t = setTimeout(() => {
+    // Encuadra el mapa. invalidateSize PRIMERO: si el contenedor se monta con
+    // tamaño aún sin resolver (p. ej. dentro de una pestaña o un grid que acaba
+    // de cambiar de layout), Leaflet cree que mide 0 y las teselas salen
+    // cortadas (líneas blancas) y el fitBounds calcula mal. Recalcular el tamaño
+    // antes de encuadrar evita ambas cosas.
+    const apply = () => {
       if (!alive) return;
-      try { map.invalidateSize(); } catch { /* ya desmontado */ }
-    }, 200);
+      try {
+        map.invalidateSize({ animate: false });
+        if (bounds) {
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12, animate: false });
+        } else {
+          map.setView(center, zoom, { animate: false });
+        }
+      } catch { /* mapa en proceso de desmontaje */ }
+    };
 
-    return () => { alive = false; clearTimeout(t); };
+    apply();
+    // Reintentos cuando el layout termina de asentarse (dos frames y un timeout).
+    const raf = requestAnimationFrame(() => requestAnimationFrame(apply));
+    const t = setTimeout(apply, 250);
+
+    // Reencuadra también si el contenedor cambia de tamaño (responsive, pestañas).
+    let ro: ResizeObserver | null = null;
+    try {
+      const container = map.getContainer();
+      if (typeof ResizeObserver !== 'undefined' && container) {
+        ro = new ResizeObserver(() => { if (alive) { try { map.invalidateSize({ animate: false }); } catch { /* desmontado */ } } });
+        ro.observe(container);
+      }
+    } catch { /* sin ResizeObserver */ }
+
+    return () => { alive = false; cancelAnimationFrame(raf); clearTimeout(t); ro?.disconnect(); };
   }, [map, center, zoom, bounds]);
   return null;
 }

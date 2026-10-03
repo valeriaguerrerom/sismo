@@ -117,7 +117,7 @@ export function Education({ onNavigate }: Props) {
                 <li key={x.id} className="flex-shrink-0 snap-start">
                   <button
                     onClick={() => go(x.id)}
-                    className={`w-full px-3 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors ${
                       on ? 'bg-[#1A1A2E] text-white' : 'bg-white text-stone-600 border border-stone-200'
                     }`}
                   >

@@ -72,6 +72,24 @@ function displacement(w: LabWave, theta: number, amp: number, decay: number): { 
   }
 }
 
+/**
+ * Componentes que registra un sismómetro de superficie para cada onda:
+ *   v           = vertical,
+ *   radial      = horizontal en la dirección de propagación,
+ *   transversal = horizontal perpendicular a la propagación.
+ * P: solo radial. SV: solo vertical. SH y Love: solo transversal.
+ * Rayleigh: vertical y radial desfasadas un cuarto de periodo (elíptica).
+ */
+function seismoComponents(w: LabWave, theta: number, amp: number): { v: number; radial: number; transversal: number } {
+  switch (w) {
+    case 'P': return { v: 0, radial: Math.sin(theta) * amp, transversal: 0 };
+    case 'SV': return { v: Math.sin(theta) * amp, radial: 0, transversal: 0 };
+    case 'SH':
+    case 'Love': return { v: 0, radial: 0, transversal: Math.sin(theta) * amp };
+    case 'Rayleigh': return { v: -Math.cos(theta) * amp, radial: Math.sin(theta) * amp, transversal: 0 };
+  }
+}
+
 interface Props {
   /** Se llama cuando el usuario termina el reto (marca el capítulo). */
   onChallengeDone?: () => void;
@@ -85,8 +103,8 @@ export function WaveLab({ onChallengeDone }: Props) {
   const phaseRef = useRef(0);
   const [, setTick] = useState(0);
 
-  // Historial del sismómetro de superficie (vertical y horizontal).
-  const seis = useRef<{ v: number[]; h: number[] }>({ v: [], h: [] });
+  // Historial del sismómetro: tres componentes (vertical, radial, transversal).
+  const seis = useRef<{ v: number[]; radial: number[]; trans: number[] }>({ v: [], radial: [], trans: [] });
 
   useEffect(() => {
     if (!playing) return;
@@ -101,7 +119,7 @@ export function WaveLab({ onChallengeDone }: Props) {
   }, [playing]);
 
   // Al cambiar de onda, reinicia el sismómetro y la partícula seguida.
-  useEffect(() => { seis.current = { v: [], h: [] }; setFollow(null); }, [wave]);
+  useEffect(() => { seis.current = { v: [], radial: [], trans: [] }; setFollow(null); }, [wave]);
 
   const color = LAB_COLOR[wave];
   const plan = PLAN_VIEW[wave];
@@ -126,10 +144,10 @@ export function WaveLab({ onChallengeDone }: Props) {
   const sensorCol = Math.round(COLS * 0.8);
   {
     const th = k * sensorCol - phase * 4;
-    const d = displacement(wave, th, amp, 1);
+    const c = seismoComponents(wave, th, amp);
     const s = seis.current;
-    s.v.push(d.dy); s.h.push(d.dx);
-    if (s.v.length > 160) { s.v.shift(); s.h.shift(); }
+    s.v.push(c.v); s.radial.push(c.radial); s.trans.push(c.transversal);
+    if (s.v.length > 160) { s.v.shift(); s.radial.shift(); s.trans.shift(); }
   }
 
   // Malla de partículas.
@@ -236,13 +254,16 @@ export function WaveLab({ onChallengeDone }: Props) {
                 />
               ))}
 
-              {/* Sismómetro en superficie (solo en corte) */}
+              {/* Sismómetro en superficie (solo en corte). El triángulo y su
+                  etiqueta van POR ENCIMA de la línea de superficie para que las
+                  partículas de la primera fila no los tapen. */}
               {!plan && (() => {
                 const sx = mX + sensorCol * dxc;
+                const top = mTop - 10;
                 return (
                   <g>
-                    <path d={`M ${sx - 6} ${mTop} L ${sx + 6} ${mTop} L ${sx} ${mTop - 9} Z`} fill="#1A1A2E" />
-                    <text x={sx + 9} y={mTop - 2} fontSize={8} fill="#78716c">sismómetro</text>
+                    <path d={`M ${sx - 6} ${top} L ${sx + 6} ${top} L ${sx} ${top - 9} Z`} fill="#1A1A2E" />
+                    <text x={sx + 9} y={top - 2} fontSize={8} fill="#78716c">sismómetro</text>
                   </g>
                 );
               })()}
@@ -274,16 +295,19 @@ export function WaveLab({ onChallengeDone }: Props) {
         </div>
       </div>
 
-      {/* Sismómetro a todo el ancho, sincronizado */}
+      {/* Sismómetro a todo el ancho, sincronizado: tres componentes */}
       <div className="bg-white rounded-xl border border-stone-200/60 p-3">
-        <div className="text-[11px] font-semibold text-stone-500 mb-1">Sismómetro en la superficie</div>
-        <svg viewBox={`0 0 ${W} 86`} className="w-full" style={{ display: 'block' }}>
-          <text x={6} y={20} fontSize={9} fill="#78716c">Vertical</text>
-          <line x1={mX} y1={26} x2={mX + gridW} y2={26} stroke="#f0efed" strokeWidth={1} />
-          <path d={seisPath(seis.current.v, 26)} fill="none" stroke={color} strokeWidth={1.5} />
-          <text x={6} y={64} fontSize={9} fill="#78716c">Horizontal</text>
-          <line x1={mX} y1={70} x2={mX + gridW} y2={70} stroke="#f0efed" strokeWidth={1} />
-          <path d={seisPath(seis.current.h, 70)} fill="none" stroke={color} strokeWidth={1.5} />
+        <div className="text-[11px] font-semibold text-stone-500 mb-1">Sismómetro en la superficie (tres componentes)</div>
+        <svg viewBox={`0 0 ${W} 128`} className="w-full" style={{ display: 'block' }}>
+          <text x={6} y={18} fontSize={9} fill="#78716c">Vertical</text>
+          <line x1={mX} y1={24} x2={mX + gridW} y2={24} stroke="#f0efed" strokeWidth={1} />
+          <path d={seisPath(seis.current.v, 24)} fill="none" stroke={color} strokeWidth={1.5} />
+          <text x={6} y={60} fontSize={9} fill="#78716c">Radial</text>
+          <line x1={mX} y1={66} x2={mX + gridW} y2={66} stroke="#f0efed" strokeWidth={1} />
+          <path d={seisPath(seis.current.radial, 66)} fill="none" stroke={color} strokeWidth={1.5} />
+          <text x={6} y={102} fontSize={9} fill="#78716c">Transversal</text>
+          <line x1={mX} y1={108} x2={mX + gridW} y2={108} stroke="#f0efed" strokeWidth={1} />
+          <path d={seisPath(seis.current.trans, 108)} fill="none" stroke={color} strokeWidth={1.5} />
         </svg>
       </div>
 
@@ -477,12 +501,12 @@ function TrajectoryGlyph({ show, phase }: { show: LabWave; phase: number }) {
 
 function SeismoGlyph({ show, phase }: { show: LabWave; phase: number }) {
   const W = 240, H = 110, amp = 15;
-  const trace = (axis: 'v' | 'h', cy: number): string => {
+  const trace = (axis: 'v' | 'transversal', cy: number): string => {
     const pts: string[] = [];
     for (let i = 0; i <= 76; i++) {
       const th = phase - (76 - i) * 0.12;
-      const d = displacement(show, th, amp, 1);
-      const val = axis === 'v' ? d.dy : d.dx;
+      const c = seismoComponents(show, th, amp);
+      const val = axis === 'v' ? c.v : c.transversal;
       pts.push(`${(10 + (i / 76) * (W - 20)).toFixed(1)},${(cy - val).toFixed(1)}`);
     }
     return `M ${pts.join(' L ')}`;
@@ -492,9 +516,9 @@ function SeismoGlyph({ show, phase }: { show: LabWave; phase: number }) {
       <text x={6} y={13} fontSize={9} fill="#78716c">Vertical</text>
       <line x1={10} y1={32} x2={W - 10} y2={32} stroke="#f0efed" strokeWidth={1} />
       <path d={trace('v', 32)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
-      <text x={6} y={70} fontSize={9} fill="#78716c">Horizontal</text>
+      <text x={6} y={70} fontSize={9} fill="#78716c">Transversal</text>
       <line x1={10} y1={88} x2={W - 10} y2={88} stroke="#f0efed" strokeWidth={1} />
-      <path d={trace('h', 88)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
+      <path d={trace('transversal', 88)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
     </svg>
   );
 }

@@ -87,6 +87,12 @@ export function MagnitudeLab({ onChallengeDone }: Props) {
   const ampTimes = Math.pow(10, dMag);               // amplitud: 10 por unidad
   const energyRatio = energyJoules(hi) / energyJoules(lo); // energía exacta
 
+  // Número redondeado y legible, con separador de miles (sin notación científica).
+  const nice = (x: number) => {
+    const r = x >= 100 ? Math.round(x / 10) * 10 : Math.round(x);
+    return r.toLocaleString('es-CO');
+  };
+
   return (
     <div className="space-y-4">
       {/* Comparador de dos sismos */}
@@ -100,12 +106,12 @@ export function MagnitudeLab({ onChallengeDone }: Props) {
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
             <div className="text-[11px] text-stone-500">Amplitud del movimiento</div>
-            <div className="text-2xl font-black text-[#1A1A2E]">{ampTimes >= 100 ? ampTimes.toExponential(0) : ampTimes.toFixed(ampTimes < 10 ? 1 : 0)}×</div>
+            <div className="text-2xl font-black text-[#1A1A2E]">unas {nice(ampTimes)} veces</div>
             <div className="text-[11px] text-stone-400">mayor en el más grande</div>
           </div>
           <div>
             <div className="text-[11px] text-stone-500">Energía liberada</div>
-            <div className="text-2xl font-black text-[#C4553A]">{energyRatio >= 1000 ? energyRatio.toExponential(0) : Math.round(energyRatio)}×</div>
+            <div className="text-2xl font-black text-[#C4553A]">unas {nice(energyRatio)} veces</div>
             <div className="text-[11px] text-stone-400">{fmtEnergy(energyJoules(hi))} frente a {fmtEnergy(energyJoules(lo))}</div>
           </div>
         </div>
@@ -163,30 +169,42 @@ function MagPicker({ label, value, onChange, options, color }: {
   );
 }
 
-/* ─── Cuadrícula de bloques: un bloque = energía del sismo menor ─── */
+/* ─── Cuadrícula de bloques: TODOS los bloques valen lo mismo ─── */
 function EnergyBlocks({ ratio, hi, lo }: { ratio: number; hi: number; lo: number }) {
-  const MAX_BLOCKS = 200;
+  const MAX_BLOCKS = 150;
   const rounded = Math.max(1, Math.round(ratio));
-  const scaled = rounded > MAX_BLOCKS;
-  const perBlock = scaled ? Math.ceil(rounded / MAX_BLOCKS) : 1;
-  const blocks = Math.min(MAX_BLOCKS, Math.ceil(rounded / perBlock));
+  // Si no caben todos, cada bloque vale "perBlock" sismos del menor (mismo valor
+  // para todos). El de referencia solo se distingue con un borde.
+  const perBlock = rounded > MAX_BLOCKS ? Math.ceil(rounded / MAX_BLOCKS) : 1;
+  const blocks = Math.max(1, Math.round(rounded / perBlock));
+
+  const equiv = perBlock === 1
+    ? `cada bloque equivale a 1 sismo de Mw ${lo.toFixed(1)}`
+    : `cada bloque equivale a ${perBlock.toLocaleString('es-CO')} sismos de Mw ${lo.toFixed(1)}`;
 
   return (
     <div className="bg-white rounded-xl border border-stone-200/60 p-4">
       <div className="flex items-baseline justify-between mb-2 flex-wrap gap-1">
         <span className="text-xs font-bold text-[#1A1A2E]">Bloques de energía</span>
-        <span className="text-[11px] text-stone-400">
-          1 bloque = energía de Mw {lo.toFixed(1)}{scaled ? ` × ${perBlock}` : ''}
-        </span>
+        <span className="text-[11px] text-stone-400">{equiv}</span>
       </div>
       <div className="flex flex-wrap gap-1">
         {Array.from({ length: blocks }).map((_, i) => (
-          <span key={i} className="rounded-sm" style={{ width: 10, height: 10, backgroundColor: i === 0 ? '#2D6A4F' : '#C4553A', opacity: i === 0 ? 1 : 0.75 }} />
+          <span
+            key={i}
+            className="rounded-sm"
+            style={{
+              width: 11, height: 11,
+              backgroundColor: '#C4553A',
+              // El bloque de referencia (el primero) se distingue solo con borde.
+              border: i === 0 ? '2px solid #1A1A2E' : 'none',
+            }}
+          />
         ))}
       </div>
       <p className="text-[11px] text-stone-500 mt-2 leading-snug">
-        El bloque verde es la energía de Mw {lo.toFixed(1)}. Los bloques terracota muestran cuántas veces esa energía cabe en Mw {hi.toFixed(1)}
-        {scaled ? ', donde cada bloque vale varias veces esa energía porque no cabrían todos.' : '.'}
+        Todos los bloques valen lo mismo: {equiv}. El bloque con borde oscuro es la referencia (el sismo menor).
+        En total, la energía de Mw {hi.toFixed(1)} equivale a unas {rounded.toLocaleString('es-CO')} veces la de Mw {lo.toFixed(1)}.
       </p>
     </div>
   );
@@ -257,7 +275,7 @@ function EnergyChallenge({ onDone }: { onDone?: () => void }) {
       {checked && (
         <div className={`text-xs rounded-lg p-2.5 flex items-start gap-2 ${close ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-700'}`}>
           {close ? <CheckCircle size={14} className="flex-shrink-0 mt-0.5" /> : <XCircle size={14} className="flex-shrink-0 mt-0.5" />}
-          <span>Son unas <b>{Math.round(real)} veces</b> más energía (cada unidad de magnitud son unas 32 veces).</span>
+          <span>Son unas <b>{Math.round(real).toLocaleString('es-CO')} veces</b> más energía (cada unidad de magnitud son unas 32 veces).</span>
         </div>
       )}
     </div>

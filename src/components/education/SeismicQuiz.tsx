@@ -224,19 +224,32 @@ function TrajectoryGlyph({ wave, phase }: { wave: WaveType; phase: number }) {
   );
 }
 
+/**
+ * Componentes del sismómetro para el glifo del quiz (vertical y transversal).
+ * S: transversal; Rayleigh: vertical; P: ninguna de las dos domina (radial).
+ */
+function seismoComp(wave: WaveType, theta: number, amp: number): { v: number; transversal: number } {
+  switch (wave) {
+    case 'P': return { v: 0, transversal: 0 };
+    case 'S': return { v: 0, transversal: Math.sin(theta) * amp };
+    case 'Love': return { v: 0, transversal: Math.sin(theta) * amp };
+    case 'Rayleigh': return { v: -Math.cos(theta) * amp, transversal: 0 };
+  }
+}
+
 function SeismoGlyph({ wave, phase }: { wave: WaveType; phase: number }) {
   const W = 240, H = 100, amp = 14;
-  const trace = (axis: 'v' | 'h', cy: number): string => {
+  const trace = (axis: 'v' | 'transversal', cy: number): string => {
     const pts: string[] = [];
-    for (let i = 0; i <= 72; i++) { const d = waveDisp(wave, phase - (72 - i) * 0.12, amp); pts.push(`${(10 + (i / 72) * (W - 20)).toFixed(1)},${(cy - (axis === 'v' ? d.dy : d.dx)).toFixed(1)}`); }
+    for (let i = 0; i <= 72; i++) { const c = seismoComp(wave, phase - (72 - i) * 0.12, amp); pts.push(`${(10 + (i / 72) * (W - 20)).toFixed(1)},${(cy - (axis === 'v' ? c.v : c.transversal)).toFixed(1)}`); }
     return `M ${pts.join(' L ')}`;
   };
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 280, display: 'block', margin: '0 auto' }}>
       <text x={6} y={12} fontSize={9} fill="#78716c">Vertical</text>
       <path d={trace('v', 30)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
-      <text x={6} y={64} fontSize={9} fill="#78716c">Horizontal</text>
-      <path d={trace('h', 82)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
+      <text x={6} y={64} fontSize={9} fill="#78716c">Transversal</text>
+      <path d={trace('transversal', 82)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
     </svg>
   );
 }
