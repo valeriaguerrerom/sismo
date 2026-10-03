@@ -268,14 +268,69 @@ export function WaveLab({ onOpenSimulator, onOpenMap3D, onChallengeDone }: Props
   );
 }
 
-/* ─── Reto: 5 rondas de "¿qué onda es?" ─── */
-const CHALLENGE_ROUNDS: { type: WaveType; hint: string; explain: string }[] = [
-  { type: 'P', hint: 'La partícula se mueve adelante y atrás a lo largo de la dirección de propagación.', explain: 'Es una onda P: movimiento longitudinal (compresión y dilatación).' },
-  { type: 'S', hint: 'La partícula se mueve perpendicular a la dirección de propagación.', explain: 'Es una onda S: movimiento transversal (cizalla).' },
-  { type: 'Rayleigh', hint: 'La partícula describe una elipse en el plano vertical y el movimiento decae con la profundidad.', explain: 'Es una onda Rayleigh: movimiento elíptico retrógrado superficial.' },
-  { type: 'Love', hint: 'En vista superior, el suelo se sacude de lado a lado (horizontal), perpendicular a la propagación.', explain: 'Es una onda Love: cizalla horizontal superficial.' },
-  { type: 'P', hint: 'Es la primera en llegar y comprime el material en la dirección en que viaja.', explain: 'Es una onda P: la más rápida y longitudinal.' },
+/* ─── Reto VISUAL: 5 rondas de "¿qué onda es?" ───
+ * Cada ronda muestra, sin decir el tipo, o la TRAYECTORIA animada de una
+ * partícula o el SISMOGRAMA del sismómetro (componentes vertical y horizontal).
+ * El usuario elige la onda; al responder se explica de forma visual.
+ */
+type ChallengeMode = 'trayectoria' | 'sismograma';
+const CHALLENGE_ROUNDS: { type: WaveType; mode: ChallengeMode; explain: string }[] = [
+  { type: 'P', mode: 'trayectoria', explain: 'La partícula se mueve a lo largo del eje de propagación (ida y vuelta horizontal): es una onda P, longitudinal.' },
+  { type: 'S', mode: 'sismograma', explain: 'El sismograma tiene movimiento perpendicular a la propagación y casi nada en el eje de avance: es una onda S, transversal.' },
+  { type: 'Rayleigh', mode: 'trayectoria', explain: 'La partícula describe una elipse en el plano vertical: es una onda Rayleigh, elíptica retrógrada.' },
+  { type: 'Love', mode: 'trayectoria', explain: 'El movimiento es horizontal, de lado a lado, perpendicular a la propagación: es una onda Love, cizalla horizontal.' },
+  { type: 'S', mode: 'trayectoria', explain: 'La partícula se mueve perpendicular a la propagación (vertical, sin componente de avance): es una onda S.' },
 ];
+
+/** Mini SVG animado de la trayectoria de una partícula para un tipo de onda. */
+function TrajectoryGlyph({ type, phase }: { type: WaveType; phase: number }) {
+  const W = 220, H = 120, cx = W / 2, cy = H / 2, amp = 26;
+  // Trayectoria: posiciones de la partícula a lo largo de un ciclo.
+  const trail: string[] = [];
+  for (let s = 0; s <= 60; s++) {
+    const th = (s / 60) * Math.PI * 2;
+    const d = displacement(type, th, amp, 1);
+    trail.push(`${(cx + d.dx).toFixed(1)},${(cy + d.dy).toFixed(1)}`);
+  }
+  // Partícula en la fase actual.
+  const d = displacement(type, phase, amp, 1);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 260, display: 'block', margin: '0 auto' }}>
+      {/* eje de propagación (horizontal) como referencia neutra */}
+      <line x1={10} y1={cy} x2={W - 30} y2={cy} stroke="#e7e5e4" strokeWidth={1} />
+      <path d={`M ${W - 36} ${cy - 4} L ${W - 30} ${cy} L ${W - 36} ${cy + 4}`} fill="none" stroke="#d6d3d1" strokeWidth={1} />
+      {/* trayectoria (sin color de onda para no delatar el tipo) */}
+      <path d={`M ${trail.join(' L ')}`} fill="none" stroke="#9ca3af" strokeWidth={1.4} strokeDasharray="3 2" />
+      {/* partícula */}
+      <circle cx={(cx + d.dx).toFixed(1)} cy={(cy + d.dy).toFixed(1)} r={5} fill="#1A1A2E" />
+    </svg>
+  );
+}
+
+/** Mini SVG animado del sismograma (vertical y horizontal) para un tipo de onda. */
+function SeismoGlyph({ type, phase }: { type: WaveType; phase: number }) {
+  const W = 260, H = 120, amp = 16;
+  const trace = (axis: 'v' | 'h', cy: number): string => {
+    const pts: string[] = [];
+    for (let i = 0; i <= 80; i++) {
+      const th = phase - (80 - i) * 0.12;
+      const d = displacement(type, th, amp, 1);
+      const val = axis === 'v' ? d.dy : d.dx;
+      pts.push(`${(10 + (i / 80) * (W - 20)).toFixed(1)},${(cy - val).toFixed(1)}`);
+    }
+    return `M ${pts.join(' L ')}`;
+  };
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 300, display: 'block', margin: '0 auto' }}>
+      <text x={6} y={14} fontSize={9} fill="#78716c">Vertical</text>
+      <line x1={10} y1={34} x2={W - 10} y2={34} stroke="#f0efed" strokeWidth={1} />
+      <path d={trace('v', 34)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
+      <text x={6} y={74} fontSize={9} fill="#78716c">Horizontal</text>
+      <line x1={10} y1={94} x2={W - 10} y2={94} stroke="#f0efed" strokeWidth={1} />
+      <path d={trace('h', 94)} fill="none" stroke="#1A1A2E" strokeWidth={1.4} />
+    </svg>
+  );
+}
 
 function WaveChallenge({ onDone }: { onDone?: () => void }) {
   const [round, setRound] = useState(0);
@@ -283,14 +338,21 @@ function WaveChallenge({ onDone }: { onDone?: () => void }) {
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
 
+  // Animación propia del reto (independiente del lienzo principal).
+  const phaseRef = useRef(0);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => { phaseRef.current = (phaseRef.current + 0.06) % (Math.PI * 2); setTick(t => (t + 1) % 100000); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const r = CHALLENGE_ROUNDS[round];
   const answered = picked !== null;
+  const phase = phaseRef.current;
 
-  const pick = (w: WaveType) => {
-    if (answered) return;
-    setPicked(w);
-    if (w === r.type) setScore(s => s + 1);
-  };
+  const pick = (w: WaveType) => { if (answered) return; setPicked(w); if (w === r.type) setScore(s => s + 1); };
   const next = () => {
     if (round < CHALLENGE_ROUNDS.length - 1) { setRound(round + 1); setPicked(null); }
     else { setFinished(true); onDone?.(); }
@@ -315,7 +377,17 @@ function WaveChallenge({ onDone }: { onDone?: () => void }) {
         <span className="text-xs font-bold text-[#1A1A2E]">Reto: ¿qué onda es?</span>
         <span className="text-[11px] text-stone-400">{round + 1}/{CHALLENGE_ROUNDS.length} · {score} pts</span>
       </div>
-      <p className="text-sm text-stone-600 mb-3">{r.hint}</p>
+      <p className="text-xs text-stone-500 mb-2">
+        {r.mode === 'trayectoria' ? 'Observa la trayectoria de la partícula y elige la onda.' : 'Observa el sismograma (vertical y horizontal) y elige la onda.'}
+      </p>
+
+      {/* Lienzo del reto: trayectoria o sismograma, SIN revelar el tipo */}
+      <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-2 mb-3">
+        {r.mode === 'trayectoria'
+          ? <TrajectoryGlyph type={r.type} phase={phase} />
+          : <SeismoGlyph type={r.type} phase={phase} />}
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
         {WAVES.map(w => {
           let cls = 'bg-stone-50 border-stone-200 text-stone-600';
@@ -333,13 +405,28 @@ function WaveChallenge({ onDone }: { onDone?: () => void }) {
           );
         })}
       </div>
+
       {answered && (
-        <div className="text-xs text-stone-600 bg-stone-50 rounded-lg p-2.5 mb-3">{r.explain}</div>
-      )}
-      {answered && (
-        <button onClick={next} className="w-full text-xs font-bold py-2 rounded-lg bg-[#C4553A] text-white">
-          {round < CHALLENGE_ROUNDS.length - 1 ? 'Siguiente' : 'Ver resultado'}
-        </button>
+        <>
+          {/* Explicación VISUAL: se muestra la misma trayectoria/sismograma ya
+              etiquetado con el color de la onda correcta + el texto. */}
+          <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-2 mb-2 flex items-center gap-3">
+            <div className="flex-shrink-0" style={{ width: 120 }}>
+              {r.mode === 'trayectoria'
+                ? <TrajectoryGlyph type={r.type} phase={phase} />
+                : <SeismoGlyph type={r.type} phase={phase} />}
+            </div>
+            <div className="min-w-0">
+              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1" style={{ backgroundColor: `${WAVE_COLORS[r.type]}20`, color: WAVE_COLORS[r.type] }}>
+                Onda {r.type}
+              </span>
+              <p className="text-xs text-stone-600 leading-snug">{r.explain}</p>
+            </div>
+          </div>
+          <button onClick={next} className="w-full text-xs font-bold py-2 rounded-lg bg-[#C4553A] text-white">
+            {round < CHALLENGE_ROUNDS.length - 1 ? 'Siguiente' : 'Ver resultado'}
+          </button>
+        </>
       )}
     </div>
   );
