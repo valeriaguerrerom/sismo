@@ -21,7 +21,7 @@ interface Ref {
 const LEARN: Ref[] = [
   { text: 'Shearer, P. M. (2019). Introduction to Seismology (3.ª ed.). Cambridge University Press.' },
   { text: 'Stein, S., & Wysession, M. (2003). An Introduction to Seismology, Earthquakes, and Earth Structure. Blackwell Publishing.' },
-  { text: 'Sarabia, A. M., & Cifuentes, H. G. (2018). Catálogo de intensidades macrosísmicas y efectos de sismos significativos en Colombia. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.', url: 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691' },
+  { text: 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.', url: 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455' },
   { text: 'Narváez, L., Torres, R., Gómez, D., Cortés, G., Cepeda, H., & Stix, J. (1997). "Tornillo"-type seismic signals at Galeras volcano, Colombia, 1992–1993. Journal of Volcanology and Geothermal Research, 77(1–4), 159–171.', url: 'https://doi.org/10.1016/S0377-0273(96)00092-3' },
   { text: 'Gómez, D. M., & Torres, R. A. (1997). Unusual low-frequency volcanic seismic events with slowly decaying coda waves observed at Galeras and other volcanoes. Journal of Volcanology and Geothermal Research, 77(1–4), 173–193. (Señales de largo período y tremor en Galeras).', url: 'https://doi.org/10.1016/S0377-0273(96)00093-5' },
   { text: 'Baxter, P. J., & Gresham, A. (1997). Deaths and injuries in the eruption of Galeras Volcano, Colombia, 14 January 1993. Journal of Volcanology and Geothermal Research, 77(1–4), 325–338.', url: 'https://doi.org/10.1016/S0377-0273(96)00103-5' },

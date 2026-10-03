@@ -20,10 +20,10 @@ Simulador).
 
 ## 1. Línea de tiempo (eventos verificados)
 
-Fuente general: Sarabia, A. M., & Cifuentes, H. G. (2018). *Catálogo de intensidades
-macrosísmicas y efectos de sismos significativos en Colombia.* Boletín Geológico, 44,
+Fuente general: Sarabia, A. M., & Cifuentes, H. G. (2018). *Evaluación del grado de daño
+en la ciudad de Pasto (Colombia) a causa de sismos históricos.* Boletín Geológico, 44,
 133–152. Servicio Geológico Colombiano.
-https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691
+https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455
 
 | Fecha | Dato en la app | Fuente |
 |-------|----------------|--------|
@@ -129,3 +129,64 @@ FDSN, USGS, EarthScope/IRIS).
 
 - Se **retiró la Guía de Scrum** (Schwaber & Sutherland, 2020): corresponde a la metodología
   de desarrollo del software, no al contenido educativo.
+
+## 8. Verificación de referencias (cuáles se comprobaron)
+
+Verificadas abriendo el enlace, el DOI o el registro del autor:
+
+- **Sarabia & Cifuentes (2018)** — título corregido a *"Evaluación del grado de daño en la
+  ciudad de Pasto (Colombia) a causa de sismos históricos"*. Verificado por el registro ORCID
+  de Ana Milena Sarabia (0000-0002-7362-5429), que lista ese título. El enlace oficial
+  (granate.sgc.gov.co/.../413/363/455) no se pudo abrir desde la herramienta por un error de
+  certificado del servidor del SGC, pero es el enlace institucional indicado. (El título
+  anterior, "Catálogo de intensidades macrosísmicas…", correspondía a OTRO artículo de los
+  mismos autores; era un error.)
+- **Narváez et al. (1997)**, "Tornillo-type seismic signals at Galeras volcano" — verificado
+  en NASA ADS: 1997 JVGR 77, 159. Volumen y página correctos.
+- **Gómez & Torres (1997)**, señales de largo período y tremor en Galeras — verificado: PDF
+  real con el identificador PII S0377-0273(96)00093-5 (coincide con el DOI citado).
+- **Baxter & Gresham (1997)**, muertes en la erupción del Galeras 1993 — verificado antes en
+  ADS y USGS Volcano Watch; JVGR 77, 325–338.
+- **Shearer (2019)**, **Stein & Wysession (2003)**, **Aki & Richards (2002)**,
+  **Moczo et al. (2014)**, **Virieux (1986)**, **CFL (1928)**, **Cerjan et al. (1985)**,
+  **Kennett & Engdahl (1991, IASP91)** — libros y artículos clásicos, citados por su
+  referencia estándar (no se abrió un enlace por título/edición, son referencias de catálogo
+  bibliográfico ampliamente conocidas).
+
+## 9. Datos del catálogo (seismic_events) — origen de las coordenadas
+
+Fuente: `backend/gen_seismic_seed.py` (generador del seed del catálogo).
+
+- **Eventos CM (tectónicos): la latitud/longitud NO es el epicentro real.** Es el
+  **centroide de las estaciones** que registraron el evento (los datos no traen epicentro).
+  La magnitud sale del nombre del archivo; `depth_km` es **NULL** (sin dato).
+- **Eventos Galeras (volcánicos): coordenada fija del cráter** (1.2216, −77.3742);
+  magnitud y profundidad NULL.
+- **Cifras:** de 134 eventos CM hay solo **28 coordenadas distintas**; **121 de 134 comparten
+  su coordenada** con otro evento (el centroide más repetido lo usan 24 eventos). Son por tanto
+  **puntos por zona, no epicentros individuales**.
+- **Consecuencia:** estas coordenadas **no deben usarse para medir el error de localización**
+  en ningún laboratorio. En el Explorador y el Mapa 3D se marcan como "ubicación aproximada
+  (centroide de estaciones), no epicentro". `depth_km` NULL se muestra como "profundidad no
+  disponible en el catálogo; se usa 15 km para la simulación".
+
+## 10. Condición CFL del motor (verificada en el código)
+
+Leída de `backend/core/fdm.py` (`cfl_limit = dx / (vp_max · √2)`, líneas 681 y 1458):
+el motor usa **dt ≤ dx / (Vp·√2)** en 2D, con la Vp máxima del medio (en modelo de dos capas
+la fija la capa más rápida). Si el dt elegido la viola, el motor lo reduce a `cfl_limit · 0.9`.
+El glosario y la metodología usan esta misma fórmula.
+
+## Pendiente para los laboratorios (Fase siguiente)
+
+- **Magnitud:** comparador logarítmico con sismos reales de la línea de tiempo (amplitud ×10
+  por unidad, energía ×~32). Usar las magnitudes de `TIMELINE` (ya con fuente).
+- **Historia:** mapa de Nariño con los eventos de Sarabia y Cifuentes (los de `TIMELINE`
+  tectónicos), ubicados por municipio/zona (no por epicentro instrumental).
+- **Metodología:** mini simulación 1D de la condición CFL y la dispersión numérica (variar
+  dx/dt y ver estabilidad), coherente con la fórmula del motor.
+- **Localiza el sismo:** usar SOLO TUM, CRU, CUM y BBAC (coordenadas confirmadas). Problema
+  pendiente: los eventos CM no tienen epicentro individual (centroide de zona), así que no se
+  puede medir "error vs epicentro real". Opción honesta: plantear el reto con tiempos S−P y
+  mostrar la zona estimada, sin afirmar un error en km contra un epicentro que es de zona.
+- **Quiz:** preguntas basadas en lo que el usuario hizo en los laboratorios.

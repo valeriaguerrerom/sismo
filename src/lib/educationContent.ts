@@ -20,8 +20,8 @@ export interface Source {
 // ─── Fuentes reutilizadas (citas canónicas) ───
 export const SRC = {
   sarabia2018: {
-    cita: 'Sarabia, A. M., & Cifuentes, H. G. (2018). Catálogo de intensidades macrosísmicas y efectos de sismos significativos en Colombia. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.',
-    url: 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691',
+    cita: 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.',
+    url: 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455',
   },
   sgcSismos: {
     cita: 'Servicio Geológico Colombiano. Catálogo de la Red Sismológica Nacional de Colombia.',

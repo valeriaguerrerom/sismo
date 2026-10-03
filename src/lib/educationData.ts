@@ -136,7 +136,9 @@ export async function loadTimelineEvents(): Promise<TimelineEvent[]> {
   if (!supabase) return fallbackTimelineVerified;
   try {
     const { data } = await withTimeout(
-      supabase.from('timeline_events').select('*').eq('active', true).order('year', { ascending: true }),
+      supabase.from('timeline_events').select('*').eq('active', true)
+        .order('year', { ascending: true })
+        .order('event_date', { ascending: true, nullsFirst: true }),
       QUERY_TIMEOUT_MS,
     );
     if (data && data.length > 0) {

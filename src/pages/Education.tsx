@@ -6,7 +6,7 @@ import {
   Flame, Activity
 } from '../lib/icons';
 import {
-  loadWaveFacts, loadQuizQuestions, loadTimelineEvents,
+  loadQuizQuestions, loadTimelineEvents,
   type QuizQuestion, type TimelineEvent,
 } from '../lib/educationData';
 import {
@@ -108,18 +108,6 @@ function AnimatedWave({ type, color, playing }: { type: 'P' | 'S' | 'Love' | 'Ra
 function WaveExplorer() {
   const [selected, setSelected] = useState<'P' | 'S' | 'Love' | 'Rayleigh'>('P');
   const [playing, setPlaying] = useState(true);
-  const [facts, setFacts] = useState<Record<string, string[]>>({});
-  const [currentFact, setCurrentFact] = useState('');
-
-  useEffect(() => { loadWaveFacts().then(setFacts); }, []);
-
-  // Pick random fact when wave type changes
-  useEffect(() => {
-    const waveFacts = facts[selected] || [];
-    if (waveFacts.length > 0) {
-      setCurrentFact(waveFacts[Math.floor(Math.random() * waveFacts.length)]);
-    }
-  }, [selected, facts]);
 
   const ICONS: Record<'P' | 'S' | 'Love' | 'Rayleigh', JSX.Element> = {
     P: <Zap size={18} />, S: <Waves size={18} />, Love: <TrendingUp size={18} />, Rayleigh: <Globe size={18} />,
@@ -197,13 +185,6 @@ function WaveExplorer() {
           <Info size={14} className="text-stone-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-stone-600 leading-relaxed">{COMPONENT_NOTE}</p>
         </div>
-
-        {currentFact && (
-          <div className="bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-lg p-3 flex gap-2 mb-3">
-            <Info size={14} className="text-[#B8860B] flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-[#1A1A2E] leading-relaxed"><span className="font-bold">Dato:</span> {currentFact}</p>
-          </div>
-        )}
 
         {/* Fuente del contenido de esta onda. */}
         <p className="text-[10px] text-stone-400 leading-snug">Fuente: {w.source.cita}</p>

@@ -6,36 +6,50 @@
 -- aplicado antes la migración 20261003_education_sources.sql (columnas source,
 -- source_url, event_date).
 --
--- Cómo aplicarlo: pégalo en el SQL Editor de Supabase y ejecútalo. Es
--- idempotente en el sentido de que primero borra el contenido actual de esas
--- dos tablas y luego inserta el verificado (no afecta a wave_facts).
+-- Cómo aplicarlo: pégalo en el SQL Editor de Supabase y ejecútalo. Antes de
+-- borrar, GUARDA UNA COPIA de las tablas actuales en quiz_questions_backup y
+-- timeline_events_backup (por si quieres revertir). Luego inserta el contenido
+-- verificado (no afecta a wave_facts).
+--
+-- Para revertir, si hiciera falta:
+--   DELETE FROM quiz_questions;
+--   INSERT INTO quiz_questions SELECT * FROM quiz_questions_backup;
+--   DELETE FROM timeline_events;
+--   INSERT INTO timeline_events SELECT * FROM timeline_events_backup;
 --
 -- Autores del contenido: revisión científica del equipo + fuentes citadas.
 -- =============================================
 
 BEGIN;
 
+-- ── Copia de seguridad del contenido actual (antes de borrar) ──
+-- DROP + CREATE AS para que la copia sea siempre la del estado actual.
+DROP TABLE IF EXISTS quiz_questions_backup;
+CREATE TABLE quiz_questions_backup AS TABLE quiz_questions;
+DROP TABLE IF EXISTS timeline_events_backup;
+CREATE TABLE timeline_events_backup AS TABLE timeline_events;
+
 -- ── Línea de tiempo verificada ──
 DELETE FROM timeline_events;
 INSERT INTO timeline_events (event_date, year, magnitude, title, description, event_type, source, source_url, active) VALUES
 ('1834-01-20', 1834, 'Mw 6.7 (estimada por daños)', 'Sismo de la región de Santiago (Putumayo)',
  'Magnitud Mw 6.7 estimada a partir de los daños (no por registro instrumental). Sismo superficial asociado al sistema de fallas de Afiladores. Alcanzó intensidad VIII (EMS-98) en Pasto.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Catálogo de intensidades macrosísmicas y efectos de sismos significativos en Colombia. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. Servicio Geológico Colombiano.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1906-01-31', 1906, 'Mw 8.4', 'Gran sismo de la costa pacífica',
  'Uno de los mayores sismos instrumentales del mundo, en la zona de subducción frente a la costa pacífica de Colombia y Ecuador. Magnitud Mw 8.4 según el Sistema de Información de Sismicidad Histórica del SGC.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Boletín Geológico, 44, 133–152. SGC.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. SGC.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1935-08-07', 1935, 'Mw 6.1', 'Sismo de Tangua',
  'Sismo cortical en el sur de Nariño, cerca de Tangua.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Boletín Geológico, 44, 133–152. SGC.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. SGC.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1935-10-26', 1935, 'Mw 5.9', 'Sismo de Imués (falla de Romeral)',
  'Sismo cortical asociado al sistema de fallas de Romeral, cerca de Imués.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Boletín Geológico, 44, 133–152. SGC.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. SGC.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1936-07-17', 1936, 'Mw 6.3', 'Sismo de Túquerres',
  'Sismo cortical en el altiplano de Túquerres, sur de Nariño.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Boletín Geológico, 44, 133–152. SGC.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. SGC.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1947-07-14', 1947, 'Mw 6.1', 'Sismo de Pasto (falla de Romeral)',
  'Sismo cortical asociado a la falla de Romeral. Alcanzó intensidad VIII en Pasto; se reportó la demolición de unas 500 casas de adobe o ladrillo sin refuerzo.',
- 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Boletín Geológico, 44, 133–152. SGC.', 'https://revistas.sgc.gov.co/index.php/boletingeo/article/view/691', true),
+ 'tectonic', 'Sarabia, A. M., & Cifuentes, H. G. (2018). Evaluación del grado de daño en la ciudad de Pasto (Colombia) a causa de sismos históricos. Boletín Geológico, 44, 133–152. SGC.', 'https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455', true),
 ('1979-12-12', 1979, 'Mw 8.1', 'Sismo de Tumaco',
  'Sismo de subducción frente a la costa pacífica, a unos 25 km de profundidad. Generó un tsunami que afectó la costa de Nariño.',
  'tectonic', 'USGS Earthquake Hazards Program. M 8.1 — 12 de diciembre de 1979, Tumaco.', 'https://earthquake.usgs.gov', true),
