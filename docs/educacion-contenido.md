@@ -190,3 +190,45 @@ El glosario y la metodología usan esta misma fórmula.
   puede medir "error vs epicentro real". Opción honesta: plantear el reto con tiempos S−P y
   mostrar la zona estimada, sin afirmar un error en km contra un epicentro que es de zona.
 - **Quiz:** preguntas basadas en lo que el usuario hizo en los laboratorios.
+
+## 11. Estructura por capítulos y estado de los laboratorios
+
+La sección se reorganizó en capítulos (barra lateral numerada): Ondas, Magnitud,
+Profundidad, Historia y Metodología, con el progreso guardado en localStorage
+(`src/lib/useChapterProgress.ts`). Glosario, Referencias y Quiz quedan en un
+bloque de consulta aparte. Cada capítulo tiene un botón para abrir el Simulador
+o el Mapa 3D y la fuente al pie.
+
+Laboratorios IMPLEMENTADOS esta noche:
+- **Ondas** (`src/components/education/WaveLab.tsx`): malla de partículas con el
+  movimiento físico correcto (P longitudinal, S transversal, Love cizalla
+  horizontal en vista superior, Rayleigh elíptica retrógrada que decae con la
+  profundidad), controles de frecuencia y velocidad, "seguir una partícula" con
+  su trayectoria, sismómetro virtual en superficie en tiempo real (componentes
+  vertical y horizontal), y reto de 5 rondas. Fuente: Shearer (2019).
+- **Profundidad** (`src/components/education/DepthLab.tsx`): corte longitud vs
+  profundidad con los hipocentros reales del USGS (`public/data/usgs_narino.json`,
+  444 eventos), franjas superficial/intermedio, hover con fecha, magnitud,
+  profundidad y lugar, fuente "USGS ComCat, consultado el [fecha]", nota de
+  subducción citada (Stein y Wysession, 2003) y reto de clasificar 5 eventos.
+
+Pendiente de laboratorio propio (los capítulos muestran su contenido corregido
+mientras tanto, sin plantillas repetidas):
+- **Magnitud:** hoy es la escala interactiva; falta el comparador logarítmico
+  con sismos reales de la línea de tiempo (amplitud ×10, energía ×~32).
+- **Historia:** hoy es la línea de tiempo con fuentes; falta el mapa de Nariño
+  con los eventos de Sarabia y Cifuentes ubicados por zona.
+- **Metodología:** hoy es el acordeón del método con valores reales; falta la
+  mini simulación de CFL y dispersión numérica.
+- **Localiza el sismo:** usar solo TUM, CRU, CUM y BBAC (confirmadas). Los
+  eventos CM no tienen epicentro individual (centroide de zona), así que el reto
+  debe mostrar la zona estimada sin afirmar un error en km contra el catálogo.
+- **Quiz basado en laboratorios:** preguntas ligadas a lo que el usuario hizo.
+
+Nota sobre el reto del laboratorio de ondas: por ahora describe el movimiento en
+texto; una mejora es mostrar la trayectoria o el sismograma animado y que el
+usuario los identifique visualmente.
+
+El tour guiado anterior de Educación (`src/tours/educacion.ts`) apuntaba a la
+estructura vieja (data-tour que ya no existe) y quedó sin cablear; se puede
+rehacer para la estructura por capítulos.

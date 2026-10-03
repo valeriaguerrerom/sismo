@@ -211,7 +211,7 @@ function AppContent() {
         setMseed3dLoad({ waveData: wd, station: meta.station, filename: meta.filename, sourceType: meta.sourceType, nonce: Date.now() });
         navigate('map3d');
       }} />;
-      case 'education': return <Education />;
+      case 'education': return <Education onNavigate={navigate} />;
       case 'map3d': return <Map3D mseedLoad={mseed3dLoad} onMseedLoadUsed={() => setMseed3dLoad(null)} />;
       case 'reports': return <MyReports onNavigate={navigate} />;
       case 'profile': return <Profile onDeleted={handleAccountDeleted} onDeactivated={handleAccountDeactivated} />;
