@@ -213,7 +213,7 @@ function AppContent() {
       }} />;
       case 'education': return <Education />;
       case 'map3d': return <Map3D mseedLoad={mseed3dLoad} onMseedLoadUsed={() => setMseed3dLoad(null)} />;
-      case 'reports': return <MyReports />;
+      case 'reports': return <MyReports onNavigate={navigate} />;
       case 'profile': return <Profile onDeleted={handleAccountDeleted} onDeactivated={handleAccountDeactivated} />;
       case 'admin': return user?.role === 'admin' ? <AdminDashboard /> : <Home onNavigate={navigate} />;
       default: return <Home onNavigate={navigate} />;
