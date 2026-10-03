@@ -9,6 +9,10 @@ import { downloadReportPdf, SavedResults } from '../lib/reportPdf';
 import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dReportOptions } from '../lib/map3dReport';
 import type { SimulationParams, Page } from '../lib/types';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
+import { Pagination } from '../components/ui/Pagination';
+
+/** Reportes por página en la lista. */
+const REPORTS_PER_PAGE = 8;
 
 /** Resultados guardados: de simulación (waveData/métricas) o de Mapa 3D. */
 type StoredResults = SavedResults & {
@@ -107,6 +111,7 @@ export function MyReports({ onNavigate }: Props) {
   const [magMax, setMagMax] = useState('');
   const [onlySeismograms, setOnlySeismograms] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [page, setPage] = useState(1);
 
   // Confirmación de borrado (con el nombre del reporte).
   const [toDelete, setToDelete] = useState<Report | null>(null);
@@ -208,6 +213,15 @@ export function MyReports({ onNavigate }: Props) {
     });
     return rows;
   }, [reports, query, dateFrom, dateTo, origin, source, magMin, magMax, onlySeismograms, sortKey]);
+
+  // Al cambiar cualquier filtro, orden o la propia lista, vuelve a la página 1
+  // para no quedar en una página que ya no existe (lista vacía).
+  useEffect(() => {
+    setPage(1);
+  }, [query, dateFrom, dateTo, origin, source, magMin, magMax, onlySeismograms, sortKey, reports.length]);
+
+  // Reportes de la página actual.
+  const paged = filtered.slice((page - 1) * REPORTS_PER_PAGE, page * REPORTS_PER_PAGE);
 
   const hasFilters = Boolean(
     query || dateFrom || dateTo || origin !== 'all' || source !== 'all' ||
@@ -353,7 +367,7 @@ export function MyReports({ onNavigate }: Props) {
               </div>
             ) : (
               <div className="space-y-3">
-                {filtered.map(r => {
+                {paged.map(r => {
                   const meta = reportMeta(r);
                   const map3d = meta.origin === 'map3d';
                   return (
@@ -410,6 +424,12 @@ export function MyReports({ onNavigate }: Props) {
                     </div>
                   );
                 })}
+                <Pagination
+                  page={page}
+                  totalItems={filtered.length}
+                  pageSize={REPORTS_PER_PAGE}
+                  onChange={setPage}
+                />
               </div>
             )}
           </>
