@@ -188,10 +188,10 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left ${
                     currentPage === 'profile' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'text-stone-600 hover:bg-stone-100'
                   }`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${user.role === 'admin' ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${user.role === 'admin' ? 'bg-[#1A1A2E]/10 text-[#1A1A2E]' : 'bg-[#C4553A]/10 text-[#C4553A]'}`}>
                     {user.full_name?.charAt(0)?.toUpperCase() || user.email.charAt(0).toUpperCase()}
                   </div>
-                  <span className="truncate">{user.full_name || user.email}</span>
+                  <span className="truncate min-w-0">{user.full_name || user.email}</span>
                 </button>
                 <button onClick={() => { setMenuOpen(false); signOut(); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left text-stone-600 hover:bg-[#C4553A]/10 hover:text-[#C4553A]">

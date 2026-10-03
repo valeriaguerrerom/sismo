@@ -231,7 +231,7 @@ export function MyReports({ onNavigate }: Props) {
             Mis reportes
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">
-            Simulaciones guardadas por {user?.full_name || user?.email}
+            Simulaciones guardadas por <span className="break-all">{user?.full_name || user?.email}</span>
           </p>
         </div>
       </div>
@@ -389,7 +389,7 @@ export function MyReports({ onNavigate }: Props) {
                           {r.notes && <span className="truncate max-w-[220px] text-stone-400">{r.notes}</span>}
                         </div>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
+                      <div className="flex flex-wrap gap-2 flex-shrink-0">
                         <button onClick={() => exportPDF(r)} title="Descargar reporte PDF"
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C4553A]/5 text-[#C4553A] border border-[#C4553A]/20 text-xs font-bold">
                           <FileDown size={14} /> PDF
