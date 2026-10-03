@@ -24,6 +24,7 @@ import {
 import type {
   Station, StationTravelTime, RayPathResult, SceneGeometry, SceneHypocenter,
 } from '../../lib/api3d';
+import { makeWaveFrontRadius } from '../../lib/waveFront';
 
 interface Epicenter {
   lat: number;
@@ -367,9 +368,9 @@ export function Scene3D({
      */
     const updateWaveShell = (
       shell: WaveShell, ex: number, ey: number, ez: number,
-      vKmS: number, elapsed: number,
+      radiusKmAt: (t: number) => number, elapsed: number,
     ) => {
-      const rKm = vKmS * elapsed;
+      const rKm = radiusKmAt(elapsed);
       const { mesh, mat } = shell;
       if (elapsed <= 0 || rKm < 1) { mesh.visible = false; return; }
       // El frente ya salió del bloque cuando su radio supera a la vez el ancho
@@ -412,9 +413,9 @@ export function Scene3D({
     const updateCutArc = (
       arc: { line: THREE.Line; mat: THREE.LineBasicMaterial },
       ex: number, ey: number, ez: number, ux: number, uz: number,
-      vKmS: number, elapsed: number,
+      radiusKmAt: (t: number) => number, elapsed: number,
     ) => {
-      const rKm = vKmS * elapsed;
+      const rKm = radiusKmAt(elapsed);
       const { line, mat } = arc;
       if (viewRef.current !== 'cut' || elapsed <= 0 || rKm < 1) { line.visible = false; return; }
       // Círculo COMPLETO del frente en el plano del corte, centrado en el
@@ -458,12 +459,13 @@ export function Scene3D({
      * anillo no existe (la onda aún viaja por el subsuelo).
      */
     const updateWaveRings = (
-      rings: WaveRing[], ex: number, ez: number, depthKm: number, vKmS: number, elapsed: number,
+      rings: WaveRing[], ex: number, ez: number, depthKm: number,
+      radiusKmAt: (t: number) => number, elapsed: number,
     ) => {
       const th = terrainRef.current;
       for (let k = 0; k < rings.length; k++) {
         const tLag = elapsed - k * 0.6; // estela: 0.6 s de retraso por anillo
-        const rHipKm = vKmS * tLag;      // radio hipocentral recorrido (km)
+        const rHipKm = radiusKmAt(tLag); // radio hipocentral según el modelo (km)
         const { line, mat } = rings[k];
         // Radio del anillo en superficie (km). Si el frente aún no sube, nada.
         const surfKm2 = rHipKm * rHipKm - depthKm * depthKm;
@@ -642,11 +644,16 @@ export function Scene3D({
         const ez = latToZ(d.epicenter.lat);
         const ey = depthToY(d.epicenter.depthKm);
         const depthKm = d.epicenter.depthKm;
-        updateWaveRings(pRings, ex, ez, depthKm, d.vpKmS, d.elapsed);
-        updateWaveRings(sRings, ex, ez, depthKm, d.vsKmS, d.elapsed);
+        // Radio del frente según el modelo activo: con velocidad constante es
+        // v·t; con IASP91 sigue la curva distancia↔tiempo de las estaciones, de
+        // modo que el anillo P toca cada estación en su tP y el S en su tS.
+        const pRadiusAt = makeWaveFrontRadius(d.travelTimes, 'P', d.vpKmS);
+        const sRadiusAt = makeWaveFrontRadius(d.travelTimes, 'S', d.vsKmS);
+        updateWaveRings(pRings, ex, ez, depthKm, pRadiusAt, d.elapsed);
+        updateWaveRings(sRings, ex, ez, depthKm, sRadiusAt, d.elapsed);
         // Casquete esférico semitransparente dentro del bloque (todas las vistas).
-        updateWaveShell(pShell, ex, ey, ez, d.vpKmS, d.elapsed);
-        updateWaveShell(sShell, ex, ey, ez, d.vsKmS, d.elapsed);
+        updateWaveShell(pShell, ex, ey, ez, pRadiusAt, d.elapsed);
+        updateWaveShell(sShell, ex, ey, ez, sRadiusAt, d.elapsed);
 
         // Frente de onda dentro del bloque (solo en vista Corte): usa la
         // dirección epicentro→estación seleccionada como eje horizontal del corte.
@@ -656,8 +663,8 @@ export function Scene3D({
           const dxc = sx - ex, dzc = sz - ez;
           const h = Math.hypot(dxc, dzc) || 1e-6;
           const ux = dxc / h, uz = dzc / h;
-          updateCutArc(pCutArc, ex, ey, ez, ux, uz, d.vpKmS, d.elapsed);
-          updateCutArc(sCutArc, ex, ey, ez, ux, uz, d.vsKmS, d.elapsed);
+          updateCutArc(pCutArc, ex, ey, ez, ux, uz, makeWaveFrontRadius(d.travelTimes, 'P', d.vpKmS), d.elapsed);
+          updateCutArc(sCutArc, ex, ey, ez, ux, uz, makeWaveFrontRadius(d.travelTimes, 'S', d.vsKmS), d.elapsed);
         } else {
           pCutArc.line.visible = false;
           sCutArc.line.visible = false;

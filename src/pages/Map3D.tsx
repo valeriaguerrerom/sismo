@@ -26,6 +26,7 @@ import {
   type RayPathResult, type WaveformResult, type SceneGeometry, type SceneHypocenter,
   type SceneEventInput, ApiError,
 } from '../lib/api3d';
+import { alignSyntheticToModel } from '../lib/alignSynthetic';
 import { loadCatalog, type CatalogRow } from '../lib/catalog';
 import {
   filterEvents, hasActiveFilters, magnitudeLabel, assumedDepthKm,
@@ -131,8 +132,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [coordIsZone, setCoordIsZone] = useState(false);
   const [sourceType, setSourceType] = useState<'tectonic' | 'volcanic'>('tectonic');
 
-  // Sintéticos por estación (componente vertical para las trazas)
+  // Sintéticos por estación, YA alineados al modelo activo (lo que se dibuja).
   const [traces, setTraces] = useState<Record<string, SyntheticResult | null>>({});
+  // Sintéticos CRUDOS del backend (eje FDM homogéneo), por estación. Se guardan
+  // para poder realinearlos a los tP/tS del nuevo modelo SIN volver a pedirlos.
+  const rawTracesRef = useRef<Record<string, SyntheticResult | null>>({});
+  // true mientras se realinean trazas por un cambio de modelo (indicador chico).
+  const [realigning, setRealigning] = useState(false);
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [stationDetail, setStationDetail] = useState<SyntheticResult | null>(null);
   const [rayPath, setRayPath] = useState<RayPathResult | null>(null);
@@ -375,8 +381,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // cambian las marcas tP/tS), así que no se regeneran ni se muestra el loader:
   // la reproducción en curso sigue sin cortarse.
   const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }, regenerate = true) => {
-    setLoadingTT(true);
-    if (regenerate) setMessage('Calculando tiempos de viaje...');
+    // Solo el flujo que regenera trazas levanta `loadingTT` (y con él el overlay
+    // de carga a pantalla completa). Al cambiar SOLO el modelo usamos `realigning`
+    // (indicador chico en el panel) para no interrumpir la reproducción.
+    if (regenerate) { setLoadingTT(true); setMessage('Calculando tiempos de viaje...'); }
+    else { setRealigning(true); }
     try {
       const res = await getTravelTimes({
         lat: epi.lat, lon: epi.lon, depth_km: epi.depthKm,
@@ -397,8 +406,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       setMessage(friendlyError(e, 'No se pudieron calcular los tiempos de viaje'));
       setTravelTimes([]);
       setLoadingTraces(new Set());
+      if (!regenerate) setRealigning(false);
     } finally {
-      setLoadingTT(false);
+      if (regenerate) setLoadingTT(false);
     }
   }, [vp, vs, model]);
 
@@ -427,6 +437,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     const runId = ++runIdRef.current;
     setLoadingTraces(new Set(tts.map(t => t.code)));
     setTraces({}); // limpiar previos para evitar trazas viejas
+    rawTracesRef.current = {}; // y los crudos asociados
     // Lanzar todas en paralelo, pero aplicar cada resultado en cuanto llega.
     await Promise.all(tts.map(async (tt) => {
       let syn: SyntheticResult | null = null;
@@ -441,7 +452,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       }
       // Descartar si ya empezó otra generación (la última gana).
       if (runId !== runIdRef.current) return;
-      setTraces(prev => ({ ...prev, [tt.code]: syn }));
+      // Guardar el crudo (para realinear al cambiar de modelo) y publicar la
+      // versión alineada a los tP/tS de ESTA estación en el modelo activo.
+      rawTracesRef.current[tt.code] = syn;
+      const aligned = syn ? alignSyntheticToModel(syn, tt.tP, tt.tS) : null;
+      setTraces(prev => ({ ...prev, [tt.code]: aligned }));
       setLoadingTraces(prev => {
         const next = new Set(prev);
         next.delete(tt.code);
@@ -452,11 +467,26 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
   useEffect(() => {
     if (travelTimes.length > 0) {
-      // Solo (re)generar los sismogramas cuando corresponde (nuevo sismo o
-      // cambio de Vp/Vs/magnitud…), no cuando solo cambió el modelo (que solo
-      // mueve las marcas tP/tS y no debe cortar la animación).
       if (shouldRegenerateRef.current) {
+        // Nuevo sismo o cambio de Vp/Vs/magnitud…: regenerar desde el backend.
         loadSynthetics(travelTimes);
+      } else if (Object.keys(rawTracesRef.current).length > 0) {
+        // Solo cambió el modelo: NO se piden trazas nuevas. Se realinean las
+        // crudas que ya tenemos a los tP/tS del nuevo modelo, en segundo plano,
+        // sin tocar `elapsed` ni `playing` (la reproducción no se corta). Así la
+        // onda P de cada traza vuelve a arrancar exactamente en el tP del modelo.
+        setRealigning(true);
+        setTraces(() => {
+          const next: Record<string, SyntheticResult | null> = {};
+          for (const tt of travelTimes) {
+            const raw = rawTracesRef.current[tt.code] ?? null;
+            next[tt.code] = raw ? alignSyntheticToModel(raw, tt.tP, tt.tS) : null;
+          }
+          return next;
+        });
+        // El realineado es síncrono; el indicador se apaga en el próximo tick
+        // para que sea visible sin bloquear la reproducción.
+        setTimeout(() => setRealigning(false), 150);
       }
       // Seleccionar por defecto la estación más cercana (define el corte).
       const nearest = travelTimes[0]?.code;
@@ -593,6 +623,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     if (req.kind === 'event') applyEvent(req.ev);
     else applyEpicenter(req.lat, req.lon);
   };
+
+  // Mantener el detalle de la estación seleccionada en sincronía con la traza
+  // activa: al realinear por un cambio de modelo, el panel triaxial y los tP/tS
+  // mostrados deben reflejar la traza alineada, no una copia vieja.
+  useEffect(() => {
+    if (selectedStation) setStationDetail(traces[selectedStation] ?? null);
+  }, [traces, selectedStation]);
 
   const selectStation = (code: string) => {
     setSelectedStation(code);
@@ -899,6 +936,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           <div className="flex items-center gap-2 mb-2 shrink-0">
             <Radio size={13} className="text-[#C4553A]" />
             <h2 className="text-xs font-bold text-stone-200">Sismogramas</h2>
+            {/* Indicador pequeño al realinear por cambio de modelo (no corta la
+                reproducción, a diferencia del overlay de generación). */}
+            {realigning && !isCalculating && (
+              <span className="flex items-center gap-1 text-[9px] text-[#D4A853]">
+                <Loader size={9} className="animate-spin" /> Ajustando al modelo…
+              </span>
+            )}
             {travelTimes.length > 0 && (
               <span className="text-[10px] text-stone-500 ml-auto">ordenados por distancia</span>
             )}
