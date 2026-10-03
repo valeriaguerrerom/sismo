@@ -14,9 +14,16 @@ interface HomeTourOptions {
   profileComplete: boolean;
 }
 
-/** true si la pantalla es "mobile" (por debajo del breakpoint md de Tailwind). */
+/**
+ * true si la pantalla es "mobile" (por debajo del breakpoint md de Tailwind).
+ * Usa matchMedia (igual que Tailwind) para coincidir con el layout real.
+ */
 function isMobile(): boolean {
-  return typeof window !== 'undefined' && window.innerWidth < 768;
+  if (typeof window === 'undefined') return false;
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia('(max-width: 767px)').matches;
+  }
+  return window.innerWidth < 768;
 }
 
 /** Construye los pasos del tour de bienvenida del Inicio. */

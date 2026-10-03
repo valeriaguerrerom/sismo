@@ -224,7 +224,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // En móvil arrancamos con los paneles ocultos para que la escena 3D ocupe
   // todo el ancho; en escritorio se muestran de entrada.
   const [panelsCollapsed, setPanelsCollapsed] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 1024,
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 1023px)').matches,
   );
   // Modo "colocar epicentro": resalta el mapa y cambia la ayuda superior para
   // indicar que el usuario ya puede hacer clic en el terreno. Se activa desde el

@@ -12,9 +12,17 @@
  */
 import type { TourStep } from './useTour';
 
-/** true si la pantalla está por debajo del breakpoint lg (paneles ocultos). */
+/**
+ * true si la pantalla está por debajo del breakpoint lg (paneles ocultos).
+ * Usa matchMedia (igual que Tailwind) para que coincida con el layout real,
+ * incluso en el modo responsive del navegador donde innerWidth puede mentir.
+ */
 function isMobile(): boolean {
-  return typeof window !== 'undefined' && window.innerWidth < 1024;
+  if (typeof window === 'undefined') return false;
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia('(max-width: 1023px)').matches;
+  }
+  return window.innerWidth < 1024;
 }
 
 /** Construye los pasos del tour del Mapa 3D. */
