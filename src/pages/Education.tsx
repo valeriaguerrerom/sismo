@@ -9,11 +9,15 @@
  *
  * @module pages/Education
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen, Award, CheckCircle, XCircle, RotateCcw, ArrowRight,
-  BookMarked, Library, Flame, Activity, Check,
+  BookMarked, Library, Flame, Activity, Check, HelpCircle,
 } from '../lib/icons';
+import { Tooltip } from '../components/ui/Tooltip';
+import { useAuth } from '../lib/authContext';
+import { startTour } from '../tours/useTour';
+import { buildEducacionSteps } from '../tours/educacion';
 import {
   loadQuizQuestions, loadTimelineEvents,
   type QuizQuestion, type TimelineEvent,
@@ -218,6 +222,22 @@ type ExtraId = 'glosario' | 'referencias' | 'quiz';
 export function Education({ onNavigate }: Props) {
   const [active, setActive] = useState<ChapterId | ExtraId>('ondas');
   const { isDone, markDone } = useChapterProgress();
+  const { user, markTourSeen } = useAuth();
+
+  // ── Tour guiado ──
+  const tourRef = useRef(false); // evita relanzar el auto-tour
+  const launchTour = useCallback(() => {
+    startTour(buildEducacionSteps(), { onDone: () => markTourSeen('educacion') });
+  }, [markTourSeen]);
+
+  // Auto-lanza el tour la primera vez que el usuario entra al módulo.
+  useEffect(() => {
+    if (tourRef.current || !user) return;
+    if (user.tours_vistos?.educacion) return;
+    tourRef.current = true;
+    const id = requestAnimationFrame(() => setTimeout(launchTour, 500));
+    return () => cancelAnimationFrame(id);
+  }, [user, launchTour]);
 
   const chapters: { id: ChapterId; label: string; intro: string }[] = [
     { id: 'ondas', label: 'Ondas', intro: 'Cómo se mueve el suelo al paso de cada tipo de onda.' },
@@ -244,6 +264,17 @@ export function Education({ onNavigate }: Props) {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
             <BookOpen size={20} className="text-[#C4553A]" /> Centro de aprendizaje sísmico
+            {/* Botón de ayuda: repite el tour guiado del módulo. */}
+            <Tooltip content="Ver guía" hoverOnly>
+              <button
+                type="button"
+                onClick={launchTour}
+                aria-label="Ver guía"
+                className={`flex items-center justify-center w-6 h-6 rounded-full border border-stone-200 text-stone-400 hover:text-[#C4553A] hover:border-[#C4553A]/40 transition-colors ${user && !user.tours_vistos?.educacion ? 'help-pulse' : ''}`}
+              >
+                <HelpCircle size={14} />
+              </button>
+            </Tooltip>
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">Recorre los capítulos; cada uno es un laboratorio interactivo</p>
         </div>
@@ -252,7 +283,7 @@ export function Education({ onNavigate }: Props) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid lg:grid-cols-[220px_1fr] gap-6">
         {/* Barra lateral: capítulos numerados + extras */}
         <nav className="lg:sticky lg:top-20 self-start space-y-4">
-          <div>
+          <div data-tour="edu-capitulos">
             <div className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-2 px-1">Capítulos</div>
             <ol className="space-y-1">
               {chapters.map((c, i) => {
@@ -272,7 +303,7 @@ export function Education({ onNavigate }: Props) {
               })}
             </ol>
           </div>
-          <div>
+          <div data-tour="edu-consulta">
             <div className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-2 px-1">Consulta</div>
             <div className="space-y-1">
               {extras.map(x => (
@@ -286,7 +317,7 @@ export function Education({ onNavigate }: Props) {
         </nav>
 
         {/* Contenido */}
-        <div key={active} className="animate-fade-in-up min-w-0">
+        <div key={active} data-tour="edu-contenido" className="animate-fade-in-up min-w-0">
           {activeChapter && (
             <div className="mb-4 flex items-center gap-3">
               <span className="w-8 h-8 rounded-full bg-[#C4553A]/10 text-[#C4553A] flex items-center justify-center text-sm font-black">{chapterIndex + 1}</span>
