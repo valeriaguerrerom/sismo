@@ -824,7 +824,12 @@ function QuizEditor({ row, onSave, onCancel }: { row: Partial<QuizRow>; onSave: 
   const [f, setF] = useState<Partial<QuizRow>>({ options: ['', '', '', ''], correct_index: 0, category: 'general', difficulty: 'medio', active: true, ...row });
   const opts = f.options || ['', '', '', ''];
   return (
-    <form onSubmit={async e => { e.preventDefault(); await onSave(f); }} className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-3">
+    <form onSubmit={async e => {
+      e.preventDefault();
+      // La fuente es obligatoria: no se guarda una pregunta sin ella.
+      if (!f.source?.trim()) { alert('La fuente es obligatoria.'); return; }
+      await onSave({ ...f, source: f.source.trim(), source_url: f.source_url?.trim() || null });
+    }} className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-3">
       <label className="text-xs text-stone-500 block">Pregunta<input required className={inputCls} value={f.question || ''} onChange={e => setF({ ...f, question: e.target.value })} /></label>
       <div className="grid sm:grid-cols-2 gap-2">
         {opts.map((o, i) => (
@@ -835,6 +840,9 @@ function QuizEditor({ row, onSave, onCancel }: { row: Partial<QuizRow>; onSave: 
         ))}
       </div>
       <label className="text-xs text-stone-500 block">Explicación<textarea required rows={2} className={inputCls} value={f.explanation || ''} onChange={e => setF({ ...f, explanation: e.target.value })} /></label>
+      {/* Fuente obligatoria (no se puede guardar sin ella). */}
+      <label className="text-xs text-stone-500 block">Fuente (obligatoria)<input required className={inputCls} placeholder="Autor (año). Título. Editorial o revista." value={f.source || ''} onChange={e => setF({ ...f, source: e.target.value })} /></label>
+      <label className="text-xs text-stone-500 block">Enlace de la fuente (opcional)<input type="url" className={inputCls} placeholder="https://…" value={f.source_url || ''} onChange={e => setF({ ...f, source_url: e.target.value })} /></label>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <label className="text-xs text-stone-500">Categoría
           <select className={inputCls} value={f.category} onChange={e => setF({ ...f, category: e.target.value })}>
@@ -875,9 +883,21 @@ function FactEditor({ row, onSave, onCancel }: { row: Partial<WaveFactRow>; onSa
 function TimelineEditor({ row, onSave, onCancel }: { row: Partial<TimelineRow>; onSave: (r: Partial<TimelineRow>) => Promise<void>; onCancel: () => void }) {
   const [f, setF] = useState<Partial<TimelineRow>>({ event_type: 'tectonic', active: true, year: new Date().getFullYear(), ...row });
   return (
-    <form onSubmit={async e => { e.preventDefault(); await onSave({ ...f, magnitude: f.magnitude?.trim() ? f.magnitude : null }); }} className="bg-stone-50 border border-stone-200 rounded-xl p-4 grid sm:grid-cols-4 gap-3">
+    <form onSubmit={async e => {
+      e.preventDefault();
+      // La fuente es obligatoria: no se guarda un evento sin ella.
+      if (!f.source?.trim()) { alert('La fuente es obligatoria.'); return; }
+      await onSave({
+        ...f,
+        magnitude: f.magnitude?.trim() ? f.magnitude : null,
+        event_date: f.event_date?.trim() || null,
+        source: f.source.trim(),
+        source_url: f.source_url?.trim() || null,
+      });
+    }} className="bg-stone-50 border border-stone-200 rounded-xl p-4 grid sm:grid-cols-4 gap-3">
       <label className="text-xs text-stone-500">Año<input type="number" required className={inputCls} value={f.year ?? ''} onChange={e => setF({ ...f, year: Number(e.target.value) })} /></label>
-      <label className="text-xs text-stone-500">Magnitud (opcional)<input className={inputCls} placeholder="8.2 o ~7.0" value={f.magnitude ?? ''} onChange={e => setF({ ...f, magnitude: e.target.value })} /></label>
+      <label className="text-xs text-stone-500">Fecha exacta (opcional)<input type="date" className={inputCls} value={f.event_date ?? ''} onChange={e => setF({ ...f, event_date: e.target.value })} /></label>
+      <label className="text-xs text-stone-500">Magnitud (opcional)<input className={inputCls} placeholder="Mw 8.1 o ~7.0" value={f.magnitude ?? ''} onChange={e => setF({ ...f, magnitude: e.target.value })} /></label>
       <label className="text-xs text-stone-500">Tipo
         <select className={inputCls} value={f.event_type} onChange={e => setF({ ...f, event_type: e.target.value as 'tectonic' | 'volcanic' })}>
           <option value="tectonic">Tectónico</option><option value="volcanic">Volcánico</option>
@@ -885,6 +905,8 @@ function TimelineEditor({ row, onSave, onCancel }: { row: Partial<TimelineRow>; 
       <label className="text-xs text-stone-500 flex items-end gap-2 pb-2"><input type="checkbox" checked={f.active !== false} onChange={e => setF({ ...f, active: e.target.checked })} /> Activo</label>
       <label className="text-xs text-stone-500 sm:col-span-4">Título<input required className={inputCls} value={f.title || ''} onChange={e => setF({ ...f, title: e.target.value })} /></label>
       <label className="text-xs text-stone-500 sm:col-span-4">Descripción<textarea required rows={2} className={inputCls} value={f.description || ''} onChange={e => setF({ ...f, description: e.target.value })} /></label>
+      <label className="text-xs text-stone-500 sm:col-span-4">Fuente (obligatoria)<input required className={inputCls} placeholder="Autor (año). Título. Editorial o institución." value={f.source || ''} onChange={e => setF({ ...f, source: e.target.value })} /></label>
+      <label className="text-xs text-stone-500 sm:col-span-4">Enlace de la fuente (opcional)<input type="url" className={inputCls} placeholder="https://…" value={f.source_url || ''} onChange={e => setF({ ...f, source_url: e.target.value })} /></label>
       <div className="sm:col-span-4 flex gap-2 justify-end">
         <button type="button" onClick={onCancel} className={btnGhost}><X size={13} /> Cancelar</button>
         <button type="submit" className={btnPrimary}><Check size={13} /> Guardar</button>

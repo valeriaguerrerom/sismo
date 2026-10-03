@@ -54,6 +54,10 @@ export interface QuizRow {
   category: string;
   difficulty: string;
   active: boolean;
+  /** Fuente de la respuesta (obligatoria en el formulario). */
+  source: string;
+  /** Enlace a la fuente (opcional). */
+  source_url: string | null;
 }
 
 export interface WaveFactRow {
@@ -71,6 +75,12 @@ export interface TimelineRow {
   description: string;
   event_type: 'tectonic' | 'volcanic';
   active: boolean;
+  /** Fecha exacta (YYYY-MM-DD) o null. */
+  event_date: string | null;
+  /** Fuente del evento (obligatoria en el formulario). */
+  source: string;
+  /** Enlace a la fuente (opcional). */
+  source_url: string | null;
 }
 
 export interface DashboardStats {

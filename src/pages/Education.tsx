@@ -5,10 +5,12 @@ import {
   Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library, HelpCircle,
   Flame, Activity
 } from '../lib/icons';
-import { loadWaveFacts } from '../lib/educationData';
 import {
-  WAVE_INFO, COMPONENT_NOTE, TIMELINE, QUIZ, DEPTH_CLASSES, INTENSITY_FACTORS,
-  type WaveInfo, type QuizItem,
+  loadWaveFacts, loadQuizQuestions, loadTimelineEvents,
+  type QuizQuestion, type TimelineEvent,
+} from '../lib/educationData';
+import {
+  WAVE_INFO, COMPONENT_NOTE, DEPTH_CLASSES, INTENSITY_FACTORS, type WaveInfo,
 } from '../lib/educationContent';
 import { FdmMethodology } from '../components/education/FdmMethodology';
 import { Glossary } from '../components/education/Glossary';
@@ -211,26 +213,19 @@ function WaveExplorer() {
 }
 
 /* ─── Quiz sísmico ─── */
-/** Baraja una copia del arreglo (orden distinto en cada intento). */
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function SeismicQuiz() {
-  // Preguntas verificadas (con fuente) desde educationContent.ts, barajadas.
-  const [questions] = useState<QuizItem[]>(() => shuffle(QUIZ));
+  // Preguntas desde Supabase (con fuente); si falla, respaldo verificado.
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [finished, setFinished] = useState(false);
 
-  if (questions.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando preguntas…" /></div>;
+  useEffect(() => { loadQuizQuestions().then(q => { setQuestions(q); setLoading(false); }); }, []);
+
+  if (loading || questions.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando preguntas…" /></div>;
 
   const q = questions[current];
 
@@ -333,7 +328,14 @@ function SeismicQuiz() {
             <p className={`text-xs leading-relaxed ${selected === q.correct_index ? 'text-green-700' : 'text-red-700'}`}>
               <span className="font-bold">{selected === q.correct_index ? '✓ ¡Correcto!' : '✗ Incorrecto.'}</span> {q.explanation}
             </p>
-            <p className="text-[10px] text-stone-500 mt-1.5 leading-snug">Fuente: {q.source.cita}</p>
+            {q.source && (
+              <p className="text-[10px] text-stone-500 mt-1.5 leading-snug">
+                Fuente: {q.source}
+                {q.source_url && (
+                  <> <a href={q.source_url} target="_blank" rel="noopener noreferrer" className="text-[#C4553A] hover:underline break-all">{q.source_url}</a></>
+                )}
+              </p>
+            )}
           </div>
         )}
 
@@ -546,9 +548,14 @@ function MagnitudeScale() {
 
 /* ─── Línea de tiempo histórica ─── */
 function HistoricalTimeline() {
-  // Eventos verificados (con fuente y enlace) desde educationContent.ts.
-  const events = TIMELINE;
+  // Eventos desde Supabase (con fuente y enlace); si falla, respaldo verificado.
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(0);
+
+  useEffect(() => { loadTimelineEvents().then(e => { setEvents(e); setLoading(false); }); }, []);
+
+  if (loading || events.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando línea de tiempo…" /></div>;
 
   const ev = events[selectedEvent];
 
@@ -583,18 +590,20 @@ function HistoricalTimeline() {
             {ev.event_type === 'volcanic' ? <Flame size={13} /> : <Activity size={13} />}
             {ev.event_type === 'volcanic' ? 'Evento volcánico' : 'Evento tectónico'}
           </span>
-          <span className="text-xs text-stone-400">· {ev.date}</span>
+          <span className="text-xs text-stone-400">· {ev.event_date ?? ev.year}</span>
           {ev.magnitude && <span className="text-xs font-semibold text-stone-500">· {ev.magnitude}</span>}
         </div>
         <h4 className="text-2xl font-black text-[#1A1A2E] mb-2">{ev.title}</h4>
         <p className="text-stone-600 text-sm leading-relaxed">{ev.description}</p>
         {/* Fuente del evento (con enlace si existe). */}
-        <p className="text-[10px] text-stone-400 mt-3 leading-snug">
-          Fuente: {ev.source.cita}
-          {ev.source.url && (
-            <> <a href={ev.source.url} target="_blank" rel="noopener noreferrer" className="text-[#C4553A] hover:underline break-all">{ev.source.url}</a></>
-          )}
-        </p>
+        {ev.source && (
+          <p className="text-[10px] text-stone-400 mt-3 leading-snug">
+            Fuente: {ev.source}
+            {ev.source_url && (
+              <> <a href={ev.source_url} target="_blank" rel="noopener noreferrer" className="text-[#C4553A] hover:underline break-all">{ev.source_url}</a></>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );
