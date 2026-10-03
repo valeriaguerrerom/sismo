@@ -148,6 +148,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // true cuando el próximo cálculo que termine debe arrancar la animación sola
   // (lo activan colocar epicentro / cargar evento, NO cambiar el modelo o Vp/Vs).
   const autoplayPendingRef = useRef(false);
+  // true cuando el próximo cambio de travelTimes debe regenerar los sismogramas
+  // (nuevo sismo / cambio de Vp/Vs); false si solo cambió el modelo (tP/tS).
+  const shouldRegenerateRef = useRef(true);
 
   // UI
   const [showEventList, setShowEventList] = useState(false);
@@ -347,20 +350,29 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [loadingTraces, setLoadingTraces] = useState<Set<string>>(new Set());
 
   // ── Recalcular tiempos de viaje cuando cambia epicentro / modelo / velocidades ──
-  const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }) => {
+  // `regenerate` indica si además hay que regenerar los sismogramas sintéticos.
+  // Al cambiar SOLO el modelo (homogéneo/IASP91) los sintéticos NO cambian (solo
+  // cambian las marcas tP/tS), así que no se regeneran ni se muestra el loader:
+  // la reproducción en curso sigue sin cortarse.
+  const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }, regenerate = true) => {
     setLoadingTT(true);
-    setMessage('Calculando tiempos de viaje...');
+    if (regenerate) setMessage('Calculando tiempos de viaje...');
     try {
       const res = await getTravelTimes({
         lat: epi.lat, lon: epi.lon, depth_km: epi.depthKm,
         vp_km_s: vp, vs_km_s: vs, model,
       });
+      // El effect de [travelTimes] leerá esta bandera para decidir si regenera
+      // los sismogramas o solo actualiza las marcas tP/tS.
+      shouldRegenerateRef.current = regenerate;
       setTravelTimes(res.estaciones);
-      // Marcar YA las estaciones como "en generación" para que isCalculating no
-      // caiga a false ni un frame entre terminar los tiempos de viaje y arrancar
-      // los sintéticos (esa caída causaba el parpadeo del overlay de carga).
-      setLoadingTraces(new Set(res.estaciones.map(t => t.code)));
-      setMessage('Tiempos de viaje calculados. Generando sismogramas…');
+      if (regenerate) {
+        // Marcar YA las estaciones como "en generación" para que isCalculating no
+        // caiga a false ni un frame entre terminar los tiempos de viaje y arrancar
+        // los sintéticos (esa caída causaba el parpadeo del overlay de carga).
+        setLoadingTraces(new Set(res.estaciones.map(t => t.code)));
+        setMessage('Tiempos de viaje calculados. Generando sismogramas…');
+      }
     } catch (e) {
       setMessage(friendlyError(e, 'No se pudieron calcular los tiempos de viaje'));
       setTravelTimes([]);
@@ -370,10 +382,20 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     }
   }, [vp, vs, model]);
 
+  // Recalcular al colocar/cambiar epicentro: regenera sismogramas (nuevo sismo).
   useEffect(() => {
-    if (epicenter) recomputeTravelTimes(epicenter);
+    if (epicenter) recomputeTravelTimes(epicenter, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [epicenter, model]);
+  }, [epicenter]);
+
+  // Recalcular al cambiar SOLO el modelo: actualiza tP/tS sin regenerar trazas
+  // ni cortar la animación. (La primera vez lo cubre el effect de epicentro.)
+  const modelFirstRef = useRef(true);
+  useEffect(() => {
+    if (modelFirstRef.current) { modelFirstRef.current = false; return; }
+    if (epicenter) recomputeTravelTimes(epicenter, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model]);
 
   // ── Cargar sintéticos por estación, de forma INCREMENTAL ──
   // Cada estación actualiza `traces` y `loadingTraces` en cuanto termina, para
@@ -410,7 +432,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
   useEffect(() => {
     if (travelTimes.length > 0) {
-      loadSynthetics(travelTimes);
+      // Solo (re)generar los sismogramas cuando corresponde (nuevo sismo o
+      // cambio de Vp/Vs/magnitud…), no cuando solo cambió el modelo (que solo
+      // mueve las marcas tP/tS y no debe cortar la animación).
+      if (shouldRegenerateRef.current) {
+        loadSynthetics(travelTimes);
+      }
       // Seleccionar por defecto la estación más cercana (define el corte).
       const nearest = travelTimes[0]?.code;
       if (nearest && !selectedStation) selectStation(nearest);
