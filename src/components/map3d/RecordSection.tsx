@@ -108,7 +108,8 @@ export function RecordSection({
     const pts: string[] = [];
     for (let i = 0; i < syn.t.length; i++) {
       const tt = syn.t[i];
-      if (tt > elapsed) break; // solo hasta el reloj actual
+      if (tt > elapsed) break;  // solo hasta el reloj actual
+      if (tt > maxTime) break;  // no dibujar más allá del eje recortado
       const y = PAD_TOP + tt * tScale;
       const amp = (comp[i] / maxAbs) * TRACE_HALF_WIDTH;
       pts.push(`${(x + amp).toFixed(1)},${y.toFixed(1)}`);

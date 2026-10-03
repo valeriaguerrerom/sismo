@@ -745,6 +745,7 @@ export function Scene3D({
         ay: number;                  // ancla (posición base vertical en pantalla)
         x: number; y: number;        // posición final (tras desplazar)
         w: number; h: number; dist: number;
+        lowPriority: boolean;        // true = cede sitio (nombres de capa)
       };
       const boxes: LabelBox[] = [];
 
@@ -764,7 +765,10 @@ export function Scene3D({
         const y = (-world.y * 0.5 + 0.5) * rect.height;
         const w = el.offsetWidth || 40;
         const h = el.offsetHeight || 16;
-        boxes.push({ el, ay: y, x, y, w, h, dist });
+        // Los nombres de capa ceden ante estaciones/hipocentro/rayo: se resuelven
+        // al final, así nunca empujan a una estación de su sitio.
+        const lowPriority = el.dataset.layerLabel === '1';
+        boxes.push({ el, ay: y, x, y, w, h, dist, lowPriority });
       };
 
       // Estaciones (ancladas al cono, con un offset vertical de etiqueta).
@@ -775,8 +779,10 @@ export function Scene3D({
         mesh.getWorldPosition(world);
         addLabel(label, world, 0.85);
       });
-      // Hipocentro y rayo (viven en hypoGroup / cutGroup).
-      [hypoGroup, cutGroupRef.current].forEach(grp => {
+      // Hipocentro, rayo y nombres de capa (viven en hypoGroup / cutGroup /
+      // layerLabels). Incluir los nombres de capa aquí garantiza que la
+      // anticolisión los empuje para que NUNCA tapen una estación.
+      [hypoGroup, cutGroupRef.current, layerLabelsRef.current].forEach(grp => {
         grp?.children.forEach(c => {
           if ((c as CSS2DObject).element) {
             const world = new THREE.Vector3();
@@ -786,9 +792,13 @@ export function Scene3D({
         });
       });
 
-      // Resolver colisiones: las más cercanas conservan su sitio; las demás se
-      // empujan (±) hasta hallar hueco con AABB real + un margen.
-      boxes.sort((a, b) => a.dist - b.dist);
+      // Resolver colisiones: primero las de ALTA prioridad (estaciones,
+      // hipocentro, rayo) por cercanía a la cámara; los nombres de capa van al
+      // final, así ceden sitio y nunca empujan a una estación.
+      boxes.sort((a, b) => {
+        if (a.lowPriority !== b.lowPriority) return a.lowPriority ? 1 : -1;
+        return a.dist - b.dist;
+      });
       const MARGIN = 3;
       const placed: LabelBox[] = [];
       const hits = (bx: number, by: number, w: number, h: number) =>
@@ -1139,44 +1149,63 @@ export function Scene3D({
     });
   }, [hypocenters]);
 
-  // ── Etiquetas de las capas del subsuelo (nombre + Vp del modelo) ──
-  // Con 'homogeneous' las capas se muestran ATENUADAS y sin Vp (todo el medio
-  // tiene la misma velocidad). Con 'iasp91' se RESALTAN y cada capa muestra su
-  // Vp del modelo que usa el cálculo (obspy.taup iasp91).
+  // ── Nombres de las capas del subsuelo (nombre + Vp del modelo) ──
+  // Reglas de visibilidad (para no chocar con las estaciones):
+  //   • Velocidad constante (homogéneo) en vista normal: NO se muestran los
+  //     nombres (bastan las líneas que dibuja TerrainBlock); todo el medio tiene
+  //     la misma velocidad, así que el nombre aporta poco y estorbaba.
+  //   • IASP91 (cualquier vista) o vista Corte (cualquier modelo): SÍ se
+  //     muestran, FUERA del bloque (más allá de la arista trasera) con una
+  //     LÍNEA GUÍA hacia la capa. Además entran en la anticolisión del loop de
+  //     render (marcadas con dataset.layerLabel) para no tapar estaciones.
   useEffect(() => {
     const group = layerLabelsRef.current;
     if (!group) return;
-    // Limpiar etiquetas previas.
-    group.children.slice().forEach(c => group.remove(c));
+    // Limpiar etiquetas + líneas guía previas (geometrías y nodos DOM incluidos).
+    group.children.slice().forEach(c => {
+      if (c instanceof THREE.Line) { c.geometry.dispose(); (c.material as THREE.Material).dispose(); }
+      const el = (c as unknown as { element?: HTMLElement }).element;
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      group.remove(c);
+    });
 
     const isIasp = model === 'iasp91';
-    // Los NOMBRES de capa se anclan a la ARISTA TRASERA del bloque (cara
-    // OPUESTA al eje de profundidad), para que NUNCA se superpongan con los
-    // números de km (que viven en la cara frontal). Un pequeño desplazamiento
-    // hacia afuera (+Z) los despega de la cara. La NOTA del modelo homogéneo NO
-    // va en la escena (se muestra como texto fijo en una esquina del visor).
+    const isCut = viewRef.current === 'cut';
+    // Si es homogéneo y NO estamos en Corte, no se dibujan los nombres.
+    if (!isIasp && !isCut) return;
+
+    // Ancla en la arista trasera (cara opuesta al eje de profundidad) y la
+    // etiqueta un poco MÁS AFUERA, unida por una línea guía a la capa.
     const edge = terrainRef.current?.backEdge ?? { x: 0, z: -BLOCK.depthXY / 2 };
+    const OUT = 1.6; // cuánto se aleja la etiqueta del bloque (−Z, hacia afuera)
     for (const layer of SUBSURFACE_LAYERS) {
       const yMid = (depthToY(layer.from) + depthToY(layer.to)) / 2;
+
+      // Línea guía: de la capa (en la arista) hacia la etiqueta (afuera).
+      const guideGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(edge.x, yMid, edge.z),
+        new THREE.Vector3(edge.x, yMid, edge.z - OUT),
+      ]);
+      const guideMat = new THREE.LineBasicMaterial({ color: 0x8894a4, transparent: true, opacity: 0.5 });
+      group.add(new THREE.Line(guideGeo, guideMat));
+
       const div = document.createElement('div');
       div.style.cssText = 'display:inline-block;';
       const span = document.createElement('span');
       span.textContent = isIasp ? `${layer.name}, Vp ${layer.vp.toFixed(1)} km/s` : layer.name;
-      const color = isIasp ? '#e2e8f0' : '#94a3b8';
-      const weight = isIasp ? 600 : 500;
-      const opacity = isIasp ? 1 : 0.55;
       span.style.cssText =
-        `display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:${weight};` +
-        `color:${color};opacity:${opacity};text-shadow:0 0 3px #000,0 0 4px #000;` +
-        'background:rgba(10,14,26,0.66);padding:1px 5px;border-radius:3px;white-space:nowrap;';
+        "display:inline-block;font-family:'Inter',system-ui,sans-serif;font-size:11px;font-weight:600;" +
+        'color:#e2e8f0;text-shadow:0 0 3px #000,0 0 4px #000;' +
+        'background:rgba(10,14,26,0.66);padding:1px 5px;border-radius:3px;white-space:nowrap;transition:transform 0.12s;';
+      // Marca para que la anticolisión del loop de render incluya esta etiqueta.
+      span.dataset.layerLabel = '1';
       div.appendChild(span);
       const label = new CSS2DObject(div);
-      // Pegada a la arista trasera, a la altura media de su capa, ligeramente
-      // afuera (−Z) para que se vea sobre la cara trasera del bloque.
-      label.position.set(edge.x, yMid, edge.z - 0.6);
+      // Afuera del bloque, a la altura media de su capa.
+      label.position.set(edge.x, yMid, edge.z - OUT);
       group.add(label);
     }
-  }, [model, terrainReady]);
+  }, [model, terrainReady, viewCommand]);
 
   // ── Plano de corte + rayo (epicentro → estación seleccionada) ──
   useEffect(() => {

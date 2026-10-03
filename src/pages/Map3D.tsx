@@ -233,14 +233,32 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const maxTime = useMemo(() => {
     const maxTs = travelTimes.reduce((m, t) => Math.max(m, t.tS ?? 0), 0);
     const theoretical = Math.max(20, Math.ceil(maxTs * 1.15));
-    // Duración real máxima de las trazas disponibles (último t de cada una).
-    let traceEnd = 0;
+    // FIN REAL de la señal: el backend genera cada sintético con duración =
+    // (tiempo S)·1.6 + margen (ver run_fdm_synthetic en core/fdm.py), así que
+    // el ÚLTIMO t del array (~110 s) va mucho más allá de donde la señal ya se
+    // apagó (~67 s). Por eso el eje quedaba largo con media sección vacía. Aquí
+    // tomamos el último instante con amplitud significativa (≥1% del máximo) de
+    // la componente vertical de cada traza, y el eje llega hasta el mayor de
+    // esos finales (entre estaciones) más un pequeño margen.
+    let signalEnd = 0;
     for (const code of Object.keys(traces)) {
       const syn = traces[code];
-      if (syn && syn.t.length > 0) traceEnd = Math.max(traceEnd, syn.t[syn.t.length - 1]);
+      if (!syn || syn.t.length === 0) continue;
+      const comp = syn.vertical;
+      let maxAbs = 1e-9;
+      for (const v of comp) maxAbs = Math.max(maxAbs, Math.abs(v));
+      const thr = maxAbs * 0.01;
+      for (let i = comp.length - 1; i >= 0; i--) {
+        if (Math.abs(comp[i]) >= thr) { signalEnd = Math.max(signalEnd, syn.t[i]); break; }
+      }
     }
-    // Si hay trazas, el eje no pasa de donde terminan los datos (ni del teórico).
-    return traceEnd > 0 ? Math.max(20, Math.min(theoretical, Math.ceil(traceEnd))) : theoretical;
+    // Con señal: eje hasta el fin real + 8% de margen, nunca antes del tS
+    // teórico (para que la S siempre se vea). Sin trazas aún: solo el teórico.
+    if (signalEnd > 0) {
+      const end = Math.max(signalEnd * 1.08, maxTs * 1.05);
+      return Math.max(20, Math.ceil(end));
+    }
+    return theoretical;
   }, [travelTimes, traces]);
 
   // ── Carga inicial: estaciones + catálogo de eventos (seismic_events) ──
