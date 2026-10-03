@@ -46,11 +46,18 @@ interface CatalogEvent {
   lat: number;
   lon: number;
   depthKm: number;
+  /** true si la profundidad NO viene del catálogo (se asume para la escena). */
+  depthAssumed: boolean;
   magnitude: number;
   date: string;
   label: string;
   sourceType: 'tectonic' | 'volcanic';
   nStations: number;
+  /**
+   * true si la coordenada es un punto por zona, no un epicentro real:
+   * los eventos CM usan el centroide de estaciones y los del Galeras el cráter.
+   */
+  coordIsZone: boolean;
 }
 
 /** Etiqueta legible por código de subtipo volcánico. */
@@ -112,6 +119,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [density, setDensity] = useState(2600);
   const [magnitude, setMagnitude] = useState(5.0);
   const [depthKm, setDepthKm] = useState(15);
+  // true cuando la profundidad activa NO viene del catálogo (evento sin dato
+  // real o epicentro colocado a mano): se usa un valor asumido para la escena.
+  const [depthAssumed, setDepthAssumed] = useState(false);
+  // true cuando la ubicación del evento cargado es por zona (centroide de
+  // estaciones en CM, cráter en Galeras), no un epicentro instrumental.
+  const [coordIsZone, setCoordIsZone] = useState(false);
   const [sourceType, setSourceType] = useState<'tectonic' | 'volcanic'>('tectonic');
 
   // Sintéticos por estación (componente vertical para las trazas)
@@ -288,6 +301,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           lat: r.latitude,
           lon: r.longitude,
           depthKm: isVolc ? 5 : 15, // profundidad asumida para la escena (no hay dato real)
+          // El catálogo no trae profundidad focal (depth_km NULL en todos).
+          depthAssumed: r.depth_km == null,
           magnitude: r.magnitude ?? (isVolc ? 4.5 : 0),
           date: r.event_date,
           label: isVolc
@@ -295,6 +310,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             : `M${r.magnitude ?? '?'} · ${r.event_date} · ${r.region ?? ''}`,
           sourceType: isVolc ? 'volcanic' : 'tectonic',
           nStations: r.station_count,
+          // Las coordenadas del catálogo son por zona (centroide de estaciones
+          // en CM; cráter en Galeras), no un epicentro instrumental real.
+          coordIsZone: true,
         };
       });
       setEvents(out);
@@ -455,6 +473,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
   const applyEpicenter = (lat: number, lon: number) => {
     setLoadingTT(true); // mostrar el loader de inmediato (evita el parpadeo del estado vacío)
+    setDepthAssumed(true); // epicentro manual: la profundidad es la que elige el usuario
+    setCoordIsZone(false); // el usuario eligió la ubicación: no es un punto por zona
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
     setPlacingEpicenter(false); // ya se colocó: salir del modo "colocar"
@@ -467,6 +487,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setSourceType(ev.sourceType);
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
+    setDepthAssumed(ev.depthAssumed); // el catálogo no trae profundidad real
+    setCoordIsZone(ev.coordIsZone);   // ubicación por zona, no epicentro real
     if (ev.sourceType === 'volcanic') { setVp(3.0); setVs(1.7); setDensity(2500); }
     setLoadingTT(true); // loader inmediato (evita el parpadeo del estado vacío)
     setEpicenter({ lat: ev.lat, lon: ev.lon, depthKm: ev.depthKm });
@@ -725,13 +747,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const magType = sourceType === 'volcanic' ? 'MD' : 'ML';
   // Descripción del evento sin puntos medios (se separan los campos con comas).
   const eventWhere = loadedEvent
-    ? loadedEvent.label.split(' · ').slice(1).join(', ')
+    ? loadedEvent.label.split(' · ').slice(1).join(', ') + (coordIsZone ? ' (ubicación por zona, no epicentro)' : '')
     : `${epicenter?.lat.toFixed(2)}°, ${epicenter?.lon.toFixed(2)}°`;
   const currentEventTitle = epicenter
     ? [
         eventWhere,
         `${magType} ${magnitude.toFixed(1)}`,
-        `Prof. ${epicenter.depthKm} km`,
+        depthAssumed ? `Prof. ${epicenter.depthKm} km (asumida, no está en el catálogo)` : `Prof. ${epicenter.depthKm} km`,
         `${stationsWithSignal}/${travelTimes.length} estaciones con señal`,
       ].join(', ')
     : 'Sin evento seleccionado';
@@ -1112,7 +1134,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               </p>
             )}
             <ParamSlider label="ρ" value={density} min={1800} max={3300} step={50} unit="kg/m³" onChange={setDensity} />
-            <ParamSlider label="Prof." value={depthKm} min={0} max={200} step={1} unit="km" onChange={(v) => { setDepthKm(v); if (epicenter) setEpicenter({ ...epicenter, depthKm: v }); }} />
+            <ParamSlider label="Prof." value={depthKm} min={0} max={200} step={1} unit="km" onChange={(v) => { setDepthKm(v); setDepthAssumed(false); if (epicenter) setEpicenter({ ...epicenter, depthKm: v }); }} />
+            {depthAssumed && currentEventId && (
+              <p className="text-[10px] text-[#D4A853] leading-snug -mt-1">
+                Profundidad no disponible en el catálogo; se usa {depthKm} km para la simulación.
+              </p>
+            )}
             <Tooltip
               content="Coloca un epicentro o carga un evento primero."
               hoverOnly

@@ -852,10 +852,13 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
                                   ) : (cmWave && cmWave.event_id === c.id && cmWave.station === selectedStation.station) ? (
                                     <div className="space-y-2">
                                       <TriaxialPreview wave={cmWave.waveData} duration={cmWave.duration} physical={cmWave.physical_quantity} />
+                                      <p className="text-[10px] text-stone-400 leading-snug">
+                                        Profundidad no disponible en el catálogo; se usa 15 km para la simulación.
+                                      </p>
                                       <button
                                         onClick={() => onLoadRealData?.(
                                           cmWave.waveData,
-                                          `CM ${c.date} ML ${c.magnitude.toFixed(1)} — Est. ${cmWave.station}`,
+                                          `CM ${c.date} ML ${c.magnitude.toFixed(1)}, Est. ${cmWave.station}`,
                                           { date: c.date, duration: cmWave.duration, sourceType: 'tectonic', magnitude: c.magnitude, depth: 15, lat: c.latitude, lon: c.longitude },
                                         )}
                                         className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
