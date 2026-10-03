@@ -25,6 +25,15 @@ en la ciudad de Pasto (Colombia) a causa de sismos históricos.* Boletín Geoló
 133–152. Servicio Geológico Colombiano.
 https://granate.sgc.gov.co/index.php/boletingeo/article/download/413/363/455
 
+**Coordenadas (capítulo Historia).** Cada evento tiene lat/lon y una nota de origen
+(`location_note`). Los sismos históricos usan el epicentro estimado de la tabla 1 de Sarabia
+y Cifuentes (2018), basada en el SISH del SGC: 1834 (1.2, −77.1), 1906 (1.5, −80.0),
+1935 Tangua (1.06, −77.35), 1935 Imués (1.1, −77.5), 1936 (1.1, −77.6), 1947 (1.2, −77.3),
+1979 (1.6, −79.36). Los eventos del Galeras (1993, 2006, 2004–2009) usan el cráter
+(1.2288, −77.3592, SGC). La Cocha 2024 no tiene coordenadas publicadas en el boletín, así que
+queda **sin punto en el mapa** (solo en la línea de tiempo). Columnas nuevas en Supabase vía
+`supabase/migrations/20261005_timeline_coordinates.sql`.
+
 | Fecha | Dato en la app | Fuente |
 |-------|----------------|--------|
 | 1834-01-20 | Mw 6.7 estimada por daños (no instrumental), superficial, región de Santiago (Putumayo), sistema de fallas de Afiladores, intensidad VIII (EMS-98) en Pasto | Sarabia y Cifuentes (2018) |
@@ -77,6 +86,13 @@ and Earth Structure.* Blackwell.
 - Se **retiró** la "intensidad" que se calculaba solo con la profundidad. Se aclara que la
   intensidad en superficie depende de **magnitud, distancia, profundidad, tipo de suelo y
   vulnerabilidad de las construcciones**.
+- Subducción: la afirmación de que los sismos se profundizan hacia el oriente, coherente con
+  la subducción de la placa de Nazca bajo el occidente de Colombia, se cita ahora con
+  **Vargas, C. A., & Mann, P. (2013). *Tearing and Breaking Off of Subducted Slabs…* Bulletin
+  of the Seismological Society of America, 103(3), 2025–2046. DOI 10.1785/0120120328**
+  (confirmada en Crossref). Se **retiró Yarce et al. (2014)**: no se pudo confirmar en Crossref
+  un artículo con ese autor, volumen, páginas y DOI, así que no cumplía la regla de fuente
+  verificable.
 
 ## 4. Metodología FDM
 
@@ -109,15 +125,21 @@ escriben a mano. CFL (2D): `dt ≤ dx / (Vp·√2)`.
 ## 6. Quiz
 
 Cada pregunta tiene una sola respuesta correcta, con explicación y fuente (ver
-`educationContent.ts`, arreglo `QUIZ`).
+`educationContent.ts`, arreglo `QUIZ`). Ahora son **13 preguntas** (el quiz muestra 9 por
+intento, siempre con las visuales). Cada intento da el puntaje final y, por cada fallo, un
+acceso al capítulo correspondiente para repasar (categoría → capítulo).
 
 - Se **retiró** la pregunta "¿Qué institución monitorea los volcanes de Nariño?" que ofrecía
   "SGC (OVSP)" e "INGEOMINAS" como opciones distintas: **INGEOMINAS se fusionó en el actual
   Servicio Geológico Colombiano**, de modo que eran la misma entidad y la pregunta admitía dos
   respuestas válidas.
-- Preguntas revisadas: onda más rápida (P), ondas S en líquidos (no), movimiento Rayleigh
-  (elíptico retrógrado), placa que subduce (Nazca), profundidad superficial (< 70 km),
-  para qué sirve la CFL (estabilidad), qué pasó en el Galeras en 1993.
+- Preguntas de ondas (P más rápida, S en líquidos, movimiento Rayleigh), tectónica (placa de
+  Nazca), profundidad (superficial < 70 km; foco a 120 km es intermedio), metodología (CFL),
+  volcanes (Galeras 1993) y magnitud (×32 de energía por unidad, con Hanks y Kanamori 1979;
+  magnitud frente a intensidad con el ejemplo de 1947, con Sarabia y Cifuentes 2018).
+- **Preguntas visuales:** una trayectoria elíptica (Rayleigh), un sismograma de movimiento
+  transversal (S) y una profundidad de 120 km para clasificar. Los distractores son las
+  confusiones típicas (P frente a S, superficial frente a intermedio).
 
 ## 7. Referencias
 
@@ -191,44 +213,54 @@ El glosario y la metodología usan esta misma fórmula.
   mostrar la zona estimada, sin afirmar un error en km contra un epicentro que es de zona.
 - **Quiz:** preguntas basadas en lo que el usuario hizo en los laboratorios.
 
-## 11. Estructura por capítulos y estado de los laboratorios
+## 11. Estructura por capítulos y estado de los laboratorios (rediseño final)
 
-La sección se reorganizó en capítulos (barra lateral numerada): Ondas, Magnitud,
-Profundidad, Historia y Metodología, con el progreso guardado en localStorage
-(`src/lib/useChapterProgress.ts`). Glosario, Referencias y Quiz quedan en un
-bloque de consulta aparte. Cada capítulo tiene un botón para abrir el Simulador
-o el Mapa 3D y la fuente al pie.
+La sección tiene cinco capítulos (barra que es una fila deslizable en móvil y una columna en
+escritorio): Ondas, Magnitud, Profundidad, Historia y Metodología, con el progreso guardado en
+localStorage (`src/lib/useChapterProgress.ts`). El progreso se marca **al completar el reto**
+de cada capítulo, no al abrirlo. Glosario, Referencias y Quiz quedan en un bloque de consulta.
+Los capítulos **ya no** tienen botones al Simulador ni al Mapa 3D: hay un **único cierre** que
+aparece al completar los cinco, con accesos al Simulador y al Mapa 3D. El botón de ayuda del
+encabezado abre una guía breve de uso (ya no un tour). Cada capítulo tiene su diseño propio y
+su fuente al pie.
 
-Laboratorios IMPLEMENTADOS esta noche:
-- **Ondas** (`src/components/education/WaveLab.tsx`): malla de partículas con el
-  movimiento físico correcto (P longitudinal, S transversal, Love cizalla
-  horizontal en vista superior, Rayleigh elíptica retrógrada que decae con la
-  profundidad), controles de frecuencia y velocidad, "seguir una partícula" con
-  su trayectoria, sismómetro virtual en superficie en tiempo real (componentes
-  vertical y horizontal), y reto de 5 rondas. Fuente: Shearer (2019).
-- **Profundidad** (`src/components/education/DepthLab.tsx`): corte longitud vs
-  profundidad con los hipocentros reales del USGS (`public/data/usgs_narino.json`,
-  444 eventos), franjas superficial/intermedio, hover con fecha, magnitud,
-  profundidad y lugar, fuente "USGS ComCat, consultado el [fecha]", nota de
-  subducción citada (Stein y Wysession, 2003) y reto de clasificar 5 eventos.
+Todos los laboratorios están implementados:
+- **Ondas** (`WaveLab.tsx`): corte vertical con malla de partículas; selector P, S (SV y SH),
+  Love y Rayleigh. Corrección de Love: en la vista en planta todas las partículas de la
+  superficie tienen la misma amplitud, y el decaimiento con la profundidad se muestra en un
+  perfil lateral. Clic en una partícula para seguir su trayectoria. Sismómetro a todo el ancho,
+  con las componentes vertical y horizontal; en Rayleigh van desfasadas un cuarto de periodo.
+  Modo carrera que estima la distancia con d = (tS − tP)·Vp·Vs/(Vp − Vs). Reto de 5 rondas.
+  Fuente: Shearer (2019).
+- **Magnitud** (`MagnitudeLab.tsx`): comparador de dos sismos (de la línea de tiempo o magnitud
+  libre); amplitud ×10 por unidad y energía con log10 E = 1.5 Mw + 4.8; cuadrícula de bloques
+  (un bloque = energía del menor, con escala si son demasiados); magnitud frente a intensidad
+  con el ejemplo de 1947; reto de estimar veces de energía. Fuentes: Hanks y Kanamori (1979),
+  Shearer (2019), Sarabia y Cifuentes (2018) para la intensidad de 1947.
+- **Profundidad** (`DepthLab.tsx`): corte longitud vs profundidad con los 444 hipocentros del
+  USGS (`public/data/usgs_narino.json`), franjas superficial/intermedio, tooltip en español con
+  el lugar del USGS, nota de subducción citada con Vargas y Mann (2013) y reto de clasificar.
+- **Historia** (`HistoryLab.tsx`): mapa de Nariño (mismo componente Leaflet del Explorador,
+  `SeismicMap`) con los eventos ubicados por sus coordenadas, junto a la línea de tiempo
+  cronológica. Al tocar un evento en el mapa se resalta en la línea y al revés. Filtro
+  tectónico/volcánico. Cada evento muestra fecha, magnitud, su nota de ubicación y la fuente.
+  Lee de Supabase con respaldo en el código.
+- **Metodología** (`FdmMethodology.tsx`): seis pasos con mini interacciones: malla (nodos por
+  longitud de onda según dx, avisa cuando son menos de diez), CFL (una onda 1D que se vuelve
+  inestable al subir dt sobre dx/(Vp·√2)) y fuente (la ondícula de Ricker cambiando con la
+  frecuencia). Los valores del Simulador se leen de los presets reales. Reto de 3 preguntas.
 
-Pendiente de laboratorio propio (los capítulos muestran su contenido corregido
-mientras tanto, sin plantillas repetidas):
-- **Magnitud:** hoy es la escala interactiva; falta el comparador logarítmico
-  con sismos reales de la línea de tiempo (amplitud ×10, energía ×~32).
-- **Historia:** hoy es la línea de tiempo con fuentes; falta el mapa de Nariño
-  con los eventos de Sarabia y Cifuentes ubicados por zona.
-- **Metodología:** hoy es el acordeón del método con valores reales; falta la
-  mini simulación de CFL y dispersión numérica.
-- **Localiza el sismo:** usar solo TUM, CRU, CUM y BBAC (confirmadas). Los
-  eventos CM no tienen epicentro individual (centroide de zona), así que el reto
-  debe mostrar la zona estimada sin afirmar un error en km contra el catálogo.
-- **Quiz basado en laboratorios:** preguntas ligadas a lo que el usuario hizo.
+**Corrección de la duración:** los presets del Simulador tenían `duration: 9`, pero el
+comentario del código y el tope del panel son 8 s (tectónico) y 13 s (volcánico), y el primer
+rebote de borde del dominio tectónico llega a ~8.4 s. Se corrigió a **8 s (tectónico)** y
+**7 s (volcánico)** en `src/lib/simulation.ts`, así que Metodología y el Simulador muestran el
+mismo valor.
 
-Nota sobre el reto del laboratorio de ondas: por ahora describe el movimiento en
-texto; una mejora es mostrar la trayectoria o el sismograma animado y que el
-usuario los identifique visualmente.
+**Glosario y referencias:** el glosario es una lista en dos columnas, alfabética, con índice de
+letras y buscador; la categoría de cada término va como texto de color. Las referencias están
+en APA, en dos grupos (Para aprender / Base técnica), con los enlaces mostrados cortos (DOI) y
+un botón para copiar cada cita.
 
-El tour guiado anterior de Educación (`src/tours/educacion.ts`) apuntaba a la
-estructura vieja (data-tour que ya no existe) y quedó sin cablear; se puede
-rehacer para la estructura por capítulos.
+**Pendiente (no bloqueante):** subrayar los términos del glosario dentro del texto de los
+capítulos con su definición al tocarlos. Queda para una iteración siguiente. El tour antiguo
+`src/tours/educacion.ts` quedó sin uso (Educación ya no lanza tour); se puede borrar.

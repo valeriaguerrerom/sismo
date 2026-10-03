@@ -60,8 +60,8 @@ export function SeismicQuiz({ onGoToChapter }: Props) {
   // visuales, para que el quiz tenga variedad, y se baraja el conjunto final.
   useEffect(() => {
     loadQuizQuestions().then(all => {
-      const visual = all.filter(q => q.id?.startsWith('q-visual-'));
-      const rest = all.filter(q => !q.id?.startsWith('q-visual-'));
+      const visual = all.filter(q => detectVisual(q) !== null);
+      const rest = all.filter(q => detectVisual(q) === null);
       const set = [...visual, ...rest.slice(0, Math.max(0, 9 - visual.length))];
       for (let i = set.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [set[i], set[j]] = [set[j], set[i]]; }
       setQuestions(set);
@@ -190,11 +190,13 @@ type Visual =
   | { kind: 'depth'; km: number };
 
 function detectVisual(q: QuizQuestion): Visual | null {
+  // Por id (contenido de respaldo) o por el texto de la pregunta (filas de
+  // Supabase, cuyo id es un UUID), para que el glifo salga en ambos casos.
   const id = q.id?.toString() ?? '';
-  if (id === 'q-visual-trayectoria-rayleigh') return { kind: 'trajectory', wave: 'Rayleigh' };
-  if (id === 'q-visual-trayectoria-p') return { kind: 'trajectory', wave: 'P' };
-  if (id === 'q-visual-sismograma-s') return { kind: 'seismogram', wave: 'S' };
-  if (id === 'q-visual-profundidad') return { kind: 'depth', km: 120 };
+  const t = q.question.toLowerCase();
+  if (id === 'q-visual-trayectoria-rayleigh' || (t.includes('trayectoria') && t.includes('qué onda'))) return { kind: 'trajectory', wave: 'Rayleigh' };
+  if (id === 'q-visual-sismograma-s' || (t.includes('sismograma') && t.includes('perpendicular'))) return { kind: 'seismogram', wave: 'S' };
+  if (id === 'q-visual-profundidad' || (t.includes('120 km') && t.includes('clasifica'))) return { kind: 'depth', km: 120 };
   return null;
 }
 
