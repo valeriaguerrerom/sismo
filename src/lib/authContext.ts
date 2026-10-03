@@ -22,7 +22,12 @@ export interface AuthContextType {
   deactivateOwnAccount: () => Promise<string | null>;
   /** true cuando el usuario llegó desde un enlace de recuperación de contraseña. */
   recoveryMode: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<string | null>;
+  /**
+   * Crea la cuenta. Devuelve `error` (o null) y `needsConfirmation`: true
+   * cuando Supabase exige confirmar el correo (no hay sesión aún); false
+   * cuando el registro ya dejó la sesión abierta (se entra directo).
+   */
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signIn: (email: string, password: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<string | null>;
   signOut: () => Promise<void>;
@@ -60,7 +65,7 @@ export const AuthContext = createContext<AuthContextType>({
   reactivateOwnAccount: async () => 'Auth no disponible',
   deactivateOwnAccount: async () => 'Auth no disponible',
   recoveryMode: false,
-  signUp: async () => 'Auth no disponible',
+  signUp: async () => ({ error: 'Auth no disponible', needsConfirmation: false }),
   signIn: async () => 'Auth no disponible',
   signInWithGoogle: async () => 'Auth no disponible',
   signOut: async () => {},

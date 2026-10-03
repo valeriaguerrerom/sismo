@@ -216,14 +216,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile]);
 
   const signUp = useCallback(
-    async (email: string, password: string, fullName: string): Promise<string | null> => {
-      if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    async (email: string, password: string, fullName: string): Promise<{ error: string | null; needsConfirmation: boolean }> => {
+      if (!supabase) return { error: 'Auth no disponible: falta configurar Supabase.', needsConfirmation: false };
       // Registro en dos pasos: aquí solo se crea la cuenta con nombre y la
       // fecha de autorización de datos (Ley 1581). El resto del perfil de
       // investigador se completa después en "Completa tu perfil".
       // Política mínima sobre la contraseña ORIGINAL, antes de derivar.
       if (!isPasswordStrong(password)) {
-        return 'La contraseña debe tener al menos 8 caracteres, con letras y números.';
+        return { error: 'La contraseña debe tener al menos 8 caracteres, con letras y números.', needsConfirmation: false };
       }
       const meta = {
         full_name: fullName.trim(),
@@ -235,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         secret = await deriveAuthSecret(email, password);
       } catch (e) {
-        return e instanceof Error ? e.message : 'No se pudo preparar el registro de forma segura.';
+        return { error: e instanceof Error ? e.message : 'No se pudo preparar el registro de forma segura.', needsConfirmation: false };
       }
       try {
         // Los metadatos los copia el trigger handle_new_user a la tabla profiles.
@@ -249,17 +249,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }), 12000, 'registro',
         );
         secret = ''; // limpiar la copia local del secreto derivado
-        if (error) return translateError(error.message);
+        if (error) return { error: translateError(error.message), needsConfirmation: false };
 
         // Si no hay confirmación de email, ya hay sesión: asegurar los datos.
+        // onAuthStateChange cargará el perfil y la app irá a "Completa tu perfil".
         if (data.session && data.user) {
           await withTimeout(
             supabase.from('profiles').update(meta).eq('id', data.user.id), 8000, 'perfil',
           );
+          return { error: null, needsConfirmation: false };
         }
-        return null;
+        // Sin sesión: Supabase exige confirmar el correo antes de entrar.
+        return { error: null, needsConfirmation: true };
       } catch (e) {
-        return e instanceof Error ? e.message : 'No se pudo completar el registro. Revisa tu conexión.';
+        return { error: e instanceof Error ? e.message : 'No se pudo completar el registro. Revisa tu conexión.', needsConfirmation: false };
       }
     },
     [],

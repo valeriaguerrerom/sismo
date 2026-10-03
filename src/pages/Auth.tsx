@@ -77,13 +77,18 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
         // Mensaje neutro SIEMPRE, exista o no el correo (no se revelan cuentas).
         setSuccess('Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa también la carpeta de spam.');
       } else {
-        const err = await signUp(email, password, fullName);
+        const { error: err, needsConfirmation } = await signUp(email, password, fullName);
         if (err) setError(err);
-        else {
-          // Cuenta creada: llevar al usuario a la pantalla de inicio de sesión
-          // (sin paso de confirmación por correo).
+        else if (needsConfirmation) {
+          // Supabase exige confirmar el correo: aún NO hay sesión. Se vuelve a
+          // login con un aviso para revisar el correo.
           setMode('login');
-          setSuccess('¡Cuenta creada! Inicia sesión para completar tu perfil de investigador.');
+          setSuccess('¡Cuenta creada! Te enviamos un correo para confirmarla. Confírmala y luego inicia sesión.');
+        } else {
+          // El registro ya dejó la sesión abierta: entrar directo. La app
+          // mostrará "Completa tu perfil" (no la pantalla de inicio de sesión,
+          // que confundía al estar ya autenticado).
+          onSuccess();
         }
       }
     } finally {
