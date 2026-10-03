@@ -4,6 +4,17 @@
  */
 import { useState } from 'react';
 import { Grid3X3, Clock, Shield, Zap, Activity, CheckCircle2 } from '../../lib/icons';
+import { tectonicParams, volcanicParams } from '../../lib/simulation';
+
+// Valores REALES del Simulador (se leen de los presets, no se escriben a mano).
+// Si cambian los presets en simulation.ts, esta ficha se actualiza sola.
+const TEC = tectonicParams();
+const VOL = volcanicParams();
+// Frecuencias de la fuente Ricker por tipo (documentadas en simulation.ts).
+const F0_TEC = 3.5; // Hz, tectónico
+const F0_VOL = 2.0; // Hz, volcánico
+/** CFL 2D: dt máximo estable = dx / (Vp·√2). */
+const cflMax = (dx: number, vp: number) => dx / (vp * Math.SQRT2);
 
 const STEPS = [
   {
@@ -13,7 +24,7 @@ const STEPS = [
     color: '#C4553A',
     body: (
       <>
-        <p>El subsuelo se modela como un medio elástico, isótropo y homogéneo. El desplazamiento <b>u</b> obedece:</p>
+        <p>El subsuelo se modela como un medio elástico e isótropo. El desplazamiento <b>u</b> obedece la ecuación de onda elástica:</p>
         <div className="font-mono text-sm bg-stone-50 border border-stone-200 rounded-lg p-3 my-3 text-center">
           ρ ∂²u/∂t² = (λ + 2μ) ∇(∇·u) − μ ∇×(∇×u) + f
         </div>
@@ -21,6 +32,12 @@ const STEPS = [
           Los parámetros de Lamé se calculan a partir de las variables físicas que configuras:
           <span className="font-mono"> μ = ρ·Vs²</span> y <span className="font-mono">λ = ρ·Vp² − 2μ</span>.
           El término <b>f</b> es la fuente sísmica (tectónica o volcánica).
+        </p>
+        <p className="mt-2">
+          El simulador ofrece <b>dos modelos del medio</b>: uno de <b>una sola capa</b> (mismas
+          propiedades Vp, Vs y ρ en todo el dominio) y uno de <b>dos capas</b> (una capa superficial
+          más blanda sobre un semiespacio de roca, con una interfaz horizontal). El de dos capas
+          genera reflexiones y refracciones en la interfaz; el de una capa es más simple de interpretar.
         </p>
       </>
     ),
@@ -96,7 +113,7 @@ const STEPS = [
         </p>
         <ul className="list-disc pl-5 mt-2 space-y-1">
           <li><b>Superficie libre</b> (z = 0): esfuerzo nulo mediante espejo antisimétrico.</li>
-          <li><b>Bordes absorbentes</b>: capa "esponja" con amortiguamiento cuadrático que evita reflexiones artificiales.</li>
+          <li><b>Bordes absorbentes</b>: esquema de Cerjan et al. (1985), una capa que amortigua gradualmente las ondas para evitar reflexiones artificiales en los bordes de la malla.</li>
         </ul>
       </>
     ),
@@ -114,8 +131,8 @@ const STEPS = [
           dado que el modelo es 2D.
         </p>
         <p className="mt-2">
-          Los tiempos de arribo de las ondas P y S se detectan con un algoritmo <b>STA</b> (promedio de corto plazo)
-          y se comparan con el valor teórico <span className="font-mono">t = d / v</span>.
+          Los tiempos de arribo de las ondas P y S se detectan con un algoritmo tipo <b>STA/LTA</b>
+          (cociente de promedios de corto y largo plazo) y se comparan con el valor teórico <span className="font-mono">t = d / v</span>.
           Cada cierto número de pasos se guarda una instantánea del campo de onda para la vista 3D.
         </p>
       </>
@@ -138,10 +155,27 @@ export function FdmMethodology() {
             {s.title}
           </button>
         ))}
-        <div className="bg-[#1A1A2E] text-white rounded-xl p-4 text-xs leading-relaxed mt-3">
-          <div className="font-bold text-[#D4A853] mb-1">Parámetros por defecto</div>
-          Vp 3500 m/s · Vs 2000 m/s · ρ 2600 kg/m³ · dx 100 m · dt 0.02 s · malla ≈ 200 × 150 · duración 60 s.
-          Una simulación completa tarda menos de 15 s en un equipo de escritorio.
+        {/* Valores leídos de los presets reales del Simulador (simulation.ts). */}
+        <div className="bg-[#1A1A2E] text-white rounded-xl p-4 text-xs leading-relaxed mt-3 space-y-2">
+          <div className="font-bold text-[#D4A853]">Valores del Simulador</div>
+          <div>
+            <div className="font-semibold text-stone-200">Preset tectónico</div>
+            <div className="text-stone-400">
+              Vp {TEC.vp} m/s · Vs {TEC.vs} m/s · ρ {TEC.density} kg/m³ · dx {TEC.dx} m ·
+              dt {TEC.dt} s · duración {TEC.duration} s · fuente {F0_TEC} Hz (doble par).
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-stone-200">Preset volcánico</div>
+            <div className="text-stone-400">
+              Vp {VOL.vp} m/s · Vs {VOL.vs} m/s · ρ {VOL.density} kg/m³ · dx {VOL.dx} m ·
+              dt {VOL.dt} s · duración {VOL.duration} s · fuente {F0_VOL} Hz (isótropa).
+            </div>
+          </div>
+          <div className="text-stone-500 pt-1 border-t border-white/10">
+            CFL máx. tectónico ≈ {cflMax(TEC.dx, TEC.vp).toFixed(4)} s; el dt elegido ({TEC.dt} s) lo cumple.
+            La malla (nx × nz) se ajusta al dominio y a la profundidad en cada corrida.
+          </div>
         </div>
       </div>
       <div className="bg-white rounded-2xl border border-stone-200/60 p-6 text-sm text-stone-600 leading-relaxed animate-fade-in" key={open}>

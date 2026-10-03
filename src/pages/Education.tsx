@@ -5,7 +5,11 @@ import {
   Target, TrendingUp, Globe, Info, Calculator, BookMarked, Library, HelpCircle,
   Flame, Activity
 } from '../lib/icons';
-import { loadQuizQuestions, loadWaveFacts, loadTimelineEvents, QuizQuestion, TimelineEvent } from '../lib/educationData';
+import { loadWaveFacts } from '../lib/educationData';
+import {
+  WAVE_INFO, COMPONENT_NOTE, TIMELINE, QUIZ, DEPTH_CLASSES, INTENSITY_FACTORS,
+  type WaveInfo, type QuizItem,
+} from '../lib/educationContent';
 import { FdmMethodology } from '../components/education/FdmMethodology';
 import { Glossary } from '../components/education/Glossary';
 import { References } from '../components/education/References';
@@ -16,45 +20,84 @@ import { WAVE_COLORS } from '../lib/waveColors';
 import { startTour } from '../tours/useTour';
 import { buildEducacionSteps } from '../tours/educacion';
 
-/* ─── Animated Wave SVG ─── */
-function AnimatedWave({ type, color, playing }: { type: string; color: string; playing: boolean }) {
-  const [offset, setOffset] = useState(0);
+/* ─── Animación de partículas por tipo de onda ───
+ * Muestra el MOVIMIENTO FÍSICO real de las partículas del medio, no una traza.
+ * Una malla de puntos se desplaza desde su posición de reposo según el tipo:
+ *   · P: longitudinal — las partículas se acercan y se alejan a lo largo del
+ *        eje de propagación (compresión y dilatación). No hay desplazamiento
+ *        transversal.
+ *   · S: transversal — desplazamiento perpendicular a la propagación, igual a
+ *        toda profundidad (onda de cuerpo).
+ *   · Love: superficial — cizalla horizontal perpendicular a la propagación,
+ *        con amplitud máxima en la superficie que decae con la profundidad.
+ *   · Rayleigh: superficial — movimiento elíptico retrógrado en el plano
+ *        vertical, con amplitud que decae con la profundidad.
+ * La propagación va en +X; la profundidad crece hacia abajo (filas).
+ */
+function AnimatedWave({ type, color, playing }: { type: 'P' | 'S' | 'Love' | 'Rayleigh'; color: string; playing: boolean }) {
+  const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     if (!playing) return;
     let raf: number;
     const animate = () => {
-      setOffset(o => (o + 0.8) % 400);
+      setPhase(p => (p + 0.05) % (Math.PI * 2));
       raf = requestAnimationFrame(animate);
     };
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
   }, [playing]);
 
-  const generatePath = () => {
-    const points: string[] = [];
-    for (let i = 0; i <= 200; i++) {
-      const x = i * 2;
-      let y = 40;
-      const t = (x + offset) * 0.03;
+  const COLS = 24;      // partículas en horizontal (eje de propagación)
+  const ROWS = 5;       // filas en profundidad (para ondas superficiales)
+  const W = 400, H = 90;
+  const dx = W / (COLS + 1);
+  const dy = (H - 20) / (ROWS + 1);
+  const k = 0.5;        // número de onda espacial
+  const amp = 7;        // amplitud base en px
+
+  // Las ondas de superficie solo tienen varias filas visibles; las de cuerpo,
+  // una sola fila central (su movimiento no depende de la profundidad aquí).
+  const rows = (type === 'Love' || type === 'Rayleigh') ? ROWS : 1;
+
+  const dots: { cx: number; cy: number; op: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    // Profundidad normalizada 0 (superficie) → 1 (fondo) y su decaimiento.
+    const depthN = rows > 1 ? r / (rows - 1) : 0;
+    const decay = rows > 1 ? Math.exp(-1.6 * depthN) : 1;
+    const y0 = rows > 1 ? 12 + (r + 1) * dy : H / 2;
+    for (let c = 0; c < COLS; c++) {
+      const x0 = (c + 1) * dx;
+      const theta = k * c - phase * 4; // fase de la onda viajera en +X
+      let cx = x0, cy = y0;
       if (type === 'P') {
-        y = 40 + Math.sin(t * 3) * 18 * Math.exp(-Math.abs(x - 200) * 0.003);
+        // Longitudinal: desplazamiento SOLO en X (compresión/dilatación).
+        cx = x0 + Math.sin(theta) * amp * 1.4;
       } else if (type === 'S') {
-        y = 40 + Math.sin(t * 2) * 24 * Math.exp(-Math.abs(x - 200) * 0.002);
+        // Transversal: desplazamiento SOLO en Y (perpendicular).
+        cy = y0 + Math.sin(theta) * amp * 1.6;
       } else if (type === 'Love') {
-        y = 40 + Math.sin(t * 1.2) * 28 * Math.exp(-Math.abs(x - 200) * 0.0015);
+        // Superficial, cizalla horizontal: desplazamiento en X, decae con prof.
+        cx = x0 + Math.sin(theta) * amp * 1.6 * decay;
       } else {
-        y = 40 + (Math.sin(t * 1.0) * 22 + Math.sin(t * 0.5) * 10) * Math.exp(-Math.abs(x - 200) * 0.0015);
+        // Rayleigh: elíptico retrógrado en el plano vertical (X–Y), decae.
+        cx = x0 + Math.sin(theta) * amp * decay;
+        cy = y0 - Math.cos(theta) * amp * 1.3 * decay; // retrógrado
       }
-      points.push(`${x},${y.toFixed(1)}`);
+      dots.push({ cx, cy, op: rows > 1 ? 0.35 + 0.65 * decay : 1 });
     }
-    return `M ${points.join(' L ')}`;
-  };
+  }
 
   return (
-    <svg viewBox="0 0 400 80" className="w-full h-20">
-      <line x1="0" y1="40" x2="400" y2="40" stroke="#d6d3d1" strokeWidth="0.5" />
-      <path d={generatePath()} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24" role="img"
+      aria-label={`Animación del movimiento de partículas de la onda ${type}`}>
+      {/* Flecha de dirección de propagación */}
+      <line x1="6" y1={H - 6} x2="60" y2={H - 6} stroke="#9ca3af" strokeWidth="1" />
+      <path d={`M 60 ${H - 9} L 66 ${H - 6} L 60 ${H - 3} Z`} fill="#9ca3af" />
+      <text x="70" y={H - 3} fontSize="9" fill="#9ca3af">propagación</text>
+      {dots.map((d, i) => (
+        <circle key={i} cx={d.cx.toFixed(1)} cy={d.cy.toFixed(1)} r="2.6" fill={color} opacity={d.op} />
+      ))}
     </svg>
   );
 }
@@ -76,52 +119,17 @@ function WaveExplorer() {
     }
   }, [selected, facts]);
 
-  const waves = {
-    P: {
-      name: 'Onda P (Primaria)',
-      color: WAVE_COLORS.P,
-      speed: '3–8 km/s',
-      motion: 'Compresión-dilatación',
-      icon: <Zap size={18} />,
-      desc: 'Las más rápidas. Comprimen y dilatan el material en la dirección de propagación, como el sonido. Viajan por sólidos, líquidos y gases. Son las primeras en llegar a los sismógrafos.',
-      damage: 'Bajo',
-      component: 'Vertical (Z)',
-      fact: ['Pueden atravesar el núcleo líquido de la Tierra, por eso se detectan en todo el planeta.', 'Viajan a ~6 km/s en la corteza terrestre, más rápido que cualquier avión.', 'Fueron las primeras ondas sísmicas identificadas, de ahí su nombre "Primarias".'],
-    },
-    S: {
-      name: 'Onda S (Secundaria)',
-      color: WAVE_COLORS.S,
-      speed: '2–5 km/s',
-      motion: 'Corte transversal',
-      icon: <Waves size={18} />,
-      desc: 'Mueven el suelo perpendicular a su dirección de viaje. No se propagan en líquidos. Son las principales causantes de daño estructural en edificaciones.',
-      damage: 'Alto',
-      component: 'Horizontal (N, E)',
-      fact: ['Su ausencia en el núcleo externo de la Tierra demostró que este es líquido.', 'Son las principales responsables del daño en edificaciones durante un sismo.', 'Se mueven como una serpiente, perpendicular a la dirección de propagación.'],
-    },
-    Love: {
-      name: 'Onda Love',
-      color: WAVE_COLORS.Love,
-      speed: '2–4.5 km/s',
-      motion: 'Cizalla horizontal',
-      icon: <TrendingUp size={18} />,
-      desc: 'Ondas superficiales que sacuden el suelo horizontalmente. Resultan de la interferencia de ondas S en capas superficiales. Muy destructivas para edificios altos.',
-      damage: 'Muy alto',
-      component: 'Horizontal (N, E)',
-      fact: ['Nombradas por Augustus Love, quien las predijo matemáticamente en 1911.', 'Son especialmente destructivas para edificios altos por su movimiento horizontal.', 'Solo se propagan en la superficie, no penetran al interior de la Tierra.'],
-    },
-    Rayleigh: {
-      name: 'Onda Rayleigh',
-      color: WAVE_COLORS.Rayleigh,
-      speed: '1–4 km/s',
-      motion: 'Elíptico (rodamiento)',
-      icon: <Globe size={18} />,
-      desc: 'Producen un movimiento elíptico como olas en el mar. Son las de mayor amplitud a larga distancia y generan el "rolling" que se siente en los sismos grandes.',
-      damage: 'Muy alto',
-      component: 'Vertical + Horizontal',
-      fact: ['Lord Rayleigh las predijo en 1885. Son las ondas que más se sienten en sismos lejanos.', 'Producen un movimiento elíptico retrógrado, como olas del mar en reversa.', 'Son las ondas de mayor amplitud a grandes distancias del epicentro.'],
-    },
+  const ICONS: Record<'P' | 'S' | 'Love' | 'Rayleigh', JSX.Element> = {
+    P: <Zap size={18} />, S: <Waves size={18} />, Love: <TrendingUp size={18} />, Rayleigh: <Globe size={18} />,
   };
+  // Metadatos verificados (con fuente) desde educationContent.ts.
+  const waves = Object.fromEntries(
+    WAVE_INFO.map(info => [info.key, {
+      ...info,
+      color: WAVE_COLORS[info.key],
+      icon: ICONS[info.key],
+    }]),
+  ) as Record<'P' | 'S' | 'Love' | 'Rayleigh', WaveInfo & { color: string; icon: JSX.Element }>;
 
   const w = waves[selected];
 
@@ -169,43 +177,60 @@ function WaveExplorer() {
 
         <p className="text-sm text-stone-600 leading-relaxed mb-4">{w.desc}</p>
 
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-stone-50 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wide">Daño</div>
-            <div className="text-sm font-bold mt-0.5" style={{ color: w.color }}>{w.damage}</div>
+            <div className="text-[10px] text-stone-500 tracking-wide">Tipo</div>
+            <div className="text-sm font-bold mt-0.5" style={{ color: w.color }}>
+              {w.type === 'cuerpo' ? 'Onda de cuerpo' : 'Onda superficial'}
+            </div>
           </div>
           <div className="bg-stone-50 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wide">Componente</div>
-            <div className="text-xs font-bold text-[#1A1A2E] mt-0.5">{w.component}</div>
-          </div>
-          <div className="bg-stone-50 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wide">Velocidad</div>
+            <div className="text-[10px] text-stone-500 tracking-wide">Velocidad típica</div>
             <div className="text-sm font-bold mt-0.5" style={{ color: w.color }}>{w.speed}</div>
           </div>
         </div>
 
-        <div className="bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-lg p-3 flex gap-2">
-          <Info size={14} className="text-[#B8860B] flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-[#1A1A2E] leading-relaxed"><span className="font-bold">Dato curioso:</span> {currentFact || 'Cargando...'}</p>
+        {/* Nota sobre la componente observada (reemplaza "Componente: Z"). */}
+        <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-3 mb-4 flex gap-2">
+          <Info size={14} className="text-stone-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-stone-600 leading-relaxed">{COMPONENT_NOTE}</p>
         </div>
+
+        {currentFact && (
+          <div className="bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-lg p-3 flex gap-2 mb-3">
+            <Info size={14} className="text-[#B8860B] flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-[#1A1A2E] leading-relaxed"><span className="font-bold">Dato:</span> {currentFact}</p>
+          </div>
+        )}
+
+        {/* Fuente del contenido de esta onda. */}
+        <p className="text-[10px] text-stone-400 leading-snug">Fuente: {w.source.cita}</p>
       </div>
     </div>
   );
 }
 
-/* ─── Seismic Quiz ─── */
+/* ─── Quiz sísmico ─── */
+/** Baraja una copia del arreglo (orden distinto en cada intento). */
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function SeismicQuiz() {
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Preguntas verificadas (con fuente) desde educationContent.ts, barajadas.
+  const [questions] = useState<QuizItem[]>(() => shuffle(QUIZ));
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [finished, setFinished] = useState(false);
 
-  useEffect(() => { loadQuizQuestions().then(q => { setQuestions(q); setLoading(false); }); }, []);
-
-  if (loading || questions.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando preguntas…" /></div>;
+  if (questions.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando preguntas…" /></div>;
 
   const q = questions[current];
 
@@ -262,7 +287,7 @@ function SeismicQuiz() {
       <div className="bg-stone-50 px-5 py-3 flex items-center justify-between border-b border-stone-200/60">
         <div className="flex items-center gap-2">
           <Award size={16} className="text-[#C4553A]" />
-          <span className="text-[#1A1A2E] text-sm font-bold">Quiz Sísmico</span>
+          <span className="text-[#1A1A2E] text-sm font-bold">Quiz sísmico</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-stone-500 text-xs">{current + 1}/{questions.length}</span>
@@ -304,8 +329,11 @@ function SeismicQuiz() {
         </div>
 
         {showResult && (
-          <div className={`rounded-xl p-3 mb-4 text-xs leading-relaxed ${selected === q.correct_index ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-            <span className="font-bold">{selected === q.correct_index ? '✓ ¡Correcto!' : '✗ Incorrecto.'}</span> {q.explanation}
+          <div className={`rounded-xl p-3 mb-4 ${selected === q.correct_index ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+            <p className={`text-xs leading-relaxed ${selected === q.correct_index ? 'text-green-700' : 'text-red-700'}`}>
+              <span className="font-bold">{selected === q.correct_index ? '✓ ¡Correcto!' : '✗ Incorrecto.'}</span> {q.explanation}
+            </p>
+            <p className="text-[10px] text-stone-500 mt-1.5 leading-snug">Fuente: {q.source.cita}</p>
           </div>
         )}
 
@@ -319,21 +347,22 @@ function SeismicQuiz() {
   );
 }
 
-/* ─── Earthquake Depth Visualizer ─── */
+/* ─── Visualizador de profundidad ─── */
 function DepthVisualizer() {
   const [depth, setDepth] = useState(15);
 
-  const classification = depth < 70 ? 'Superficial' : depth < 300 ? 'Intermedio' : 'Profundo';
-  const classColor = depth < 70 ? '#ef4444' : depth < 300 ? '#C4553A' : '#2D6A4F';
-  const intensity = depth < 30 ? 'Muy alta' : depth < 70 ? 'Alta' : depth < 150 ? 'Moderada' : 'Baja';
+  // Clasificación ESTÁNDAR por profundidad (Stein y Wysession, 2003). No se
+  // calcula ninguna "intensidad" a partir de la profundidad sola.
+  const cls = DEPTH_CLASSES.find(c => depth >= c.from && depth < c.to) ?? DEPTH_CLASSES[DEPTH_CLASSES.length - 1];
+  const classColor = cls.label === 'Superficial' ? '#C4553A' : cls.label === 'Intermedio' ? '#D4A853' : '#2D6A4F';
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
       <h3 className="font-black text-[#1A1A2E] mb-1 flex items-center gap-2">
         <Layers size={18} className="text-[#C4553A]" />
-        Profundidad y Daño Sísmico
+        Profundidad del foco
       </h3>
-      <p className="text-xs text-stone-500 mb-4">Mueve el control para explorar cómo la profundidad afecta la intensidad en superficie</p>
+      <p className="text-xs text-stone-500 mb-4">Mueve el control para ver cómo se clasifica un sismo según la profundidad de su foco</p>
 
       <div className="flex gap-5">
         <div className="flex-1">
@@ -379,29 +408,30 @@ function DepthVisualizer() {
           <div className="text-center text-xs text-stone-500 mt-1">Profundidad: <span className="font-bold" style={{ color: classColor }}>{depth} km</span></div>
         </div>
 
-        <div className="w-40 space-y-3">
+        <div className="w-44 space-y-3">
           <div className="rounded-xl p-3 text-center" style={{ backgroundColor: `${classColor}10`, border: `1px solid ${classColor}30` }}>
-            <div className="text-[10px] text-stone-500 uppercase">Clasificación</div>
-            <div className="text-sm font-black" style={{ color: classColor }}>{classification}</div>
+            <div className="text-[10px] text-stone-500">Clasificación</div>
+            <div className="text-sm font-black" style={{ color: classColor }}>{cls.label}</div>
+            <div className="text-[10px] text-stone-400 mt-0.5">
+              {cls.from}–{cls.to} km
+            </div>
           </div>
           <div className="bg-stone-50 rounded-xl p-3 text-center border border-stone-200/60">
-            <div className="text-[10px] text-stone-500 uppercase">Intensidad</div>
-            <div className="text-sm font-bold text-[#1A1A2E]">{intensity}</div>
-          </div>
-          <div className="bg-stone-50 rounded-xl p-3 text-center border border-stone-200/60">
-            <div className="text-[10px] text-stone-500 uppercase">Profundidad</div>
+            <div className="text-[10px] text-stone-500">Profundidad</div>
             <div className="text-sm font-bold text-[#1A1A2E]">{depth} km</div>
           </div>
-          <div className="bg-[#D4A853]/10 border border-[#D4A853]/20 rounded-xl p-3">
-            <p className="text-[10px] text-[#D4A853] leading-relaxed">
-              {depth < 30 && 'Sismos muy superficiales causan el mayor daño. La energía se libera cerca de la superficie.'}
-              {depth >= 30 && depth < 70 && 'Sismos superficiales. Aún causan daño significativo en la zona epicentral.'}
-              {depth >= 70 && depth < 300 && 'Sismos intermedios. Se sienten en áreas amplias pero con menor intensidad.'}
-              {depth >= 300 && 'Sismos profundos. Rara vez causan daño significativo en superficie.'}
-            </p>
+          <div className="bg-stone-50 rounded-xl p-3 border border-stone-200/60">
+            <p className="text-[10px] text-stone-600 leading-relaxed">{cls.desc}</p>
           </div>
         </div>
       </div>
+
+      {/* La intensidad NO depende solo de la profundidad: se aclaran los factores. */}
+      <div className="mt-4 bg-[#D4A853]/10 border border-[#D4A853]/30 rounded-xl p-3 flex gap-2">
+        <Info size={14} className="text-[#B8860B] flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-[#1A1A2E] leading-relaxed">{INTENSITY_FACTORS}</p>
+      </div>
+      <p className="text-[10px] text-stone-400 mt-2 leading-snug">Fuente: Stein, S., & Wysession, M. (2003). An Introduction to Seismology, Earthquakes, and Earth Structure.</p>
     </div>
   );
 }
@@ -446,7 +476,7 @@ function MagnitudeScale() {
     <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
       <h3 className="font-black text-[#1A1A2E] mb-1 flex items-center gap-2">
         <TrendingUp size={18} className="text-[#C4553A]" />
-        Escala de Magnitud Interactiva
+        Escala de magnitud interactiva
       </h3>
       <p className="text-xs text-stone-500 mb-4">Explora cómo la magnitud afecta la energía liberada y el potencial destructivo</p>
 
@@ -514,15 +544,11 @@ function MagnitudeScale() {
   );
 }
 
-/* ─── Historical Timeline ─── */
+/* ─── Línea de tiempo histórica ─── */
 function HistoricalTimeline() {
-  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  // Eventos verificados (con fuente y enlace) desde educationContent.ts.
+  const events = TIMELINE;
   const [selectedEvent, setSelectedEvent] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => { loadTimelineEvents().then(e => { setEvents(e); setLoading(false); }); }, []);
-
-  if (loading || events.length === 0) return <div className="py-8"><VolcanoLoader size={40} label="Cargando línea de tiempo…" /></div>;
 
   const ev = events[selectedEvent];
 
@@ -552,15 +578,23 @@ function HistoricalTimeline() {
         backgroundColor: ev.event_type === 'volcanic' ? '#C4553A08' : '#2D6A4F08',
         borderColor: ev.event_type === 'volcanic' ? '#C4553A20' : '#2D6A4F20',
       }}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className="text-xs font-bold flex items-center gap-1.5" style={{ color: ev.event_type === 'volcanic' ? '#C4553A' : '#2D6A4F' }}>
             {ev.event_type === 'volcanic' ? <Flame size={13} /> : <Activity size={13} />}
             {ev.event_type === 'volcanic' ? 'Evento volcánico' : 'Evento tectónico'}
           </span>
-          {ev.magnitude !== '—' && <span className="text-xs text-stone-400">, ML {ev.magnitude}</span>}
+          <span className="text-xs text-stone-400">· {ev.date}</span>
+          {ev.magnitude && <span className="text-xs font-semibold text-stone-500">· {ev.magnitude}</span>}
         </div>
         <h4 className="text-2xl font-black text-[#1A1A2E] mb-2">{ev.title}</h4>
         <p className="text-stone-600 text-sm leading-relaxed">{ev.description}</p>
+        {/* Fuente del evento (con enlace si existe). */}
+        <p className="text-[10px] text-stone-400 mt-3 leading-snug">
+          Fuente: {ev.source.cita}
+          {ev.source.url && (
+            <> <a href={ev.source.url} target="_blank" rel="noopener noreferrer" className="text-[#C4553A] hover:underline break-all">{ev.source.url}</a></>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -590,14 +624,14 @@ export function Education() {
   }, [user, launchTour]);
 
   const sections = [
-    { id: 'waves', label: 'Tipos de Ondas', icon: <Waves size={16} />, color: '#2D6A4F' },
-    { id: 'magnitude', label: 'Escala de Magnitud', icon: <TrendingUp size={16} />, color: '#C4553A' },
+    { id: 'waves', label: 'Tipos de ondas', icon: <Waves size={16} />, color: '#2D6A4F' },
+    { id: 'magnitude', label: 'Escala de magnitud', icon: <TrendingUp size={16} />, color: '#C4553A' },
     { id: 'depth', label: 'Profundidad', icon: <Layers size={16} />, color: '#1A1A2E' },
     { id: 'fdm', label: 'Metodología FDM', icon: <Calculator size={16} />, color: '#2D6A4F' },
-    { id: 'timeline', label: 'Línea de Tiempo', icon: <Clock size={16} />, color: '#C9A227' },
+    { id: 'timeline', label: 'Línea de tiempo', icon: <Clock size={16} />, color: '#C9A227' },
     { id: 'glossary', label: 'Glosario', icon: <BookMarked size={16} />, color: '#D4A853' },
     { id: 'references', label: 'Referencias', icon: <Library size={16} />, color: '#C4553A' },
-    { id: 'quiz', label: 'Quiz Sísmico', icon: <Award size={16} />, color: '#C4553A' },
+    { id: 'quiz', label: 'Quiz sísmico', icon: <Award size={16} />, color: '#C4553A' },
   ];
 
   return (
@@ -606,7 +640,7 @@ export function Education() {
         <div className="max-w-7xl mx-auto">
           <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
             <BookOpen size={20} className="text-[#C4553A]" />
-            Centro de Aprendizaje Sísmico
+            Centro de aprendizaje sísmico
             {/* Botón de ayuda: repite el tour guiado cuando el usuario quiera. */}
             <Tooltip content="Ver guía" hoverOnly>
               <button
@@ -647,8 +681,8 @@ export function Education() {
           {activeSection === 'waves' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Tipos de Ondas Sísmicas</h2>
-                <p className="text-stone-500 text-sm mt-1">Explora las diferentes ondas que se generan durante un sismo y cómo se propagan</p>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Tipos de ondas sísmicas</h2>
+                <p className="text-stone-500 text-sm mt-1">Explora las ondas que se generan durante un sismo y cómo se mueve el suelo a su paso</p>
               </div>
               <WaveExplorer />
             </div>
@@ -657,7 +691,7 @@ export function Education() {
           {activeSection === 'magnitude' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Escala de Magnitud</h2>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Escala de magnitud</h2>
                 <p className="text-stone-500 text-sm mt-1">Comprende cómo se mide la energía de un sismo y su potencial destructivo</p>
               </div>
               <MagnitudeScale />
@@ -667,8 +701,8 @@ export function Education() {
           {activeSection === 'depth' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Profundidad Sísmica</h2>
-                <p className="text-stone-500 text-sm mt-1">Descubre cómo la profundidad del foco afecta la intensidad del sismo en superficie</p>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Profundidad sísmica</h2>
+                <p className="text-stone-500 text-sm mt-1">Cómo se clasifican los sismos según la profundidad de su foco</p>
               </div>
               <DepthVisualizer />
             </div>
@@ -677,7 +711,7 @@ export function Education() {
           {activeSection === 'timeline' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Historia Sísmica de Nariño</h2>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Historia sísmica de Nariño</h2>
                 <p className="text-stone-500 text-sm mt-1">Eventos que han marcado la historia sísmica y volcánica de la región</p>
               </div>
               <HistoricalTimeline />
@@ -687,7 +721,7 @@ export function Education() {
           {activeSection === 'fdm' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Metodología: Método de Diferencias Finitas</h2>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Metodología: método de diferencias finitas</h2>
                 <p className="text-stone-500 text-sm mt-1">Cómo el simulador resuelve la ecuación de onda elástica paso a paso</p>
               </div>
               <FdmMethodology />
@@ -697,7 +731,7 @@ export function Education() {
           {activeSection === 'glossary' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Glosario de Términos</h2>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Glosario de términos</h2>
                 <p className="text-stone-500 text-sm mt-1">Conceptos de sismología, ondas, método numérico y contexto regional de Nariño</p>
               </div>
               <Glossary />
@@ -707,8 +741,8 @@ export function Education() {
           {activeSection === 'references' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Referencias Bibliográficas</h2>
-                <p className="text-stone-500 text-sm mt-1">Fuentes académicas, software y estándares de datos en los que se basa SismoNariño</p>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Referencias</h2>
+                <p className="text-stone-500 text-sm mt-1">Fuentes para aprender y base técnica del proyecto</p>
               </div>
               <References />
             </div>
@@ -717,7 +751,7 @@ export function Education() {
           {activeSection === 'quiz' && (
             <div>
               <div className="mb-4">
-                <h2 className="text-2xl font-black text-[#1A1A2E]">Pon a Prueba tu Conocimiento</h2>
+                <h2 className="text-2xl font-black text-[#1A1A2E]">Pon a prueba lo que aprendiste</h2>
                 <p className="text-stone-500 text-sm mt-1">Responde preguntas sobre sismología, volcanes y la geología de Nariño</p>
               </div>
               <SeismicQuiz />
