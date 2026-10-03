@@ -300,8 +300,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           id: r.event_id,
           lat: r.latitude,
           lon: r.longitude,
-          depthKm: isVolc ? 5 : 15, // profundidad asumida para la escena (no hay dato real)
-          // El catálogo no trae profundidad focal (depth_km NULL en todos).
+          // Profundidad real si el catálogo la trae; si no, se asume para la escena.
+          depthKm: r.depth_km != null ? r.depth_km : (isVolc ? 5 : 15),
           depthAssumed: r.depth_km == null,
           magnitude: r.magnitude ?? (isVolc ? 4.5 : 0),
           date: r.event_date,
@@ -310,9 +310,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             : `M${r.magnitude ?? '?'} · ${r.event_date} · ${r.region ?? ''}`,
           sourceType: isVolc ? 'volcanic' : 'tectonic',
           nStations: r.station_count,
-          // Las coordenadas del catálogo son por zona (centroide de estaciones
-          // en CM; cráter en Galeras), no un epicentro instrumental real.
-          coordIsZone: true,
+          // Coordenada por zona SOLO si no tiene epicentro real del SGC/USGS.
+          coordIsZone: r.location_source !== 'SGC/USGS',
         };
       });
       setEvents(out);

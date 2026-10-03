@@ -42,6 +42,12 @@ export interface CatalogRow {
   region: string | null;
   station_count: number;
   source: string;
+  /**
+   * Origen de la coordenada: 'SGC/USGS' = epicentro real (cruzado con el USGS);
+   * cualquier otro valor o null = coordenada por zona (centroide de estaciones
+   * en CM, cráter en Galeras).
+   */
+  location_source: string | null;
 }
 
 /**
@@ -58,7 +64,7 @@ export async function loadCatalog(): Promise<CatalogRow[]> {
       const { data, error } = await withTimeout(
         supabase
           .from('seismic_events')
-          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source')
+          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source, location_source')
           .order('event_date', { ascending: false }),
         6000,
       );
@@ -93,8 +99,10 @@ async function loadCatalogFromJson(): Promise<CatalogRow[]> {
       event_id: e.id, event_date: e.date, event_time: e.time,
       magnitude: e.magnitude ?? null, depth_km: null,
       latitude: Number(lat.toFixed(6)), longitude: Number(lon.toFixed(6)),
-      location_name: `Red CM — ${e.folder}`, event_type: 'tectonic',
+      location_name: `Red CM, ${e.folder}`, event_type: 'tectonic',
       volcanic_subtype: null, region: e.folder, station_count: sts.length, source: 'SGC-RSNC',
+      // El respaldo JSON usa el centroide (nunca el epicentro real).
+      location_source: 'centroide de estaciones',
     });
   }
 
@@ -107,6 +115,8 @@ async function loadCatalogFromJson(): Promise<CatalogRow[]> {
       location_name: e.location_name ?? 'Volcán Galeras', event_type: 'volcanic',
       volcanic_subtype: e.volcanic_subtype || null, region: 'Nariño (Galeras)',
       station_count: 1, source: 'SGC-OVSP',
+      // Los eventos del Galeras usan la coordenada del cráter (no epicentro).
+      location_source: 'cráter del Galeras',
     });
   }
 

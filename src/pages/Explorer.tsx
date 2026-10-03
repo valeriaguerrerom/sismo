@@ -78,6 +78,10 @@ interface CMEvent {
   folder: string;
   latitude?: number;
   longitude?: number;
+  /** Profundidad real (km) si el catálogo la trae, o null. */
+  depthKm?: number | null;
+  /** 'SGC/USGS' = epicentro real; otro valor/null = coordenada por zona. */
+  locationSource?: string | null;
   stations: CMStation[];
 }
 
@@ -372,6 +376,8 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
           folder: r.region ?? 'Colombia',
           latitude: r.latitude,
           longitude: r.longitude,
+          depthKm: r.depth_km,
+          locationSource: r.location_source,
           stations: stationsByEvent[r.event_id] ?? [],
         }));
 
@@ -481,8 +487,10 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
         lon: openCMEvent.longitude,
         color: COLOR_VOLCANIC,
         badge: `ML ${openCMEvent.magnitude.toFixed(1)}`,
-        label: `Evento ML ${openCMEvent.magnitude.toFixed(1)} · ${openCMEvent.folder}`,
-        sublabel: 'Ubicación aproximada (centroide de las estaciones que lo registraron); el catálogo no incluye el epicentro ni la profundidad real.',
+        label: `Evento ML ${openCMEvent.magnitude.toFixed(1)}, ${openCMEvent.folder}`,
+        sublabel: openCMEvent.locationSource === 'SGC/USGS'
+          ? 'Epicentro del catálogo del USGS (ComCat).'
+          : 'Ubicación aproximada (centroide de las estaciones que lo registraron); el catálogo no incluye el epicentro ni la profundidad real.',
       });
     }
     return pts;
@@ -852,14 +860,16 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
                                   ) : (cmWave && cmWave.event_id === c.id && cmWave.station === selectedStation.station) ? (
                                     <div className="space-y-2">
                                       <TriaxialPreview wave={cmWave.waveData} duration={cmWave.duration} physical={cmWave.physical_quantity} />
-                                      <p className="text-[10px] text-stone-400 leading-snug">
-                                        Profundidad no disponible en el catálogo; se usa 15 km para la simulación.
-                                      </p>
+                                      {c.depthKm == null && (
+                                        <p className="text-[10px] text-stone-400 leading-snug">
+                                          Profundidad no disponible en el catálogo; se usa 15 km para la simulación.
+                                        </p>
+                                      )}
                                       <button
                                         onClick={() => onLoadRealData?.(
                                           cmWave.waveData,
                                           `CM ${c.date} ML ${c.magnitude.toFixed(1)}, Est. ${cmWave.station}`,
-                                          { date: c.date, duration: cmWave.duration, sourceType: 'tectonic', magnitude: c.magnitude, depth: 15, lat: c.latitude, lon: c.longitude },
+                                          { date: c.date, duration: cmWave.duration, sourceType: 'tectonic', magnitude: c.magnitude, depth: c.depthKm ?? 15, lat: c.latitude, lon: c.longitude },
                                         )}
                                         className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white text-xs font-bold py-2.5 rounded-lg btn-hover"
                                       >

@@ -62,13 +62,16 @@ export function DepthLab({ onOpenMap3D, onChallengeDone }: Props) {
         <a href={cat.consulta.url} target="_blank" rel="noopener noreferrer" className="text-[#C4553A] hover:underline break-all">consulta</a>
       </p>
 
-      {/* Nota de subducción, citada */}
+      {/* Nota de subducción, con fuente regional verificable */}
       <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-3">
         <p className="text-xs text-stone-600 leading-relaxed">
           La mayoría de los sismos de la región son superficiales; algunos son intermedios.
-          Esto es coherente con la subducción de la placa de Nazca bajo la Sudamericana frente a la costa pacífica.
+          Esto es coherente con la subducción de la placa de Nazca bajo Sudamérica en el suroccidente de Colombia.
         </p>
-        <p className="text-[10px] text-stone-400 mt-1">Fuente: Stein, S., & Wysession, M. (2003). An Introduction to Seismology, Earthquakes, and Earth Structure.</p>
+        <p className="text-[10px] text-stone-400 mt-1">
+          Fuente: Yarce, J., Monsalve, G., Becker, T. W., Cardona, A., Poveda, E., Alvira, D., &amp; Ordóñez-Carmona, O. (2014).
+          Seismological observations in Northwestern South America: Evidence for two subduction segments. Tectonophysics.
+        </p>
       </div>
 
       {onOpenMap3D && (
