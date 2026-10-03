@@ -15,7 +15,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { loadUsgsCatalog, type UsgsCatalog, type UsgsEvent } from '../../lib/usgsDepth';
-import { DEPTH_CLASSES } from '../../lib/educationContent';
+import { DEPTH_CLASSES, SRC } from '../../lib/educationContent';
 import { VolcanoLoader } from '../ui/VolcanoLoader';
 import { RotateCcw, CheckCircle, XCircle } from '../../lib/icons';
 
@@ -36,11 +36,10 @@ function depthBand(km: number): string {
 }
 
 interface Props {
-  onOpenMap3D?: () => void;
   onChallengeDone?: () => void;
 }
 
-export function DepthLab({ onOpenMap3D, onChallengeDone }: Props) {
+export function DepthLab({ onChallengeDone }: Props) {
   const [cat, setCat] = useState<UsgsCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [hover, setHover] = useState<UsgsEvent | null>(null);
@@ -66,19 +65,12 @@ export function DepthLab({ onOpenMap3D, onChallengeDone }: Props) {
       <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-3">
         <p className="text-xs text-stone-600 leading-relaxed">
           La mayoría de los sismos de la región son superficiales; algunos son intermedios.
-          Esto es coherente con la subducción de la placa de Nazca bajo Sudamérica en el suroccidente de Colombia.
+          Esto es coherente con la subducción de la placa de Nazca bajo el occidente de Colombia.
         </p>
         <p className="text-[10px] text-stone-400 mt-1">
-          Fuente: Yarce, J., Monsalve, G., Becker, T. W., Cardona, A., Poveda, E., Alvira, D., &amp; Ordóñez-Carmona, O. (2014).
-          Seismological observations in Northwestern South America: Evidence for two subduction segments. Tectonophysics.
+          Fuente: {SRC.vargasMann2013.cita}
         </p>
       </div>
-
-      {onOpenMap3D && (
-        <button onClick={onOpenMap3D} className="text-xs font-bold px-3 py-2 rounded-lg bg-[#2D6A4F]/10 text-[#2D6A4F] border border-[#2D6A4F]/20">
-          Ver los hipocentros en el Mapa 3D
-        </button>
-      )}
 
       <DepthChallenge cat={cat} onDone={onChallengeDone} />
     </div>
