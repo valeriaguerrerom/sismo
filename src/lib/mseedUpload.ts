@@ -4,6 +4,7 @@
  * @module mseedUpload
  */
 import type { WaveData } from './types';
+import { supabase } from './supabase';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -60,9 +61,18 @@ export async function uploadMseed(file: File, opts: MseedUploadOptions = {}): Pr
   if (opts.freqmin !== undefined) form.append('freqmin', String(opts.freqmin));
   if (opts.freqmax !== undefined) form.append('freqmax', String(opts.freqmax));
 
+  // La carga requiere sesión: se envía el access token de Supabase para que el
+  // backend verifique el usuario del lado del servidor (no basta con la UI).
+  const headers: Record<string, string> = {};
+  try {
+    const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+    const token = data.session?.access_token;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch { /* sin sesión: el backend responderá 401 */ }
+
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/api/upload/mseed`, { method: 'POST', body: form });
+    res = await fetch(`${API_BASE}/api/upload/mseed`, { method: 'POST', body: form, headers });
   } catch {
     throw new Error('No se pudo conectar con el backend. Verifica que el servidor FastAPI esté en ejecución.');
   }

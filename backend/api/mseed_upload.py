@@ -18,10 +18,11 @@ import io
 import math
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from core.config import require_user_id
 from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
 
@@ -463,14 +464,21 @@ async def upload_mseed(
     station: str | None = Form(default=None, description="Código de estación a extraer"),
     freqmin: float | None = Form(default=None, description="Pasabanda: frecuencia mínima (Hz)"),
     freqmax: float | None = Form(default=None, description="Pasabanda: frecuencia máxima (Hz)"),
+    authorization: str | None = Header(default=None),
 ):
     """Devuelve el registro triaxial normalizado de una estación del archivo.
 
+    Requiere sesión: la carga de MiniSEED es una función para investigadores
+    autenticados, así que el token se verifica contra Supabase del lado del
+    servidor (no basta con que la interfaz oculte el botón sin sesión).
+
     Raises:
+        HTTPException 401: sin sesión o token inválido.
         HTTPException 400: archivo vacío, demasiado grande o ilegible.
         HTTPException 404: estación inexistente o sin componente vertical.
         HTTPException 429: si se supera el límite de cargas por IP.
     """
+    require_user_id(authorization)  # exige sesión válida; lanza 401 si no la hay
     _upload_limiter.check(client_ip(request))
     # Se lee por bloques y se aborta en cuanto se supera el límite, para no
     # cargar en memoria un archivo gigante antes de rechazarlo (DoS por memoria).

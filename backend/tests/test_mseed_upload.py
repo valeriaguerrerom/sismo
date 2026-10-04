@@ -9,6 +9,19 @@ from api.mseed_upload import process_mseed_bytes
 from main import app
 
 
+@pytest.fixture(autouse=True)
+def _sin_supabase(monkeypatch):
+    """Fuerza el modo sin Supabase en las pruebas de endpoint.
+
+    La carga de MiniSEED exige sesión verificada contra Supabase. En las pruebas
+    no hay proveedor, así que se limpian las variables para que require_user_id
+    use el modo local (sin bloqueo) y se pueda probar la lógica de procesamiento.
+    La exigencia real de sesión (401) se prueba aparte en test_require_user_id.
+    """
+    monkeypatch.setenv("SUPABASE_URL", "")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "")
+
+
 def _make_mseed(stations=("CUFP",), fs=100.0, seconds=20.0, comps=("Z", "N", "E"), network="CM") -> bytes:
     """Genera un MiniSEED sintético en memoria con ObsPy."""
     from obspy import Stream, Trace, UTCDateTime
@@ -276,3 +289,24 @@ def test_estimacion_distancia_sinteticos():
     sp, dist, origin, _ = _estimate_distance_sp(vertical, horiz.tolist(), horiz.tolist(), fs)
     assert sp is not None and dist is not None
     assert origin in ("local", "regional", "lejano")
+
+
+def test_require_user_id_exige_sesion_cuando_supabase_configurado(monkeypatch):
+    """Con Supabase configurado, require_user_id exige un Bearer válido.
+
+    Sin encabezado Authorization devuelve 401. Es la verificación de sesión del
+    lado del servidor para la carga de MiniSEED (no basta con ocultar el botón).
+    """
+    from fastapi import HTTPException
+    from core.config import require_user_id
+
+    monkeypatch.setenv("SUPABASE_URL", "https://proyecto.supabase.co")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "clave-anon-de-prueba")
+
+    with pytest.raises(HTTPException) as exc:
+        require_user_id(None)
+    assert exc.value.status_code == 401
+
+    with pytest.raises(HTTPException) as exc:
+        require_user_id("Bearer   ")
+    assert exc.value.status_code == 401
