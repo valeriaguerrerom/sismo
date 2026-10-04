@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTimelineEvents, type TimelineEvent } from '../../lib/educationData';
+import { TIMELINE } from '../../lib/educationContent';
 import { SeismicMap, type MapPoint } from '../explorer/SeismicMap';
 import { VolcanoLoader } from '../ui/VolcanoLoader';
 import { RotateCcw } from '../../lib/icons';
@@ -24,6 +25,23 @@ import type { LatLngBoundsExpression } from 'leaflet';
 type Filter = 'todos' | 'tectonic' | 'volcanic';
 
 const COLOR = { tectonic: '#2D6A4F', volcanic: '#C4553A' };
+
+/** Coordenadas verificadas por id de evento (respaldo si la BD aún no las trae). */
+const COORDS_BY_ID = new Map(
+  TIMELINE.map(t => [t.id, { lat: t.lat, lon: t.lon, note: t.locationNote }]),
+);
+
+/**
+ * Completa lat/lon/location_note desde el contenido verificado cuando la fila de
+ * Supabase no los trae. Pasa mientras no se haya aplicado la migración de
+ * coordenadas y el seed; así el mapa funciona igual. Hace match por id.
+ */
+function backfillCoords(e: TimelineEvent): TimelineEvent {
+  if (e.lat != null && e.lon != null) return e;
+  const c = COORDS_BY_ID.get(e.id);
+  if (!c || c.lat == null || c.lon == null) return e;
+  return { ...e, lat: c.lat, lon: c.lon, location_note: e.location_note ?? c.note };
+}
 
 interface Props {
   onChallengeDone?: () => void;
@@ -38,7 +56,9 @@ export function HistoryLab({ onChallengeDone }: Props) {
 
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  useEffect(() => { loadTimelineEvents().then(e => { setEvents(e); setLoading(false); }); }, []);
+  useEffect(() => {
+    loadTimelineEvents().then(e => { setEvents(e.map(backfillCoords)); setLoading(false); });
+  }, []);
 
   const filtered = useMemo(
     () => events.filter(e => filter === 'todos' || e.event_type === filter),
