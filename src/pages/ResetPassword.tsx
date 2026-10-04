@@ -77,7 +77,7 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
               {PASSWORD_RULES.map(rule => {
                 const ok = rule.test(password);
                 return (
-                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
+                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#57534e' }}>
                     <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: ok ? '#2D6A4F' : 'transparent', border: ok ? 'none' : '1px solid #D6D3D1' }}>
                       {ok && <Check size={10} className="text-white" />}
                     </span>
@@ -87,7 +87,7 @@ export function ResetPassword({ onDone, onRequestNew, onHome }: Props) {
               })}
             </ul>
 
-            {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
+            {error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
 
             {(() => {
               const disabled = loading || !strong;

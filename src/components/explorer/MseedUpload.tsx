@@ -301,7 +301,7 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
         )}
 
         {error && (
-          <div className="flex items-start gap-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+          <div role="alert" className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">
             <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> {error}
           </div>
         )}

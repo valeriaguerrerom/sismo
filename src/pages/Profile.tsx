@@ -344,7 +344,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
           {editing ? (
             <form onSubmit={save} className="space-y-4">
               <ResearcherFields form={form} onChange={set} />
-              {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
+              {error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={saving}
                   className="flex items-center justify-center gap-2 bg-[#C4553A] text-white px-5 py-2.5 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
@@ -425,7 +425,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
                     );
                   })}
                 </ul>
-                {pwError && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{pwError}</p>}
+                {pwError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{pwError}</p>}
                 <div className="flex gap-2">
                   <button type="submit" disabled={pwSaving || !pwStrong || !currentPw}
                     className="flex items-center gap-2 bg-[#C4553A] text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
@@ -491,7 +491,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
               Tus datos y tus simulaciones se conservan. Mientras esté desactivada no podrás usar la plataforma, pero puedes reactivarla cuando quieras iniciando sesión.
             </p>
-            {deacError && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{deacError}</p>}
+            {deacError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{deacError}</p>}
             <div className="flex gap-2 mt-4">
               <button onClick={confirmDeactivate} disabled={deacBusy}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#C4553A] text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
@@ -528,7 +528,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               autoComplete="off"
               className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50"
             />
-            {delError && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{delError}</p>}
+            {delError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{delError}</p>}
             <div className="flex gap-2 mt-4">
               <button
                 onClick={confirmDelete}

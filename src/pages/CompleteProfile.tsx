@@ -78,7 +78,7 @@ export function CompleteProfile({ onDone }: Props) {
 
           <ConsentCheckbox checked={consent} onChange={setConsent} />
 
-          {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
+          {error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
 
           <div className="flex flex-col sm:flex-row gap-2">
             <button type="submit" disabled={saving || !consent}

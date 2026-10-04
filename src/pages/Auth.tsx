@@ -126,7 +126,7 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
   return (
     <AuthLayout title={title} subtitle={subtitle} onHome={onHome}>
         {localNotice && mode === 'login' && (
-          <div className="mb-4 text-xs text-green-700 bg-green-50 border border-green-100 rounded-xl p-3">{localNotice}</div>
+          <div role="status" className="mb-4 text-xs text-green-700 bg-green-50 border border-green-100 rounded-xl p-3">{localNotice}</div>
         )}
 
         <form onSubmit={handleSubmit} className={`bg-white rounded-2xl border border-stone-200/60 shadow-sm ${isRegister ? 'p-4 space-y-2.5' : 'p-5 space-y-3'}`}>
@@ -184,7 +184,7 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
               {PASSWORD_RULES.map(rule => {
                 const ok = rule.test(password);
                 return (
-                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#8A8A8A' }}>
+                  <li key={rule.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: ok ? '#2D6A4F' : '#57534e' }}>
                     <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: ok ? '#2D6A4F' : 'transparent', border: ok ? 'none' : '1px solid #D6D3D1' }}>
                       {ok && <Check size={10} className="text-white" />}
                     </span>
@@ -197,9 +197,9 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
 
           {isRegister && <ConsentCheckbox checked={consent} onChange={setConsent} />}
 
-          {blockedMessage && !error && <p className="text-red-600 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{blockedMessage}</p>}
-          {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
-          {success && <p className="text-green-600 text-xs bg-green-50 rounded-lg p-2 border border-green-100">{success}</p>}
+          {blockedMessage && !error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{blockedMessage}</p>}
+          {error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
+          {success && <p role="status" className="text-green-700 text-xs bg-green-50 rounded-lg p-2 border border-green-100">{success}</p>}
 
           {/* En "forgot", tras enviar, ocultamos el botón y ofrecemos volver. */}
           {!(isForgot && success) && (() => {
