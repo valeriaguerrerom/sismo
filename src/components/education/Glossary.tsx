@@ -62,7 +62,11 @@ export function Glossary() {
     return map;
   }, [filtered]);
 
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => ({ l, page: letterPage.get(l) }));
+  // Solo las letras que tienen términos (en orden), cada una con su página.
+  const letters = useMemo(
+    () => [...letterPage.entries()].map(([l, p]) => ({ l, page: p })).sort((a, b) => a.l.localeCompare(b.l)),
+    [letterPage],
+  );
 
   // Agrupa los términos de la página actual por letra inicial (encabezados).
   const groups = useMemo(() => {
@@ -84,21 +88,25 @@ export function Glossary() {
           className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-stone-200 bg-white text-sm focus:outline-none focus:border-[#C4553A]" />
       </div>
 
-      {/* Índice de letras: salta a la página donde empieza cada letra */}
-      <div className="flex flex-wrap gap-1 mb-4">
-        {letters.map(({ l, page: lp }) => (
-          <button
-            key={l}
-            onClick={() => lp && setPage(lp)}
-            disabled={!lp}
-            className={`w-6 h-6 rounded text-[11px] font-bold transition-colors ${
-              lp ? 'text-[#C4553A] hover:bg-[#C4553A]/10' : 'text-stone-300 cursor-default'
-            }`}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
+      {/* Índice de letras: solo las que tienen términos; salta a su página */}
+      {letters.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-4">
+          {letters.map(({ l, page: lp }) => {
+            const current = lp === page;
+            return (
+              <button
+                key={l}
+                onClick={() => setPage(lp)}
+                className={`w-6 h-6 rounded text-[11px] font-bold transition-colors ${
+                  current ? 'bg-[#C4553A] text-white' : 'text-[#C4553A] hover:bg-[#C4553A]/10'
+                }`}
+              >
+                {l}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <p className="text-center text-stone-400 text-sm py-10">Sin resultados para "{q}".</p>
