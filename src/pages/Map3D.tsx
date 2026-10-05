@@ -1257,7 +1257,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         <div
           ref={sceneContainerRef}
           data-tour="m3d-escena"
-          className={`relative bg-black/30 rounded-xl overflow-hidden min-h-[360px] sm:min-h-[480px] lg:min-h-[640px] transition-all ${
+          className={`relative bg-black/30 rounded-xl overflow-hidden min-h-[440px] sm:min-h-[520px] lg:min-h-[640px] transition-all ${
             placingEpicenter ? 'border-2 border-[#2D6A4F] ring-2 ring-[#2D6A4F]/40' : 'border border-white/10'
           }`}
         >
@@ -1278,17 +1278,24 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             onPlaceEpicenter={placeEpicenter}
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
-          <div data-tour="m3d-hint" className={`absolute top-2 left-2 z-10 max-w-[55%] sm:max-w-[60%] text-[10px] leading-snug rounded px-2 py-1 transition-colors ${
+          {/* Ayuda superior. En móvil se acorta el texto para no tapar la escena. */}
+          <div data-tour="m3d-hint" className={`absolute top-2 left-2 z-10 max-w-[70%] sm:max-w-[60%] text-[10px] leading-snug rounded px-2 py-1 transition-colors ${
             placingEpicenter ? 'text-white bg-[#2D6A4F]/80 font-semibold' : 'text-stone-400 bg-black/40'
           }`}>
-            {placingEpicenter
-              ? 'Haz clic en el terreno para colocar el epicentro'
-              : 'Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación'}
+            {placingEpicenter ? (
+              'Haz clic en el terreno para colocar el epicentro'
+            ) : (
+              <>
+                {/* Versión corta en móvil, completa en pantallas grandes. */}
+                <span className="sm:hidden">Toca el terreno para el epicentro; ▲ para una estación.</span>
+                <span className="hidden sm:inline">Clic en el terreno para colocar el epicentro, clic en ▲ para seleccionar una estación</span>
+              </>
+            )}
           </div>
-          {/* Nota del modelo homogéneo: texto FIJO en una esquina del visor (no
-              dentro de la escena 3D, para no encimarse con las etiquetas de capa). */}
+          {/* Nota del modelo homogéneo. Se oculta en móvil (secundaria) para no
+              apilar texto sobre la escena; visible desde sm. */}
           {model === 'homogeneous' && (
-            <div className="absolute top-12 left-2 z-10 max-w-[55%] sm:max-w-[220px] text-[10px] leading-snug text-stone-300 bg-black/45 rounded px-2 py-1">
+            <div className="hidden sm:block absolute top-12 left-2 z-10 max-w-[220px] text-[10px] leading-snug text-stone-300 bg-black/45 rounded px-2 py-1">
               En este modelo todo el subsuelo tiene la misma velocidad.
             </div>
           )}

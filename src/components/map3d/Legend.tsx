@@ -11,6 +11,7 @@
  *
  * @module map3d/Legend
  */
+import { useState } from 'react';
 import { WAVE_COLORS } from '../../lib/waveColors';
 import { kmToSceneUnits, depthToY, TERRAIN_EXAGGERATION, DOMAIN_WIDTH_KM, DOMAIN } from './domain';
 
@@ -88,14 +89,40 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
   // Rampa de profundidad: la del backend o la de respaldo. Siempre presente.
   const ramp = (depthRamp && depthRamp.length > 0) ? depthRamp : fallbackDepthRamp();
 
+  // En móvil la leyenda tapaba media escena. Se colapsa a un botón "ⓘ" y el
+  // usuario la despliega cuando quiere; en pantallas grandes (lg+) va siempre
+  // abierta como antes.
+  const [open, setOpen] = useState(false);
+
   return (
-    <div
-      className="absolute bottom-3 right-3 z-10 bg-black/55 backdrop-blur-sm rounded-lg border border-white/15 px-3 py-2.5 max-w-[220px]"
-      style={{ fontFamily: LABEL_FONT }}
-    >
-      {/* Título corto */}
-      <div className="text-[12px] font-bold text-stone-100 mb-2 flex items-center gap-1.5">
-        <span className="text-[#C4553A]">◉</span> Mapa 3D de Nariño
+    <div className="absolute bottom-3 right-3 z-10" style={{ fontFamily: LABEL_FONT }}>
+      {/* Botón compacto SOLO en móvil cuando está cerrada: despliega la leyenda. */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="lg:hidden flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-bold text-stone-100"
+          aria-label="Mostrar leyenda del mapa"
+        >
+          <span className="text-[#C4553A]">◉</span> Leyenda
+        </button>
+      )}
+
+      {/* Panel de la leyenda: oculto en móvil si está cerrada; siempre visible en lg+. */}
+      <div
+        className={`${open ? 'block' : 'hidden'} lg:block bg-black/55 backdrop-blur-sm rounded-lg border border-white/15 px-3 py-2.5 max-w-[220px]`}
+      >
+      {/* Título + botón de cerrar (solo móvil) */}
+      <div className="text-[12px] font-bold text-stone-100 mb-2 flex items-center justify-between gap-1.5">
+        <span className="flex items-center gap-1.5"><span className="text-[#C4553A]">◉</span> Mapa 3D de Nariño</span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="lg:hidden text-stone-400 text-base leading-none px-1"
+          aria-label="Ocultar leyenda"
+        >
+          ×
+        </button>
       </div>
 
       {/* Símbolos principales */}
@@ -176,6 +203,7 @@ export function Legend({ scaleBar, domainWidthKm, depthRamp }: LegendProps) {
           relieve está exagerado, para no leer la escena como si fuera a escala. */}
       <div className="mt-2 pt-2 border-t border-white/10 text-[9px] leading-snug text-stone-400">
         1 km de profundidad se dibuja como {fmtNum(HORIZ_PER_DEPTH_KM)} km horizontales; relieve exagerado {fmtNum(RELIEF_EXAGGERATION, 1)} veces.
+      </div>
       </div>
     </div>
   );
