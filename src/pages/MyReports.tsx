@@ -425,22 +425,19 @@ export function MyReports({ onNavigate }: Props) {
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C4553A]/5 text-[#C4553A] border border-[#C4553A]/20 text-xs font-bold">
                           <FileDown size={14} /> PDF
                         </button>
-                        {map3d ? (
-                          <>
-                            <button onClick={() => exportMap3dCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
-                              <Download size={14} /> CSV
-                            </button>
-                            <button onClick={() => exportMap3dJson(r)} title="Descargar JSON" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#6B5B95]/5 text-[#6B5B95] border border-[#6B5B95]/20 text-xs font-bold">
-                              <FileText size={14} /> JSON
-                            </button>
-                          </>
-                        ) : (
-                          <button onClick={() => exportJSON(r)} title="Descargar datos JSON" className="p-2 rounded-lg bg-stone-50 text-stone-500 border border-stone-200">
-                            <Download size={14} />
+                        {map3d && (
+                          <button onClick={() => exportMap3dCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
+                            <Download size={14} /> CSV
                           </button>
                         )}
-                        <button onClick={() => setToDelete(r)} title="Eliminar" className="p-2 rounded-lg bg-red-50 text-red-500 border border-red-100">
-                          <Trash2 size={14} />
+                        <button
+                          onClick={() => map3d ? exportMap3dJson(r) : exportJSON(r)}
+                          title="Descargar JSON"
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#6B5B95]/5 text-[#6B5B95] border border-[#6B5B95]/20 text-xs font-bold">
+                          <FileText size={14} /> JSON
+                        </button>
+                        <button onClick={() => setToDelete(r)} title="Eliminar" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-500 border border-red-100 text-xs font-bold">
+                          <Trash2 size={14} /> Eliminar
                         </button>
                       </div>
                     </div>
