@@ -64,16 +64,12 @@ export async function loadCatalog(): Promise<CatalogRow[]> {
       const { data, error } = await withTimeout(
         supabase
           .from('seismic_events')
-          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source')
+          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source, location_source')
           .order('event_date', { ascending: false }),
         6000,
       );
       if (!error && data && data.length > 0) {
-        // Asignar location_source si no vino de la BD (columna no migrada).
-        return (data as CatalogRow[]).map(r => ({
-          ...r,
-          location_source: r.location_source ?? (r.event_type === 'tectonic' ? 'centroide de estaciones' : null),
-        }));
+        return data as CatalogRow[];
       }
       // data vacío o error → respaldo JSON (p.ej. seed aún no aplicado).
     } catch {
