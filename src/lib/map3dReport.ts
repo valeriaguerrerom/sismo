@@ -498,6 +498,10 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     const traceH = 24, gap = 7;
     // Reserva al menos la primera traza para que no quede el título solo.
     section(`Sismograma triaxial · Estación ${data.seismogram.station}`, traceH + gap + 4);
+    // Nota aclaratoria: estos son sintéticos generados por el motor FDM, no datos reales MiniSEED.
+    doc.setFontSize(8); doc.setFont('Inter', 'normal'); doc.setTextColor(180, 150, 70);
+    doc.text('Sismograma sintético generado por el motor de Diferencias Finitas (FDM) para esta estación.', MARGIN, y);
+    y += 4;
     const traces: [number[], [number, number, number], string][] = [
       [sg.north, COLORS.green, 'Norte (N)'],
       [sg.east, COLORS.primary, 'Este (E)'],

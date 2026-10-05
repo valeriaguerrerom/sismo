@@ -116,7 +116,7 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds,
         >
           {area.label && (
             <Popup>
-              <div style={{ fontSize: 12 }}>{area.label}</div>
+              <div style={{ fontSize: 12, maxWidth: 250 }}>{area.label}</div>
             </Popup>
           )}
         </Circle>
@@ -146,7 +146,7 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds,
                 </LeafletTooltip>
               )}
               <Popup>
-                <div style={{ fontSize: 12 }}>
+                <div style={{ fontSize: 12, maxWidth: 250 }}>
                   <strong>{p.label}</strong>
                   {p.sublabel && <div style={{ color: '#78716c' }}>{p.sublabel}</div>}
                 </div>
@@ -174,7 +174,7 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds,
               </LeafletTooltip>
             )}
             <Popup>
-              <div style={{ fontSize: 12 }}>
+              <div style={{ fontSize: 12, maxWidth: 250 }}>
                 <strong>{p.label}</strong>
                 {p.sublabel && <div style={{ color: '#78716c' }}>{p.sublabel}</div>}
               </div>

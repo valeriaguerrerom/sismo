@@ -494,14 +494,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epicenter]);
 
-  // Recalcular al cambiar SOLO el modelo: actualiza tP/tS sin regenerar trazas
-  // ni cortar la animación. (La primera vez lo cubre el effect de epicentro.)
-  const modelFirstRef = useRef(true);
-  useEffect(() => {
-    if (modelFirstRef.current) { modelFirstRef.current = false; return; }
-    if (epicenter) recomputeTravelTimes(epicenter, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model]);
+  // REMOVED: auto-recompute on model change (UX issue - user expects manual control)
+  // Users must click "Recalcular con estos valores" button to update travel times
+  // when changing Vp, Vs, or density sliders.
 
   // ── Cargar sintéticos por estación, de forma INCREMENTAL ──
   // Cada estación actualiza `traces` y `loadingTraces` en cuanto termina, para
@@ -859,7 +854,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // ── Progreso legible de la generación (para el overlay a pantalla completa) ──
   const genTotal = travelTimes.length;
   const genDone = stationsWithSignal;
-  const genPercent = genTotal > 0 ? Math.round((genDone / genTotal) * 100) : 0;
+  // Durante el cálculo de tiempos de viaje mostramos 5% para dar feedback inmediato.
+  // Una vez calculados, el % refleja las estaciones completadas (5%-100%).
+  const genPercent = loadingTT 
+    ? 5 
+    : genTotal > 0 
+      ? Math.max(5, Math.round((genDone / genTotal) * 100)) 
+      : 0;
   // Paso actual: primero los tiempos de viaje; luego la estación más cercana que
   // aún está en cola (loadingTraces conserva las pendientes en orden de distancia).
   const nextPending = travelTimes.find(tt => loadingTraces.has(tt.code));
@@ -1178,10 +1179,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           {showTriaxial && selectedStation && (
             <div className="absolute bottom-0 left-0 right-0 z-10 bg-black/70 backdrop-blur-sm border-t border-white/10 p-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] font-bold text-stone-200">
-                  Panel triaxial, {selectedStation}, {showReal[selectedStation] ? 'señal real (1 a 10 Hz)' : 'sintético FDM'}
-                </span>
-                <button onClick={() => setShowTriaxial(false)} aria-label="Cerrar panel triaxial" title="Cerrar" className="text-stone-400"><X size={14} /></button>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-bold text-stone-200">
+                    Panel triaxial, {selectedStation}, {showReal[selectedStation] ? 'señal real (1 a 10 Hz)' : 'sintético FDM'}
+                  </span>
+                  {!showReal[selectedStation] && (
+                    <span className="text-[9px] text-[#D4A853] leading-tight">
+                      Sismograma sintético generado con Diferencias Finitas. No coincide con datos reales MiniSEED.
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => setShowTriaxial(false)} aria-label="Cerrar panel triaxial" title="Cerrar" className="text-stone-400 flex-shrink-0"><X size={14} /></button>
               </div>
               <TriaxialTraces
                 syn={traces[selectedStation] ?? null}
@@ -1301,7 +1309,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               </p>
             )}
             <ParamSlider label="ρ" value={density} min={1800} max={3300} step={50} unit="kg/m³" onChange={setDensity} />
-            <ParamSlider label="Prof." value={depthKm} min={0} max={200} step={1} unit="km" onChange={(v) => { setDepthKm(v); setDepthAssumed(false); if (epicenter) setEpicenter({ ...epicenter, depthKm: v }); }} />
+            <ParamSlider label="Prof." value={depthKm} min={0.1} max={200} step={0.1} unit="km" onChange={(v) => { setDepthKm(v); setDepthAssumed(false); if (epicenter) setEpicenter({ ...epicenter, depthKm: v }); }} />
             {depthAssumed && currentEventId && (
               <p className="text-[10px] text-[#D4A853] leading-snug -mt-1">
                 Profundidad no disponible en el catálogo; se usa {depthKm} km para la simulación.

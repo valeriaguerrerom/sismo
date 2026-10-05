@@ -6,7 +6,7 @@ import {
   Waves, AlertTriangle, HelpCircle,
 } from '../lib/icons';
 import { downloadReportPdf, SavedResults } from '../lib/reportPdf';
-import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dReportOptions } from '../lib/map3dReport';
+import { downloadMap3dPdf, downloadMap3dCsv, downloadMap3dJson, type Map3dReportData, type Map3dReportOptions } from '../lib/map3dReport';
 import type { SimulationParams, Page } from '../lib/types';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { Pagination } from '../components/ui/Pagination';
@@ -179,6 +179,11 @@ export function MyReports({ onNavigate }: Props) {
   /** Descarga el CSV (solo aplica a reportes del Mapa 3D). */
   const exportMap3dCsv = (report: Report) => {
     if (isMap3d(report)) downloadMap3dCsv(report.results.map3d!, map3dOpts(report));
+  };
+
+  /** Descarga el JSON (solo aplica a reportes del Mapa 3D). */
+  const exportMap3dJson = (report: Report) => {
+    if (isMap3d(report)) downloadMap3dJson(report.results.map3d!, map3dOpts(report));
   };
 
   // ── Aplicar filtros + orden ──
@@ -421,9 +426,14 @@ export function MyReports({ onNavigate }: Props) {
                           <FileDown size={14} /> PDF
                         </button>
                         {map3d ? (
-                          <button onClick={() => exportMap3dCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
-                            <Download size={14} /> CSV
-                          </button>
+                          <>
+                            <button onClick={() => exportMap3dCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
+                              <Download size={14} /> CSV
+                            </button>
+                            <button onClick={() => exportMap3dJson(r)} title="Descargar JSON" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#6B5B95]/5 text-[#6B5B95] border border-[#6B5B95]/20 text-xs font-bold">
+                              <FileText size={14} /> JSON
+                            </button>
+                          </>
                         ) : (
                           <button onClick={() => exportJSON(r)} title="Descargar datos JSON" className="p-2 rounded-lg bg-stone-50 text-stone-500 border border-stone-200">
                             <Download size={14} />
