@@ -271,7 +271,7 @@ function AppContent() {
           : { minHeight: '100vh' }
       }
     >
-      <Navbar currentPage={page} authMode={authMode} onNavigate={navigate} />
+      <Navbar currentPage={page} authMode={authMode} onNavigate={navigate} darkMode={page === 'map3d'} />
       {/* `main` ocupa AL MENOS una pantalla física completa (compensando el zoom
           de pantallas anchas): así el contenido de cada página llena el alto
           visible y el footer queda SIEMPRE por debajo del pliegue, visible solo

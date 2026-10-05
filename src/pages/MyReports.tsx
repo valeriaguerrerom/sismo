@@ -3,13 +3,14 @@ import { useAuth } from '../lib/authContext';
 import { supabase } from '../lib/supabase';
 import {
   FileText, Trash2, Download, Calendar, FileDown, Search, X, Activity, Box,
-  Waves, AlertTriangle,
+  Waves, AlertTriangle, HelpCircle,
 } from '../lib/icons';
 import { downloadReportPdf, SavedResults } from '../lib/reportPdf';
 import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dReportOptions } from '../lib/map3dReport';
 import type { SimulationParams, Page } from '../lib/types';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { Pagination } from '../components/ui/Pagination';
+import { Tooltip } from '../components/ui/Tooltip';
 
 /** Reportes por página en la lista. */
 const REPORTS_PER_PAGE = 8;
@@ -345,6 +346,9 @@ export function MyReports({ onNavigate }: Props) {
                     <input type="checkbox" checked={onlySeismograms} onChange={e => setOnlySeismograms(e.target.checked)}
                       className="accent-[#C4553A]" />
                     Con sismogramas
+                    <Tooltip content="Filtra solo reportes que incluyen las series de tiempo completas (waveData). Los reportes sin sismogramas solo guardan parámetros y métricas agregadas.">
+                      <HelpCircle size={12} className="text-stone-400" />
+                    </Tooltip>
                   </label>
                 </div>
               </div>

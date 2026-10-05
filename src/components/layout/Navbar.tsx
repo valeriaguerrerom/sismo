@@ -10,9 +10,11 @@ interface NavbarProps {
   /** Modo activo de la página de autenticación (para marcar el botón correcto). */
   authMode?: 'login' | 'register' | 'forgot';
   onNavigate: (page: Page, opts?: { register?: boolean }) => void;
+  /** Modo oscuro (solo para Mapa 3D). */
+  darkMode?: boolean;
 }
 
-export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
+export function Navbar({ currentPage, authMode, onNavigate, darkMode }: NavbarProps) {
   const { user, signOut } = useAuth();
   // Menú desplegable en móvil (bajo el botón hamburguesa).
   const [menuOpen, setMenuOpen] = useState(false);
@@ -42,7 +44,11 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
   const authLoginActive = currentPage === 'auth' && authMode !== 'register';
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-40 bg-[#FAFAF8]/90 backdrop-blur-md border-b border-stone-200/60">
+    <nav className={`fixed top-0 left-0 right-0 z-40 backdrop-blur-md border-b ${
+      darkMode 
+        ? 'bg-[#1A1A2E]/95 border-stone-700/60' 
+        : 'bg-[#FAFAF8]/90 border-stone-200/60'
+    }`}>
       <div className="app-container">
         <div className="flex items-center justify-between h-16 gap-2">
           <button onClick={() => go('home')} className="flex items-center flex-shrink-0">
@@ -56,24 +62,30 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
               return (
                 <button key={item.id} data-tour={`nav-${item.id}`} onClick={() => onNavigate(item.id)} title={item.label}
                   className={`relative flex items-center gap-1.5 px-2.5 lg:px-3.5 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap ${
-                    active ? 'text-[#C4553A]' : 'text-stone-500 nav-link'
+                    active 
+                      ? darkMode ? 'text-[#D4A853]' : 'text-[#C4553A]'
+                      : darkMode ? 'text-stone-300 nav-link-dark' : 'text-stone-500 nav-link'
                   }`}>
                   {item.icon}
                   <span>{item.label}</span>
                   {active && (
-                    <span className="absolute left-2.5 right-2.5 lg:left-3.5 lg:right-3.5 -bottom-px h-0.5 rounded-full bg-[#C4553A]" />
+                    <span className={`absolute left-2.5 right-2.5 lg:left-3.5 lg:right-3.5 -bottom-px h-0.5 rounded-full ${
+                      darkMode ? 'bg-[#D4A853]' : 'bg-[#C4553A]'
+                    }`} />
                   )}
                 </button>
               );
             })}
 
-            <div className="w-px h-6 bg-stone-200 mx-2" />
+            <div className={`w-px h-6 mx-2 ${darkMode ? 'bg-stone-700' : 'bg-stone-200'}`} />
 
             {user ? (
               <>
                 <button data-tour="nav-reports" onClick={() => onNavigate('reports')} title="Mis reportes"
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium ${
-                    currentPage === 'reports' ? 'bg-[#2D6A4F] text-white' : 'text-stone-500'
+                    currentPage === 'reports' 
+                      ? 'bg-[#2D6A4F] text-white' 
+                      : darkMode ? 'text-stone-300' : 'text-stone-500'
                   }`}>
                   <FileText size={15} />
                   <span className="hidden lg:inline">Reportes</span>
@@ -82,7 +94,9 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                 {user.role === 'admin' && (
                   <button onClick={() => onNavigate('admin')} title="Administración"
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium ${
-                      currentPage === 'admin' ? 'bg-[#1A1A2E] text-white' : 'text-stone-500'
+                      currentPage === 'admin' 
+                        ? 'bg-[#1A1A2E] text-white' 
+                        : darkMode ? 'text-stone-300' : 'text-stone-500'
                     }`}>
                     <Settings size={15} />
                     <span className="hidden lg:inline">Admin</span>
@@ -93,8 +107,8 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                   <button onClick={() => onNavigate('profile')} title="Mi perfil de investigador"
                     className={`flex items-center gap-2 rounded-lg px-1.5 py-1 ${currentPage === 'profile' ? 'bg-[#C4553A]/10' : ''}`}>
                     <div className="hidden lg:block text-right leading-tight">
-                      <div className="text-[12px] font-semibold text-[#1A1A2E] max-w-[140px] truncate">{user.full_name || user.email}</div>
-                      <div className={`text-[10px] ${user.profileComplete ? 'text-stone-400' : 'text-[#D4A853] font-semibold'}`}>
+                      <div className={`text-[12px] font-semibold max-w-[140px] truncate ${darkMode ? 'text-stone-100' : 'text-[#1A1A2E]'}`}>{user.full_name || user.email}</div>
+                      <div className={`text-[10px] ${user.profileComplete ? (darkMode ? 'text-stone-400' : 'text-stone-400') : 'text-[#D4A853] font-semibold'}`}>
                         {user.profileComplete ? ROLE_LABELS[user.role] : 'Perfil incompleto'}
                       </div>
                     </div>
@@ -105,7 +119,11 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
                   </button>
                   <button
                     onClick={signOut}
-                    className="group relative text-[#5A5A5A] p-1.5 rounded-lg hover:text-[#C4553A] hover:bg-[#C4553A]/10"
+                    className={`group relative p-1.5 rounded-lg ${
+                      darkMode 
+                        ? 'text-stone-400 hover:text-[#D4A853] hover:bg-[#D4A853]/10' 
+                        : 'text-[#5A5A5A] hover:text-[#C4553A] hover:bg-[#C4553A]/10'
+                    }`}
                     title="Cerrar sesión"
                     aria-label="Cerrar sesión"
                   >
@@ -141,7 +159,11 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
           {/* ─── Botón hamburguesa (solo móvil, <md) ─── */}
           <button
             onClick={() => setMenuOpen(o => !o)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg text-stone-600 hover:bg-stone-100"
+            className={`md:hidden flex items-center justify-center w-10 h-10 rounded-lg ${
+              darkMode 
+                ? 'text-stone-300 hover:bg-stone-700' 
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
             aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
             aria-expanded={menuOpen}
           >
@@ -152,7 +174,11 @@ export function Navbar({ currentPage, authMode, onNavigate }: NavbarProps) {
 
       {/* ─── Menú desplegable móvil ─── */}
       {menuOpen && (
-        <div className="md:hidden border-t border-stone-200/60 bg-[#FAFAF8]">
+        <div className={`md:hidden border-t ${
+          darkMode 
+            ? 'bg-[#1A1A2E] border-stone-700/60' 
+            : 'bg-[#FAFAF8] border-stone-200/60'
+        }`}>
           <div className="app-container py-3 flex flex-col gap-1">
             {mainNav.map(item => {
               const active = currentPage === item.id;

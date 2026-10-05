@@ -896,12 +896,14 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
           {/* Mapa (en móvil va DEBAJO de la lista) */}
           <div data-tour="exp-mapa" className="order-2 lg:sticky lg:top-20 h-[320px] lg:h-[calc(100vh-140px)]">
             <div className="bg-white rounded-xl border border-stone-200/60 p-2 h-full flex flex-col">
-              <div className="flex items-center gap-1.5 px-2 py-1.5">
-                <MapPin size={13} className={source === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
-                <span className="text-xs font-bold text-[#1A1A2E]">
-                  {source === 'volcanic' ? 'Mapa del Volcán Galeras' : 'Mapa de estaciones'}
-                </span>
-                <span className="text-[10px] text-stone-400 ml-auto">
+              <div className="flex flex-col gap-0.5 px-2 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <MapPin size={13} className={source === 'volcanic' ? 'text-[#C4553A]' : 'text-[#2D6A4F]'} />
+                  <span className="text-xs font-bold text-[#1A1A2E]">
+                    {source === 'volcanic' ? 'Mapa del Volcán Galeras' : 'Mapa de estaciones'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-stone-400 pl-5">
                   {source === 'volcanic' ? 'Zona de origen' : 'Red del SGC en Nariño'}
                 </span>
               </div>

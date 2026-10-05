@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
-import { Download, FileText, Grid3X3, Image, FileDown, Save, Check, Info, ChevronRight } from '../../lib/icons';
+import { Download, FileText, Grid3X3, FileDown, Save, Check, Info, ChevronRight } from '../../lib/icons';
 import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
 import { computeRealRecordMetrics } from '../../lib/realRecordMetrics';
 import { computeEventWindow } from '../../lib/waveWindow';
@@ -8,7 +8,6 @@ import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
 import { renderCrossSectionPng, computeGlobalPeak, fontScaleForPdf } from '../../lib/crossSectionRender';
 import { renderParticleMotionPng } from '../../lib/particleMotionRender';
-import { exportPNG } from '../../lib/exportImage';
 import { AccordionSection } from './AccordionSection';
 import { Tooltip } from '../ui/Tooltip';
 import { VolcanoLoader } from '../ui/VolcanoLoader';
@@ -46,6 +45,33 @@ function exportCSV(result: SimulationResult) {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'sismograma_narino.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportJSON(result: SimulationResult) {
+  const data = {
+    metadata: {
+      source: 'SismoNariño - Simulador Triaxial',
+      exportDate: new Date().toISOString(),
+      sampleRate: 1 / (result.gridInfo?.dtAdjusted ?? 0.02),
+      duration: result.duration,
+      numSamples: result.waveData.time.length,
+    },
+    parameters: result.params,
+    metrics: {
+      maxAmplitude: result.maxAmplitude,
+      dominantFrequency: result.dominantFrequency,
+      pArrival: result.pArrival,
+      sArrival: result.sArrival,
+    },
+    waveData: result.waveData,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sismograma_narino.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -280,6 +306,31 @@ function RealRecordResultsPanel({
     URL.revokeObjectURL(url);
   };
 
+  const exportJsonReal = () => {
+    const data = {
+      metadata: {
+        source: 'SismoNariño - Registro Real',
+        label: realRecord.label,
+        exportDate: new Date().toISOString(),
+        sampleRate: 1 / (realRecord.waveData.time[1] - realRecord.waveData.time[0]),
+        duration: metrics.duration,
+        numSamples: realRecord.waveData.time.length,
+      },
+      parameters: realParams,
+      metrics: {
+        maxAmplitude: metrics.maxAmplitude,
+        dominantFrequency: metrics.dominantFrequency,
+        eventWindow: metrics.eventWindow,
+      },
+      waveData: realRecord.waveData,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'registro_real_narino.json'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportPdfReal = async () => {
     setPdfBusy(true);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -392,8 +443,8 @@ function RealRecordResultsPanel({
               <button onClick={exportCsvReal} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <Download size={14} /> CSV
               </button>
-              <button onClick={() => exportPNG()} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                <Image size={14} /> PNG
+              <button onClick={exportJsonReal} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <FileText size={14} /> JSON
               </button>
               <button onClick={exportPdfReal} disabled={!hasSaved || pdfBusy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileDown size={14} /> {pdfBusy ? '…' : 'PDF'}
@@ -688,8 +739,8 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
               <button onClick={() => exportCSV(result)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <Download size={14} /> CSV
               </button>
-              <button onClick={() => exportPNG()} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                <Image size={14} /> PNG
+              <button onClick={() => exportJSON(result)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <FileText size={14} /> JSON
               </button>
               <button onClick={() => setPdfDialog(true)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileDown size={14} /> PDF

@@ -672,3 +672,53 @@ export function downloadMap3dCsv(data: Map3dReportData, opts: Map3dReportOptions
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** Genera y descarga el JSON del reporte del Mapa 3D. */
+export function downloadMap3dJson(data: Map3dReportData, _opts: Map3dReportOptions): void {
+  const jsonData = {
+    metadata: {
+      source: 'SismoNariño - Mapa 3D',
+      title: data.title,
+      author: data.author,
+      createdAt: data.createdAt,
+      exportDate: new Date().toISOString(),
+    },
+    epicenter: data.epicenter,
+    parameters: {
+      sourceType: data.sourceType,
+      magnitude: data.magnitude,
+      model: data.model,
+      vp: data.vp,
+      vs: data.vs,
+      density: data.density,
+    },
+    stations: data.stations.map(s => ({
+      code: s.code,
+      name: s.name,
+      lat: s.lat,
+      lon: s.lon,
+      distanceKm: s.distanceKm,
+      tP: s.tP,
+      tS: s.tS,
+    })),
+    seismograms: data.seismogram ? {
+      station: data.seismogram.station,
+      tP: data.seismogram.tP,
+      tS: data.seismogram.tS,
+      waveData: {
+        t: data.seismogram.t,
+        north: data.seismogram.north,
+        east: data.seismogram.east,
+        vertical: data.seismogram.vertical,
+      },
+    } : null,
+  };
+
+  const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mapa3d_${data.title.replace(/[^\w-]+/g, '_').slice(0, 60)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

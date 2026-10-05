@@ -38,7 +38,7 @@ import { supabase } from '../lib/supabase';
 import { startTour } from '../tours/useTour';
 import { buildMapa3dSteps } from '../tours/mapa3d';
 import {
-  downloadMap3dPdf, downloadMap3dCsv, DEFAULT_MAP3D_OPTIONS,
+  downloadMap3dPdf, downloadMap3dCsv, downloadMap3dJson, DEFAULT_MAP3D_OPTIONS,
   type Map3dReportData, type Map3dReportOptions,
 } from '../lib/map3dReport';
 import { Pagination } from '../components/ui/Pagination';
@@ -198,13 +198,15 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
 
   const [showReport, setShowReport] = useState(false);
   const [reportOpts, setReportOpts] = useState<Map3dReportOptions>(DEFAULT_MAP3D_OPTIONS);
-  const [reportFormat, setReportFormat] = useState<'pdf' | 'csv'>('pdf');
+  const [reportFormat, setReportFormat] = useState<'pdf' | 'csv' | 'json'>('pdf');
   const [savingReport, setSavingReport] = useState(false);
   const [reportMsg, setReportMsg] = useState<string | null>(null);
   // El reporte debe GUARDARSE antes de poder descargarlo (CSV/PDF). Este flag
   // se pone en true cuando el guardado en "Mis Reportes" tuvo éxito. Para
   // usuarios sin sesión no hay guardado, así que se permite descargar directo.
   const [reportSaved, setReportSaved] = useState(false);
+  // Título personalizado del reporte (editable por el usuario antes de guardar).
+  const [reportTitle, setReportTitle] = useState('');
   // Contenedor de la escena 3D (para capturar su canvas en el reporte PDF).
   const sceneContainerRef = useRef<HTMLDivElement>(null);
   // Silueta del departamento de Nariño para el mapa del reporte (se carga una vez).
@@ -213,13 +215,32 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   /**
    * Captura el canvas WebGL de la escena 3D como PNG (data URL).
    * Requiere preserveDrawingBuffer en el renderer (activado en Scene3D).
-   * Devuelve null si no encuentra el canvas o falla la captura.
+   * 
+   * @param scale Factor de escala para aumentar la resolución (1 = tamaño actual, 2 = doble, etc.)
+   * @returns Data URL de la imagen PNG, o null si falla
    */
-  const captureScene = useCallback((): string | null => {
-    const canvas = sceneContainerRef.current?.querySelector('canvas');
+  const captureScene = useCallback((scale: number = 1): string | null => {
+    const canvas = sceneContainerRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
     if (!canvas) return null;
     try {
-      return canvas.toDataURL('image/png');
+      // Si scale === 1, captura directa sin procesamiento
+      if (scale === 1) return canvas.toDataURL('image/png');
+
+      // Para scale > 1, crear un canvas temporal con mayor resolución
+      const tempCanvas = document.createElement('canvas');
+      const ctx = tempCanvas.getContext('2d');
+      if (!ctx) return canvas.toDataURL('image/png');
+
+      // Dimensiones escaladas
+      tempCanvas.width = canvas.width * scale;
+      tempCanvas.height = canvas.height * scale;
+
+      // Dibujar el canvas original escalado en el temporal
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+      return tempCanvas.toDataURL('image/png');
     } catch (e) {
       console.warn('[Map3D] No se pudo capturar la escena 3D:', e);
       return null;
@@ -237,6 +258,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
    * con una estación seleccionada; si no hay, se omite. Al final restaura la
    * vista oblicua por defecto. La reproducción del sismo sigue corriendo, así
    * que las capturas muestran los frentes de onda en movimiento.
+   * 
+   * Las capturas se realizan a escala 2x para mayor calidad en el PDF.
    */
   const captureAllViews = useCallback(async (): Promise<{ label: string; image: string }[]> => {
     const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -249,7 +272,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     for (const v of views) {
       setView(v.view);
       await wait(950); // transición de cámara (800 ms) + margen para repintar
-      const img = captureScene();
+      const img = captureScene(2); // escala 2x para mayor calidad
       if (img) out.push({ label: v.label, image: img });
     }
     // Restaurar la vista por defecto.
@@ -693,7 +716,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const fmtTime = (s: number) => {
     const m = Math.floor(s / 60);
     const ss = Math.floor(s % 60);
-    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    const dec = Math.floor((s % 1) * 10);
+    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${dec}`;
   };
 
   // ── Reporte del Mapa 3D ──
@@ -706,9 +730,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     if (!epicenter) return null;
     const ev = events.find(e => e.id === currentEventId) ?? null;
     const fecha = new Date().toISOString().slice(0, 10);
-    const title = ev
+    const autoTitle = ev
       ? `Mapa 3D · ${ev.label}`
       : `Mapa 3D · ${epicenter.lat.toFixed(2)}, ${epicenter.lon.toFixed(2)} · ${fecha}`;
+    // Usa el título personalizado si el usuario lo ingresó; de lo contrario, el auto-generado.
+    const title = reportTitle.trim() || autoTitle;
 
     // Sismograma de la estación seleccionada (si hay y se pidió esa sección).
     const syn = selectedStation ? traces[selectedStation] : null;
@@ -763,13 +789,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
     };
-  }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes, captureScene]);
+  }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes, captureScene, reportTitle]);
 
   /** Descarga el reporte en el formato elegido (PDF o CSV). */
   const handleDownloadReport = async () => {
     // Para PDF con la sección "Vista 3D" activa, se capturan las tres vistas
     // (Norte/Corte/Superior) moviendo la cámara mientras corre el sismo. El CSV
-    // no lleva imágenes, así que no se captura nada.
+    // y JSON no llevan imágenes, así que no se captura nada.
     let views: { label: string; image: string }[] | undefined;
     if (reportFormat === 'pdf' && reportOpts.vista3d) {
       setCapturingViews(true);
@@ -779,31 +805,43 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     const data = buildReportData(views);
     if (!data) return;
     if (reportFormat === 'pdf') downloadMap3dPdf(data, reportOpts);
+    else if (reportFormat === 'json') downloadMap3dJson(data, reportOpts);
     else downloadMap3dCsv(data, reportOpts);
   };
 
   /** Guarda el reporte en "Mis Reportes" (Supabase) para regenerarlo luego. */
   const handleSaveReport = async () => {
-    const data = buildReportData();
-    if (!data || !supabase || !user) return;
+    if (!supabase || !user) return;
     setSavingReport(true);
     setReportMsg(null);
-    // Se guarda con report_type='map3d' + los datos y opciones para regenerar.
-    // La captura de la escena 3D (sceneImage) NO se persiste: es una imagen
-    // pesada que solo tiene sentido en la descarga inmediata; al regenerar
-    // desde "Mis Reportes" no hay escena en pantalla que capturar.
-    const dataToStore = { ...data, sceneImage: null };
+
+    // Si el PDF incluye la vista 3D, capturar las 3 vistas (Norte/Corte/Superior)
+    // para que el reporte regenerado desde "Mis Reportes" las incluya.
+    let views: { label: string; image: string }[] | undefined;
+    if (reportFormat === 'pdf' && reportOpts.vista3d) {
+      setCapturingViews(true);
+      try { views = await captureAllViews(); }
+      catch (e) { console.warn('[Map3D] No se pudieron capturar las vistas:', e); }
+      finally { setCapturingViews(false); }
+    }
+
+    const data = buildReportData(views);
+    if (!data) { setSavingReport(false); return; }
+
+    // Se guarda con report_type='map3d' + los datos completos (con las vistas
+    // capturadas si se pidió vista3d). Al regenerar desde "Mis Reportes", el
+    // PDF ya tendrá las 3 vistas sin necesidad de volver a capturarlas.
     const { error } = await supabase.from('simulation_reports').insert({
       user_id: user.id,
       title: data.title,
       params: { sourceType, magnitude, depth: epicenter?.depthKm, model, vp, vs, density },
-      results: { report_type: 'map3d', map3d: dataToStore, options: reportOpts },
+      results: { report_type: 'map3d', map3d: data, options: reportOpts },
     });
     if (error) {
       setReportMsg('No se pudo guardar. Inténtalo de nuevo.');
       console.error('Guardar reporte Mapa 3D:', error.message);
     } else {
-      setReportMsg('¡Guardado! Ya puedes descargar el CSV o el PDF, y verlo en "Mis Reportes".');
+      setReportMsg('¡Guardado! Ya puedes descargar en el formato elegido, y verlo en "Mis Reportes".');
       setReportSaved(true); // habilita la descarga
     }
     setSavingReport(false);
@@ -1293,7 +1331,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               block
             >
               <button
-                onClick={() => { setReportMsg(null); setReportSaved(false); setShowReport(true); }}
+                onClick={() => { setReportMsg(null); setReportSaved(false); setReportTitle(''); setShowReport(true); }}
                 disabled={!epicenter || travelTimes.length === 0}
                 className="w-full flex items-center justify-center gap-1.5 text-[11px] font-bold py-2 rounded-lg bg-[#2D6A4F] text-white disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -1552,9 +1590,50 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             </div>
 
             <div className="px-4 py-3 space-y-4">
-              {/* Qué incluir */}
+              {/* Título personalizado */}
               <div>
-                <div className="text-[11px] font-semibold text-stone-300 mb-2">¿Qué incluir?</div>
+                <label className="text-[11px] font-semibold text-stone-300 mb-1.5 block">Título del reporte</label>
+                <input
+                  type="text"
+                  value={reportTitle}
+                  onChange={e => { setReportTitle(e.target.value); setReportSaved(false); }}
+                  placeholder={
+                    events.find(e => e.id === currentEventId)
+                      ? `Mapa 3D · ${events.find(e => e.id === currentEventId)?.label}`
+                      : `Mapa 3D · ${epicenter?.lat.toFixed(2)}, ${epicenter?.lon.toFixed(2)} · ${new Date().toISOString().slice(0, 10)}`
+                  }
+                  className="w-full px-2.5 py-2 text-[11px] rounded-lg bg-white/5 border border-white/10 text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-[#2D6A4F]"
+                />
+                <p className="text-[9px] text-stone-500 mt-1">Opcional. Si está vacío, se usa el título automático.</p>
+              </div>
+
+              {/* Formato */}
+              <div>
+                <div className="text-[11px] font-semibold text-stone-300 mb-1">Formato</div>
+                <div className="flex gap-1.5">
+                  {(['json', 'csv', 'pdf'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setReportFormat(f)}
+                      className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg border ${
+                        reportFormat === f ? 'bg-[#C4553A] text-white border-[#C4553A]' : 'bg-white/5 text-stone-400 border-white/10'
+                      }`}
+                    >
+                      {f.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9px] text-stone-500 mt-1.5">
+                  {reportFormat === 'json' && 'Datos completos en formato JSON: epicentro, parámetros, tiempos de viaje, sismogramas y metadatos.'}
+                  {reportFormat === 'csv' && 'Tabla de tiempos de viaje por estación en formato CSV (compatible con Excel).'}
+                  {reportFormat === 'pdf' && 'Documento completo con las secciones seleccionadas abajo.'}
+                </p>
+              </div>
+
+              {/* Qué incluir (solo para PDF) */}
+              {reportFormat === 'pdf' && (
+              <div>
+                <div className="text-[11px] font-semibold text-stone-300 mb-2">¿Qué incluir en el PDF?</div>
                 <div className="space-y-2">
                   {([
                     ['epicentro', 'Epicentro y fuente'],
@@ -1582,24 +1661,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   })}
                 </div>
               </div>
-
-              {/* Formato */}
-              <div>
-                <div className="text-[11px] font-semibold text-stone-300 mb-1">Formato</div>
-                <div className="flex gap-1.5">
-                  {(['pdf', 'csv'] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setReportFormat(f)}
-                      className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg border ${
-                        reportFormat === f ? 'bg-[#C4553A] text-white border-[#C4553A]' : 'bg-white/5 text-stone-400 border-white/10'
-                      }`}
-                    >
-                      {f.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {reportMsg && (
                 <div className="text-[10px] text-[#2D6A4F] bg-[#2D6A4F]/10 rounded-lg px-2.5 py-1.5 border border-[#2D6A4F]/20">
@@ -1614,11 +1676,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 <div className="space-y-2 pt-1">
                   <button
                     onClick={handleSaveReport}
-                    disabled={savingReport || reportSaved}
+                    disabled={savingReport || reportSaved || capturingViews}
                     className="w-full flex items-center justify-center gap-1.5 bg-[#2D6A4F] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
                   >
                     {reportSaved ? <Check size={14} /> : <Save size={14} />}
-                    {savingReport ? 'Guardando…' : reportSaved ? 'Guardado' : '1. Guardar en Mis Reportes'}
+                    {capturingViews ? 'Capturando vistas…' : savingReport ? 'Guardando…' : reportSaved ? 'Guardado' : '1. Guardar en Mis Reportes'}
                   </button>
                   <button
                     onClick={handleDownloadReport}

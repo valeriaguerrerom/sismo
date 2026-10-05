@@ -131,8 +131,29 @@
 .nav-link:hover::after { transform: scaleX(1); }
 /* Variante verde bosque (p. ej. "Registrarse"). */
 .nav-link-forest { --nav-accent: #2D6A4F; }
+/* Variante modo oscuro (para Mapa 3D). */
+.nav-link-dark {
+  position: relative;
+  --nav-accent: #D4A853;
+  transition: color 0.2s ease-in-out;
+}
+.nav-link-dark::after {
+  content: '';
+  position: absolute;
+  left: 0.625rem;
+  right: 0.625rem;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 9999px;
+  background-color: var(--nav-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s ease-in-out;
+}
+.nav-link-dark:hover { color: var(--nav-accent); }
+.nav-link-dark:hover::after { transform: scaleX(1); }
 @media (prefers-reduced-motion: reduce) {
-  .nav-link, .nav-link::after { transition: none; }
+  .nav-link, .nav-link::after, .nav-link-dark, .nav-link-dark::after { transition: none; }
 }
 
 .btn-hover {
