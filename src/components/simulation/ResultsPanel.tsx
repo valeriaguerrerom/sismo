@@ -508,6 +508,7 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
     params: true, metrics: true, seismograms: true, crossSection: true, particleMotion: true, interpretation: true,
   });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   // ── Guardar como reporte (obligatorio ANTES de exportar) ──
   const { user } = useAuth();
@@ -802,17 +803,36 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
                 );
               })}
             </div>
+            {pdfError && (
+              <p role="alert" className="text-[11px] text-red-700 bg-red-50 border border-red-100 rounded-lg p-2.5 mt-4 leading-relaxed">
+                {pdfError}
+              </p>
+            )}
             <div className="flex gap-2 mt-5">
               <button onClick={() => setPdfDialog(false)} disabled={pdfBusy} className="flex-1 py-2 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold">Cancelar</button>
               <button
                 onClick={async () => {
                   setPdfBusy(true);
+                  setPdfError(null);
                   // Cede dos frames para que el volcán cargando se pinte ANTES
                   // del render pesado del PDF (que bloquea el hilo principal).
                   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                   try {
                     await exportPDF(result, { ...pdfSections, crossSection: pdfSections.crossSection && canCrossSection, particleMotion: pdfSections.particleMotion && canParticleMotion }, realRecord, ampScale, heatmapGrid);
                     setPdfDialog(false);
+                  } catch (err) {
+                    // En producción el fallo más común es un chunk cacheado que
+                    // ya no existe tras un redeploy (import dinámico del
+                    // constructor del PDF). Mostramos el error y sugerimos
+                    // recargar, en vez de dejar el diálogo "congelado".
+                    console.error('[PDF] Error generando el reporte:', err);
+                    const msg = err instanceof Error ? err.message : String(err);
+                    const isChunk = /dynamically imported module|importing|chunk|Failed to fetch/i.test(msg);
+                    setPdfError(
+                      isChunk
+                        ? 'No se pudo cargar el generador de PDF. Recarga la página (Ctrl+Shift+R) e inténtalo de nuevo.'
+                        : `No se pudo generar el PDF: ${msg}`,
+                    );
                   } finally {
                     setPdfBusy(false);
                   }
