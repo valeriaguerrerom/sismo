@@ -374,14 +374,41 @@ function buildSilhouetteBlock(
   surfGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   surfGeo.setIndex(surfIndices);
   surfGeo.computeVertexNormals();
-  // Terreno más claro: baja roughness, súbele el color base y añade un
-  // emissive tenue para que el relieve no se vea apagado sobre el fondo oscuro.
+  // ── Superficie con relieve colorido por elevación ──
+  // Genera un gradiente de elevación: verde oscuro (valles) → verde claro →
+  // café (montañas) → gris → blanco (picos como Galeras, Azufral, Cumbal).
+  const elevColors = new Float32Array(surfGeo.attributes.position.count * 3);
+  const posArr = surfGeo.attributes.position.array as Float32Array;
+  const minElev = Math.min(...Array.from(posArr).filter((_, i) => i % 3 === 1));
+  const maxElev = Math.max(...Array.from(posArr).filter((_, i) => i % 3 === 1));
+  const elevRange = maxElev - minElev;
+  for (let i = 0; i < posArr.length / 3; i++) {
+    const y = posArr[i * 3 + 1];
+    const t = elevRange > 0 ? (y - minElev) / elevRange : 0.5;
+    // Gradiente RGB: verde oscuro → verde → amarillento → café → gris → blanco
+    let r, g, b;
+    if (t < 0.25) {       // Valle: verde bosque oscuro
+      r = 0.15 + t * 0.8; g = 0.4 + t * 0.5; b = 0.15;
+    } else if (t < 0.5) {  // Ladera baja: verde → amarillento
+      const u = (t - 0.25) / 0.25;
+      r = 0.35 + u * 0.3; g = 0.55 + u * 0.15; b = 0.15;
+    } else if (t < 0.75) { // Ladera alta: café
+      const u = (t - 0.5) / 0.25;
+      r = 0.55 + u * 0.15; g = 0.5 + u * 0.1; b = 0.25 + u * 0.15;
+    } else {               // Pico: gris → blanco
+      const u = (t - 0.75) / 0.25;
+      r = 0.7 + u * 0.3; g = 0.65 + u * 0.35; b = 0.45 + u * 0.55;
+    }
+    elevColors[i * 3] = r;
+    elevColors[i * 3 + 1] = g;
+    elevColors[i * 3 + 2] = b;
+  }
+  surfGeo.setAttribute('color', new THREE.BufferAttribute(elevColors, 3));
   const surfMat = new THREE.MeshStandardMaterial({
     map: hillshadeTex ?? undefined,
-    color: hillshadeTex ? 0xffffff : 0x6f8f6a,
-    emissive: 0x2a3038,
-    emissiveIntensity: 0.35,
-    roughness: 0.78, metalness: 0.0, side: THREE.DoubleSide,
+    vertexColors: true, // mezcla el gradiente de elevación con el hillshade
+    roughness: 0.75, metalness: 0.0, side: THREE.DoubleSide,
+    emissive: 0x1a2228, emissiveIntensity: 0.3,
   });
   const surface = new THREE.Mesh(surfGeo, surfMat);
   group.add(surface);
