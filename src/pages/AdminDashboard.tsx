@@ -185,13 +185,20 @@ function Overview({ stats, users, newMessages, onRefresh, onGoTab }: {
   const chars = useMemo(() => characterize(users), [users]);
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
-  // Dispara las animaciones de entrada (count-up, barras) una vez que hay datos.
+  // Dispara las animaciones de entrada (count-up, barras, donut) la PRIMERA vez
+  // que hay datos. Se usa un flag con doble rAF para garantizar que el navegador
+  // pinte primero el estado inicial (0) y LUEGO el final, para que la transición
+  // CSS sea visible aunque los stats ya estuvieran cargados al montar.
   const [animate, setAnimate] = useState(false);
+  const startedRef = useRef(false);
+  const rafRef = useRef(0);
   useEffect(() => {
-    if (stats) {
-      const t = setTimeout(() => setAnimate(true), 60);
-      return () => clearTimeout(t);
-    }
+    if (!stats || startedRef.current) return;
+    startedRef.current = true;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => setAnimate(true));
+    });
+    return () => cancelAnimationFrame(rafRef.current);
   }, [stats]);
 
   const handleExportPdf = async () => {
