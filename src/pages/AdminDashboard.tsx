@@ -186,30 +186,33 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
         <button onClick={onRefresh} className={`${btnGhost} gap-1.5`}><RefreshCw size={13} /> Actualizar</button>
       </div>
 
-      {/* ── Tarjetas de indicadores ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* ── Tarjetas de indicadores (layout horizontal: ícono + número) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {cards.map(s => (
-          <div key={s.label} className={`bg-white rounded-2xl border border-stone-200/60 p-4 card-hover relative overflow-hidden`}>
-            {/* Acento superior de color */}
-            <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ backgroundColor: s.accent }} />
-            <div className={`w-8 h-8 rounded-xl ${s.bg} flex items-center justify-center mb-3`} style={{ color: s.accent }}>
+          <div key={s.label} className="bg-white rounded-2xl border border-stone-200/60 p-4 card-hover flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${s.accent}18`, color: s.accent }}>
               {s.icon}
             </div>
-            <div className="text-3xl font-black text-[#1A1A2E] leading-none">{s.value}</div>
-            <div className="text-xs font-bold text-stone-600 mt-1.5 leading-tight">{s.label}</div>
-            <div className="text-[10px] text-stone-400 mt-0.5 leading-tight">{s.sub}</div>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-[#1A1A2E] leading-none">{s.value}</span>
+              </div>
+              <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">{s.label}</div>
+              <div className="text-[10px] text-stone-400 leading-tight truncate">{s.sub}</div>
+            </div>
           </div>
         ))}
-        {/* Tarjeta mensajes nuevos — lleva a la pestaña */}
+        {/* Mensajes nuevos — lleva a la pestaña */}
         <button onClick={onGoMessages}
-          className={`text-left bg-white rounded-2xl border border-stone-200/60 p-4 card-hover relative overflow-hidden ${newMessages > 0 ? 'ring-1 ring-[#D4A853]/40' : ''}`}>
-          <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ backgroundColor: newMessages > 0 ? '#D4A853' : '#E7E5E4' }} />
-          <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${newMessages > 0 ? 'bg-[#D4A853]/10 text-[#D4A853]' : 'bg-stone-100 text-stone-400'}`}>
-            <MessageSquare size={18} />
+          className={`text-left bg-white rounded-2xl border p-4 card-hover flex items-center gap-4 ${newMessages > 0 ? 'border-[#D4A853]/50 ring-1 ring-[#D4A853]/30' : 'border-stone-200/60'}`}>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${newMessages > 0 ? 'bg-[#D4A853]/15 text-[#D4A853]' : 'bg-stone-100 text-stone-400'}`}>
+            <MessageSquare size={22} />
           </div>
-          <div className="text-3xl font-black text-[#1A1A2E] leading-none">{newMessages}</div>
-          <div className="text-xs font-bold text-stone-600 mt-1.5 leading-tight">Mensajes nuevos</div>
-          <div className="text-[10px] text-stone-400 mt-0.5">formulario Escríbenos</div>
+          <div className="min-w-0">
+            <span className="text-3xl font-black text-[#1A1A2E] leading-none">{newMessages}</span>
+            <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">Mensajes nuevos</div>
+            <div className="text-[10px] text-stone-400 leading-tight">toca para revisarlos →</div>
+          </div>
         </button>
       </div>
 
@@ -1294,9 +1297,14 @@ function MessageDrawer({ m, onClose, onStatus, onDelete, busy }: {
       <div className="w-full max-w-md h-full bg-white shadow-xl overflow-y-auto scrollbar-thin" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-stone-200/60 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_DOT[m.status] }} />
               <span className="font-bold text-[#1A1A2E]">{FEEDBACK_TYPE_LABELS[m.type]}</span>
+              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                m.user_id != null ? 'bg-[#2D6A4F]/10 text-[#2D6A4F]' : 'bg-stone-100 text-stone-500'
+              }`}>
+                {m.user_id != null ? <><UserCheck size={10} /> Investigador</> : <><Users size={10} /> Visitante</>}
+              </span>
             </div>
             <div className="text-xs text-stone-400 mt-1">{fmtDate(m.created_at, true)}</div>
           </div>
@@ -1344,9 +1352,13 @@ function MessageDrawer({ m, onClose, onStatus, onDelete, busy }: {
   );
 }
 
+/** Origen del mensaje: investigador con sesión (user_id) o visitante anónimo. */
+type MsgOrigin = 'investigador' | 'visitante';
+
 function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'error') => void; onChange: () => void }) {
   const [messages, setMessages] = useState<FeedbackMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [origin, setOrigin] = useState<MsgOrigin>('investigador');
   const [typeFilter, setTypeFilter] = useState<'' | FeedbackType>('');
   const [statusFilter, setStatusFilter] = useState<'' | FeedbackStatus>('');
   const [drawer, setDrawer] = useState<FeedbackMessage | null>(null);
@@ -1362,14 +1374,23 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
 
   useEffect(() => { reload(); }, [reload]);
 
+  // Conteos por origen (para los badges de la segmentación).
+  const counts = useMemo(() => ({
+    investigador: messages.filter(m => m.user_id != null).length,
+    visitante: messages.filter(m => m.user_id == null).length,
+  }), [messages]);
+
   const filtered = useMemo(() => messages.filter(m => {
+    const isInvestigador = m.user_id != null;
+    if (origin === 'investigador' && !isInvestigador) return false;
+    if (origin === 'visitante' && isInvestigador) return false;
     if (typeFilter && m.type !== typeFilter) return false;
     if (statusFilter && m.status !== statusFilter) return false;
     return true;
-  }), [messages, typeFilter, statusFilter]);
+  }), [messages, origin, typeFilter, statusFilter]);
 
   const paged = filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
-  useEffect(() => { setPage(1); }, [typeFilter, statusFilter, messages.length]);
+  useEffect(() => { setPage(1); }, [origin, typeFilter, statusFilter, messages.length]);
 
   // Al abrir un mensaje "nuevo", pasarlo a "leído".
   const openDrawer = async (m: FeedbackMessage) => {
@@ -1408,8 +1429,37 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
     setBusy(false);
   };
 
+  const emptyMsg = origin === 'investigador'
+    ? (counts.investigador === 0 ? 'Ningún investigador ha escrito todavía.' : 'Ningún mensaje con esos filtros.')
+    : (counts.visitante === 0 ? 'Ningún visitante ha escrito todavía.' : 'Ningún mensaje con esos filtros.');
+
   return (
     <div className="space-y-4">
+      {/* Segmentación por origen: investigadores (con sesión) vs visitantes (anónimos) */}
+      <div className="flex items-center gap-1 bg-stone-100 rounded-xl p-1 w-fit">
+        {([
+          { id: 'investigador' as MsgOrigin, label: 'Investigadores', icon: <UserCheck size={14} />, n: counts.investigador },
+          { id: 'visitante' as MsgOrigin, label: 'Visitantes', icon: <Users size={14} />, n: counts.visitante },
+        ]).map(o => (
+          <button key={o.id} onClick={() => setOrigin(o.id)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              origin === o.id ? 'bg-white text-[#1A1A2E] shadow-sm' : 'text-stone-500 hover:text-stone-700'
+            }`}>
+            {o.icon} {o.label}
+            <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center ${
+              origin === o.id ? 'bg-[#C4553A] text-white' : 'bg-stone-200 text-stone-500'
+            }`}>{o.n}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Nota explicativa del origen seleccionado */}
+      <p className="text-xs text-stone-400 -mt-1">
+        {origin === 'investigador'
+          ? 'Mensajes de usuarios con cuenta (investigadores registrados). Siempre dejan correo.'
+          : 'Mensajes del formulario público de «Acerca de», enviados sin iniciar sesión.'}
+      </p>
+
       {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as '' | FeedbackType)} className={`${inputCls} sm:w-52`}>
@@ -1425,7 +1475,7 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
         )}
         <button onClick={reload} className={btnGhost}><RefreshCw size={13} /> Actualizar</button>
         <div className="flex-1" />
-        <span className="text-xs text-stone-400">{filtered.length} de {messages.length}</span>
+        <span className="text-xs text-stone-400">{filtered.length} mensaje{filtered.length === 1 ? '' : 's'}</span>
       </div>
 
       {loading ? (
@@ -1433,27 +1483,36 @@ function MessagesTab({ notify, onChange }: { notify: (m: string, t?: 'ok' | 'err
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-stone-400">
           <MessageSquare size={32} className="mx-auto text-stone-300" />
-          <p className="text-sm mt-3">{messages.length === 0 ? 'Aún no hay mensajes.' : 'Ningún mensaje con esos filtros.'}</p>
+          <p className="text-sm mt-3">{emptyMsg}</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200/60 divide-y divide-stone-100">
-          {paged.map(m => (
-            <button
-              key={m.id} onClick={() => openDrawer(m)}
-              className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-stone-50/60 transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: STATUS_DOT[m.status] }} title={FEEDBACK_STATUS_LABELS[m.status]} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-sm ${m.status === 'nuevo' ? 'font-bold text-[#1A1A2E]' : 'font-semibold text-stone-600'}`}>{FEEDBACK_TYPE_LABELS[m.type]}</span>
-                  <span className="text-[11px] text-stone-400">{FEEDBACK_STATUS_LABELS[m.status]}</span>
+          {paged.map(m => {
+            const isInvestigador = m.user_id != null;
+            return (
+              <button
+                key={m.id} onClick={() => openDrawer(m)}
+                className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-stone-50/60 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0 mt-2" style={{ backgroundColor: STATUS_DOT[m.status] }} title={FEEDBACK_STATUS_LABELS[m.status]} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-sm ${m.status === 'nuevo' ? 'font-bold text-[#1A1A2E]' : 'font-semibold text-stone-600'}`}>{FEEDBACK_TYPE_LABELS[m.type]}</span>
+                    {/* Badge de origen */}
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      isInvestigador ? 'bg-[#2D6A4F]/10 text-[#2D6A4F]' : 'bg-stone-100 text-stone-500'
+                    }`}>
+                      {isInvestigador ? <><UserCheck size={10} /> Investigador</> : <><Users size={10} /> Visitante</>}
+                    </span>
+                    {m.status === 'nuevo' && <span className="text-[10px] font-bold text-[#C4553A]">● Nuevo</span>}
+                  </div>
+                  <div className="text-sm text-stone-500 truncate mt-0.5">{m.message}</div>
+                  {m.email && <div className="text-[11px] text-stone-400 flex items-center gap-1 mt-0.5"><Mail size={10} /> {m.email}</div>}
                 </div>
-                <div className="text-sm text-stone-500 truncate mt-0.5">{m.message}</div>
-                {m.email && <div className="text-[11px] text-stone-400 flex items-center gap-1 mt-0.5"><Mail size={10} /> {m.email}</div>}
-              </div>
-              <span className="text-[11px] text-stone-400 flex-shrink-0">{fmtDate(m.created_at, true)}</span>
-            </button>
-          ))}
+                <span className="text-[11px] text-stone-400 flex-shrink-0">{fmtDate(m.created_at, true)}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -1579,7 +1638,11 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-6 py-6"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(26,26,46,0.035) 1px, transparent 1px)',
+          backgroundSize: '22px 22px',
+        }}>
 
         {tab === 'overview' && <Overview stats={stats} users={users} newMessages={newMessages} onRefresh={reloadStats} onGoMessages={() => setTab('messages')} />}
         {tab === 'users' && <UsersTab users={users} meId={user?.id} onChange={() => { reloadUsers(); reloadStats(); }} notify={notify} />}
