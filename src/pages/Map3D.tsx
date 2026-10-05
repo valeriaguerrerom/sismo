@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Play, Pause, RotateCcw, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check, HelpCircle,
+  Play, Pause, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check, HelpCircle,
 } from '../lib/icons';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
@@ -636,16 +636,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setView('fit'); // transición de cámara suave al encuadre
   };
 
-  // Wrappers públicos: si hay una generación en curso, piden confirmación antes
-  // de reemplazarla; si no, aplican de inmediato. `calculatingNow` se evalúa en
-  // el momento del clic (no al crear el componente).
+  // Al hacer clic en un evento de la lista, SIEMPRE pide confirmación (no carga
+  // automáticamente). Si ya hay una generación en curso, la encola como pendiente.
   const loadEvent = (ev: CatalogEvent) => {
-    if (isCalculating) {
-      setShowEventList(false);
-      setPendingRequest({ kind: 'event', ev });
-      return;
-    }
-    applyEvent(ev);
+    setShowEventList(false);
+    setPendingRequest({ kind: 'event', ev });
   };
 
   // Un clic en el terreno NO coloca el epicentro de inmediato: abre una
@@ -694,8 +689,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         .catch(() => setRayPath(null));
     }
   };
-
-  const reset = () => { setElapsed(0); setPlaying(false); };
 
   const fmtTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -1166,34 +1159,29 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               corta) y, al lado, el botón de reiniciar como ícono. */}
           <div data-tour="m3d-transporte">
             <h2 className="text-xs font-bold text-stone-200 mb-2">Controles</h2>
-            <div className="flex items-stretch gap-2">
-              <Tooltip
-                content={
-                  isCalculating
-                    ? 'Espera a que terminen de generarse los sismogramas.'
-                    : 'Coloca un epicentro o carga un evento primero.'
-                }
-                hoverOnly
-                disabled={canPlay}
-                className="flex-1 min-w-0"
-                block
+            <Tooltip
+              content={
+                isCalculating
+                  ? 'Espera a que terminen de generarse los sismogramas.'
+                  : 'Coloca un epicentro o carga un evento primero.'
+              }
+              hoverOnly
+              disabled={canPlay}
+              className="w-full"
+              block
+            >
+              <button
+                onClick={() => setPlaying(p => !p)}
+                disabled={!canPlay}
+                className={`w-full flex items-center justify-center gap-1.5 whitespace-nowrap bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${canPlay && !playing ? 'ready-glow' : ''}`}
               >
-                <button
-                  onClick={() => setPlaying(p => !p)}
-                  disabled={!canPlay}
-                  className={`w-full flex items-center justify-center gap-1.5 whitespace-nowrap bg-[#C4553A] text-white text-xs font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed ${canPlay && !playing ? 'ready-glow' : ''}`}
-                >
-                  {isCalculating ? (
-                    <><Loader size={13} className="animate-spin" /> Generando…</>
-                  ) : (
-                    <>{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'Pausar' : 'Reproducir'}</>
-                  )}
-                </button>
-              </Tooltip>
-              <button onClick={reset} aria-label="Reiniciar la reproducción" title="Volver al inicio de la reproducción" className="shrink-0 px-3 rounded-lg bg-white/5 border border-white/10 text-stone-300">
-                <RotateCcw size={14} />
+                {isCalculating ? (
+                  <><Loader size={13} className="animate-spin" /> Generando…</>
+                ) : (
+                  <>{playing ? <Pause size={13} /> : <Play size={13} />}{playing ? 'Pausar' : 'Reproducir'}</>
+                )}
               </button>
-            </div>
+            </Tooltip>
           </div>
 
           {/* Estado actual, en una línea natural (sin etiqueta "MESSAGE"). */}

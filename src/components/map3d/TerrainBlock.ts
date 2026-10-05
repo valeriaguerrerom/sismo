@@ -375,8 +375,8 @@ function buildSilhouetteBlock(
   surfGeo.setIndex(surfIndices);
   surfGeo.computeVertexNormals();
   // ── Superficie con relieve colorido por elevación ──
-  // Genera un gradiente de elevación: verde oscuro (valles) → verde claro →
-  // café (montañas) → gris → blanco (picos como Galeras, Azufral, Cumbal).
+  // Genera un gradiente de elevación SATURADO: verde intenso (valles) → verde
+  // brillante → amarillo → café → gris → blanco (picos como Galeras, Azufral).
   const elevColors = new Float32Array(surfGeo.attributes.position.count * 3);
   const posArr = surfGeo.attributes.position.array as Float32Array;
   const minElev = Math.min(...Array.from(posArr).filter((_, i) => i % 3 === 1));
@@ -385,19 +385,19 @@ function buildSilhouetteBlock(
   for (let i = 0; i < posArr.length / 3; i++) {
     const y = posArr[i * 3 + 1];
     const t = elevRange > 0 ? (y - minElev) / elevRange : 0.5;
-    // Gradiente RGB: verde oscuro → verde → amarillento → café → gris → blanco
+    // Gradiente RGB con más saturación y brillo
     let r, g, b;
-    if (t < 0.25) {       // Valle: verde bosque oscuro
-      r = 0.15 + t * 0.8; g = 0.4 + t * 0.5; b = 0.15;
-    } else if (t < 0.5) {  // Ladera baja: verde → amarillento
-      const u = (t - 0.25) / 0.25;
-      r = 0.35 + u * 0.3; g = 0.55 + u * 0.15; b = 0.15;
-    } else if (t < 0.75) { // Ladera alta: café
-      const u = (t - 0.5) / 0.25;
-      r = 0.55 + u * 0.15; g = 0.5 + u * 0.1; b = 0.25 + u * 0.15;
-    } else {               // Pico: gris → blanco
-      const u = (t - 0.75) / 0.25;
-      r = 0.7 + u * 0.3; g = 0.65 + u * 0.35; b = 0.45 + u * 0.55;
+    if (t < 0.2) {        // Valle profundo: verde esmeralda oscuro
+      r = 0.1 + t * 1.5; g = 0.5 + t * 1.0; b = 0.2;
+    } else if (t < 0.45) { // Ladera baja: verde brillante → lima
+      const u = (t - 0.2) / 0.25;
+      r = 0.4 + u * 0.4; g = 0.7 + u * 0.15; b = 0.2 + u * 0.1;
+    } else if (t < 0.7) {  // Ladera alta: amarillo → café cálido
+      const u = (t - 0.45) / 0.25;
+      r = 0.75 + u * 0.05; g = 0.65 - u * 0.25; b = 0.25 + u * 0.15;
+    } else {               // Pico: café grisáceo → blanco brillante
+      const u = (t - 0.7) / 0.3;
+      r = 0.75 + u * 0.25; g = 0.7 + u * 0.3; b = 0.5 + u * 0.5;
     }
     elevColors[i * 3] = r;
     elevColors[i * 3 + 1] = g;
@@ -407,8 +407,8 @@ function buildSilhouetteBlock(
   const surfMat = new THREE.MeshStandardMaterial({
     map: hillshadeTex ?? undefined,
     vertexColors: true, // mezcla el gradiente de elevación con el hillshade
-    roughness: 0.75, metalness: 0.0, side: THREE.DoubleSide,
-    emissive: 0x1a2228, emissiveIntensity: 0.3,
+    roughness: 0.65, metalness: 0.0, side: THREE.DoubleSide,
+    emissive: 0x1a2530, emissiveIntensity: 0.4,
   });
   const surface = new THREE.Mesh(surfGeo, surfMat);
   group.add(surface);

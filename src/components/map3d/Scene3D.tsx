@@ -82,7 +82,7 @@ const SUBSURFACE_LAYERS = [
  */
 export function Scene3D({
   stations, epicenter, travelTimes, vpKmS, vsKmS, elapsed,
-  selectedStation, rayPath, viewCommand, sceneGeometry, hypocenters, model,
+  selectedStation, rayPath, viewCommand, sceneGeometry, model,
   onSelectStation, onPlaceEpicenter,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -1134,6 +1134,8 @@ export function Scene3D({
   // ── Hipocentros del catálogo (esferas por profundidad, backend) ──
   // Son los eventos del catálogo; distintos del epicentro activo. El backend
   // entrega x/y/z, radio y color; aquí solo se dibujan.
+  // ── Hipocentros del catálogo (DESACTIVADO: saturan la escena) ──
+  /*
   useEffect(() => {
     const st = stateRef.current;
     if (!st) return;
@@ -1143,7 +1145,6 @@ export function Scene3D({
       if (c instanceof THREE.Mesh) { c.geometry.dispose(); (c.material as THREE.Material).dispose(); }
       group.remove(c);
     });
-
     (hypocenters ?? []).forEach(hc => {
       const geo = new THREE.SphereGeometry(Math.max(0.12, hc.radius), 16, 16);
       const color = new THREE.Color(hc.color);
@@ -1155,6 +1156,7 @@ export function Scene3D({
       group.add(sphere);
     });
   }, [hypocenters]);
+  */
 
   // ── Nombres de las capas del subsuelo (nombre + Vp del modelo) ──
   // Reglas de visibilidad (para no chocar con las estaciones):
