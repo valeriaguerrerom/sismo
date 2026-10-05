@@ -616,7 +616,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setShowReal(s => ({ ...s, [code]: true }));
     setSelectedStation(code);
     setUploadedStation(code);
-    setShowTriaxial(true); // Abrir el panel triaxial automáticamente
+    // NO abrir el panel aquí - se abrirá después de colocar epicentro y generar sintéticos
     setMessage(`Registro cargado en ${code}. Coloca un epicentro en el terreno para ver la propagación.`);
     onMseedLoadUsed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
