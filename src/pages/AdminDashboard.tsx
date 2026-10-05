@@ -1045,7 +1045,7 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">Cargando…</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8"><VolcanoLoader size={36} label="Cargando eventos…" /></td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">
                 {events.length === 0 ? 'La tabla seismic_events está vacía. Crea un evento o importa un catálogo QuakeML del SGC.' : 'Sin resultados para la búsqueda.'}
@@ -1332,7 +1332,7 @@ function ReportsTab({ stats, users, notify }: { stats: DashboardStats | null; us
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">Cargando…</td></tr>
+            {loading ? <tr><td colSpan={7} className="px-4 py-8"><VolcanoLoader size={36} label="Cargando reportes…" /></td></tr>
             : reports.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">No hay reportes en el período</td></tr>
             : paged.map(r => {
               const p = r.params as { sourceType?: string; magnitude?: number; depth?: number };

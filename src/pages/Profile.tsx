@@ -17,6 +17,7 @@ import { ResearcherFields } from '../components/auth/ResearcherFields';
 import { PASSWORD_RULES, isPasswordStrong, DATA_POLICY_URL } from '../lib/authConsent';
 import { deleteOwnAccount } from '../lib/account';
 import { hasVerifiedTotp, startEnrollment, verifyEnrollment, disableTotp } from '../lib/mfa';
+import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 
 const C = { terracotta: '#C4553A', forest: '#2D6A4F', ink: '#1A1A2E', cream: '#FAFAF8', muted: '#5A5A5A' };
 
@@ -552,7 +553,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
           </p>
 
           {mfaLoading ? (
-            <div className="h-5 w-5 rounded-full border-2 border-stone-200 border-t-[#C4553A] animate-spin" aria-label="Cargando" />
+            <div className="py-2"><VolcanoLoader size={28} label="" /></div>
           ) : mfaOn ? (
             // Ya activa: estado + botón para desactivar.
             <div className="space-y-3">
