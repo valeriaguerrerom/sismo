@@ -63,11 +63,13 @@ _DEV_ORIGINS = [
     "http://127.0.0.1:8080",
 ]
 _env_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+# Siempre permitir el dominio principal de producción
+_production_origins = ["https://sismonarino.com", "https://www.sismonarino.com"]
 if IS_PRODUCTION:
-    # Sin ALLOWED_ORIGINS en producción no se habilita ningún origen (fallo seguro).
-    ALLOWED_ORIGINS = _env_origins
+    # Sin ALLOWED_ORIGINS en producción, usar solo los dominios de producción conocidos
+    ALLOWED_ORIGINS = _env_origins if _env_origins else _production_origins
 else:
-    ALLOWED_ORIGINS = _env_origins + _DEV_ORIGINS
+    ALLOWED_ORIGINS = _env_origins + _DEV_ORIGINS + _production_origins
 
 # Límite de peticiones por IP para las simulaciones FDM (cómputo intensivo). Es
 # generoso para el uso normal (el panel lanza una simulación por clic) pero
