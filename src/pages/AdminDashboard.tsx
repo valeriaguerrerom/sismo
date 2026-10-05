@@ -601,10 +601,10 @@ function UsersTab({ users, meId, onChange, notify }: {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => setReasonDlg(null)}>
             <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-3 ${isDelete ? 'bg-red-50' : 'bg-[#C4553A]/10'}`}>
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mx-auto mb-3 ${isDelete ? 'bg-red-50' : 'bg-[#C4553A]/10'}`}>
                 {isDelete ? <AlertTriangle size={22} className="text-red-500" /> : <UserX size={22} className="text-[#C4553A]" />}
               </div>
-              <h3 className="text-lg font-black text-[#1A1A2E]">{isDelete ? 'Eliminar cuenta' : 'Desactivar cuenta'}</h3>
+              <h3 className="text-lg font-black text-center text-[#1A1A2E]">{isDelete ? 'Eliminar cuenta' : 'Desactivar cuenta'}</h3>
               <p className="text-sm mt-2 text-stone-500 leading-relaxed">
                 {isDelete
                   ? <>Se eliminarán el perfil y los datos personales de <b className="text-[#1A1A2E]">{u.full_name || u.email}</b> de forma permanente. Las simulaciones se conservarán sin ningún dato que identifique a la persona, solo con fines estadísticos del proyecto.</>

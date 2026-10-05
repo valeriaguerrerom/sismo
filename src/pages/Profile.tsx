@@ -646,10 +646,10 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
       {deacOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => !deacBusy && setDeacOpen(false)}>
           <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="w-11 h-11 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mb-3">
+            <div className="w-11 h-11 rounded-2xl bg-[#C4553A]/10 flex items-center justify-center mx-auto mb-3">
               <UserX size={22} className="text-[#C4553A]" />
             </div>
-            <h3 className="text-lg font-black" style={{ color: C.ink }}>Desactivar mi cuenta</h3>
+            <h3 className="text-lg font-black text-center" style={{ color: C.ink }}>Desactivar mi cuenta</h3>
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
               Tus datos y tus simulaciones se conservan. Mientras esté desactivada no podrás usar la plataforma, pero puedes reactivarla cuando quieras iniciando sesión.
             </p>
@@ -672,10 +672,10 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
       {delOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1A2E]/50 px-4" onClick={() => !deleting && setDelOpen(false)}>
           <div className="bg-white rounded-2xl border border-stone-200/60 shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center mb-3">
+            <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-3">
               <AlertTriangle size={22} className="text-red-500" />
             </div>
-            <h3 className="text-lg font-black" style={{ color: C.ink }}>Eliminar mi cuenta</h3>
+            <h3 className="text-lg font-black text-center" style={{ color: C.ink }}>Eliminar mi cuenta</h3>
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
               Se eliminarán el perfil y los datos personales de forma permanente. Las simulaciones se conservarán sin ningún dato que identifique a la persona, solo con fines estadísticos del proyecto.
             </p>
