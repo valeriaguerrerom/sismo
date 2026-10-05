@@ -109,6 +109,7 @@ async def get_event_waveforms(event_id: str):
     Raises:
         HTTPException 404: El evento no existe, o no tiene datos reales.
         HTTPException 500: Error leyendo el archivo (JSON corrupto, permisos, etc.).
+        HTTPException 503: Base de datos no disponible.
     """
     # 1. Consultar el evento en seismic_events para obtener mseed_file_path
     if not supabase:
@@ -128,7 +129,9 @@ async def get_event_waveforms(event_id: str):
     event = response.data[0]
     
     # 2. Verificar que el evento tenga datos reales asociados
-    if not event.get("mseed_available"):
+    # Si las columnas nuevas no existen (migración pendiente), asumimos que no hay datos
+    mseed_available = event.get("mseed_available", False)
+    if not mseed_available:
         raise HTTPException(
             status_code=404,
             detail=f"El evento {event_id} no tiene datos reales MiniSEED disponibles. "

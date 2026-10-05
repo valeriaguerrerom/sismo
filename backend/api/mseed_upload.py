@@ -229,6 +229,8 @@ def _log_upload_attempt(
             bandpass_applied, bandpass_freq_min_hz, bandpass_freq_max_hz,
             decimation_factor, final_sample_count.
         processing_time_ms: Tiempo de procesamiento en milisegundos.
+    
+    Si la tabla no existe (migración pendiente), solo imprime warning y continúa.
     """
     if not supabase:
         return  # Sin Supabase no se registra nada (entorno local/testing)
@@ -260,8 +262,10 @@ def _log_upload_attempt(
             })
         supabase.table("mseed_upload_logs").insert(log_data).execute()
     except Exception as e:
-        # Log en consola pero no falla la carga si el tracking falla
-        print(f"[WARNING] Failed to log mseed upload: {e}")
+        # Silenciar error si la tabla no existe (migración pendiente)
+        # o cualquier otro problema de DB. El logging es opcional.
+        import sys
+        print(f"[WARNING] Failed to log mseed upload (table may not exist yet): {e}", file=sys.stderr)
 
 
 # Relación de velocidades Vp/Vs ≈ 1.73 (roca de corteza). Con Vp≈6.3 km/s la
