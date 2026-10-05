@@ -19,14 +19,15 @@ from supabase import create_client
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+# Usar SERVICE_ROLE_KEY para escribir directamente sin RLS
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY", "")
 
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    print("ERROR: Faltan variables de entorno SUPABASE_URL y SUPABASE_ANON_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("ERROR: Faltan variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY")
     print("Configúralas en backend/.env")
     exit(1)
 
-supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Ruta a los archivos JSON procesados
 GALERAS_DIR = Path(__file__).parent.parent / "public" / "data" / "galeras"

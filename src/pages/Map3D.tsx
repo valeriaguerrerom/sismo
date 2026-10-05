@@ -537,17 +537,22 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     }));
     
     // Cuando termine de generar todos los sintéticos, abrir el panel triaxial
-    // automáticamente con la primera estación (la más cercana)
+    // automáticamente SOLO si no hay una estación ya seleccionada (por datos reales)
     if (runId === runIdRef.current && tts.length > 0) {
-      const stationToShow = tts[0]?.code;
-      if (stationToShow) {
-        // Esperar un poco para que los estados se actualicen
-        setTimeout(() => {
-          setSelectedStation(stationToShow);
-          setShowTriaxial(true);
-          console.log(`[Map3D] Panel triaxial abierto automáticamente para estación ${stationToShow}`);
-        }, 200);
-      }
+      setTimeout(() => {
+        setSelectedStation(current => {
+          // Si ya hay una estación seleccionada (datos reales), mantenerla
+          if (current) {
+            console.log(`[Map3D] Manteniendo estación seleccionada: ${current}`);
+            return current;
+          }
+          // Si no, seleccionar la más cercana (sintética)
+          const nearest = tts[0]?.code;
+          console.log(`[Map3D] Auto-seleccionando estación más cercana: ${nearest}`);
+          return nearest || current;
+        });
+        setShowTriaxial(true);
+      }, 200);
     }
   }, [vp, vs, density, magnitude, depthKm, sourceType]);
 
