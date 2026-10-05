@@ -54,7 +54,7 @@ function exportJSON(result: SimulationResult) {
     metadata: {
       source: 'SismoNariño - Simulador Triaxial',
       exportDate: new Date().toISOString(),
-      sampleRate: 1 / (result.gridInfo?.dtAdjusted ?? 0.02),
+      sampleRate: 1 / (result.gridInfo?.dt ?? 0.02),
       duration: result.duration,
       numSamples: result.waveData.time.length,
     },
@@ -320,7 +320,10 @@ function RealRecordResultsPanel({
       metrics: {
         maxAmplitude: metrics.maxAmplitude,
         dominantFrequency: metrics.dominantFrequency,
-        eventWindow: metrics.eventWindow,
+        duration: metrics.duration,
+        sampleRate: metrics.sampleRate,
+        numSamples: metrics.numSamples,
+        peakTime: metrics.peakTime,
       },
       waveData: realRecord.waveData,
     };

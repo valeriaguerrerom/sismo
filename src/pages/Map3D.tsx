@@ -389,17 +389,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     async function loadEvents() {
       const catalog = await loadCatalog();
       setCatalogRows(catalog);
-      // DEBUG: verificar que el catálogo trae los campos mseed
-      const withMseed = catalog.filter(r => r.mseed_available).length;
-      console.log(`[Map3D] Catálogo cargado: ${catalog.length} eventos, ${withMseed} con mseed_available=true`);
-      if (catalog[0]) {
-        console.log('[Map3D] Primer evento:', {
-          event_id: catalog[0].event_id,
-          mseed_available: catalog[0].mseed_available,
-          mseed_data_source: catalog[0].mseed_data_source,
-          mseed_station: catalog[0].mseed_station,
-        });
-      }
       const out: CatalogEvent[] = catalog
         .filter(r => r.latitude != null && r.longitude != null)
         .map(r => {
@@ -541,8 +530,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // CRÍTICO: NO borrar las trazas sintéticas aquí porque perderíamos
     // los datos reales cargados en applyEvent. En su lugar, solo borrar
     // las trazas sintéticas (las que se van a regenerar).
-    console.log('[Map3D] loadSynthetics: Regenerando sintéticos SIN borrar datos reales');
-    
     // NO hacer setTraces({}) aquí - mantener las trazas reales
     // Solo limpiar rawTracesRef (sintéticos crudos)
     rawTracesRef.current = {};
@@ -577,13 +564,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       setTimeout(() => {
         // Prioridad ABSOLUTA: si hay datos reales activos, mantener esa estación.
         if (realStationRef.current) {
-          console.log(`[Map3D] loadSynthetics: Manteniendo estación REAL: ${realStationRef.current}`);
           setSelectedStation(realStationRef.current);
         } else {
           setSelectedStation(current => {
             if (current) return current;
             const nearest = tts[0]?.code;
-            console.log(`[Map3D] loadSynthetics: Auto-seleccionando más cercana: ${nearest}`);
             return nearest || current;
           });
         }
@@ -644,7 +629,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   useEffect(() => {
     if (!mseedLoad) return;
     const code = mseedLoad.station.toUpperCase();
-    console.log(`[Map3D] >>> mseedLoad (ARCHIVO SUBIDO) cargado en estación: ${code}`);
     const wd = mseedLoad.waveData;
     // Convertir waveData {time,north,east,vertical} al formato WaveformResult.
     const wf: WaveformResult = {
@@ -706,16 +690,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // es para ver la propagación sintética SIN perder la traza real del usuario.
     if (!realStationRef.current) {
       resetRealState();
-    } else {
-      console.log(`[Map3D] applyEpicenter: PRESERVANDO datos reales de ${realStationRef.current}`);
     }
     setElapsed(0);
     setPlaying(false);
   };
 
   const applyEvent = async (ev: CatalogEvent) => {
-    console.log('[Map3D] >>> applyEvent INICIADO para evento:', ev.id, ev.label);
-    
     setSourceType(ev.sourceType);
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
@@ -737,21 +717,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setMessage(`Evento cargado: ${ev.label}`);
     setView('fit'); // transición de cámara suave al encuadre
     
-    // Intentar cargar datos reales MiniSEED si están disponibles
-    console.log('[Map3D] >>> mseedSource:', ev.mseedSource, '| mseedStation:', ev.mseedStation, '| mseedEventId:', ev.mseedEventId);
+    // Intentar cargar datos reales MiniSEED si están disponibles para este evento.
     let hasRealData = false;
-    
+
     if (ev.mseedSource && ev.mseedStation && ev.mseedEventId) {
       try {
         const realData = await fetchEventWaveforms(ev.mseedEventId, ev.mseedSource, ev.mseedStation);
-        console.log('[Map3D] >>> fetchEventWaveforms retornó:', realData ? `OK (${realData.station})` : 'null');
-        
         if (realData) {
           hasRealData = true;
           const stationCode = realData.station;
-          console.log('[Map3D] >>> DATOS REALES ENCONTRADOS para estación:', stationCode);
-          
-          // Convertir al formato WaveformResult que usa el panel TriaxialTraces
+
+          // Convertir al formato WaveformResult que usa el panel TriaxialTraces.
           const wf: WaveformResult = {
             event_id: ev.mseedEventId!,
             station: stationCode,
@@ -767,26 +743,21 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             starttime_utc: ev.date,
             filtro: { freqmin: 1, freqmax: 10 },
           };
-          
+
           setRealWave(prev => ({ ...prev, [stationCode]: wf }));
           setShowReal(prev => ({ ...prev, [stationCode]: true }));
           realStationRef.current = stationCode; // marcar como estación real activa
           setSelectedStation(stationCode);
           setStationDetail(traces[stationCode] ?? null);
           setShowTriaxial(true);
-          
-          console.log(`[Map3D] ✅ DATOS REALES CARGADOS y panel abierto para ${stationCode}`);
         }
       } catch (error) {
-        console.error(`[Map3D] ❌ ERROR al cargar datos reales:`, error);
+        console.warn('[Map3D] No se pudieron cargar datos reales:', error);
       }
-    } else {
-      console.log('[Map3D] >>> Evento sin datos reales (mseedSource null)');
     }
-    
-    // SOLO resetear el estado real si NO se cargaron datos reales
+
+    // SOLO resetear el estado real si NO se cargaron datos reales.
     if (!hasRealData) {
-      console.log('[Map3D] >>> NO hay datos reales, reseteando estado');
       realStationRef.current = null;
       resetRealState();
     }
@@ -842,7 +813,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   useEffect(() => {
     const realCode = realStationRef.current;
     if (realCode && realWave[realCode] && selectedStation !== realCode) {
-      console.log(`[Map3D] ⚡ Forzando selección a estación real: ${realCode} (estaba en ${selectedStation})`);
       setSelectedStation(realCode);
       setShowTriaxial(true);
     }
@@ -895,14 +865,29 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     const title = reportTitle.trim() || autoTitle;
 
     // Sismograma de la estación seleccionada (si hay y se pidió esa sección).
+    // Si la estación tiene datos REALES (MiniSEED), se usan esos; si no, el
+    // sintético FDM. El flag isReal marca el origen para el texto del reporte.
+    const real = selectedStation ? realWave[selectedStation] : null;
     const syn = selectedStation ? traces[selectedStation] : null;
-    const seismogram = syn && selectedStation
-      ? {
-          station: selectedStation,
-          t: syn.t, north: syn.north, east: syn.east, vertical: syn.vertical,
-          tP: syn.tP_detectado, tS: syn.tS_detectado,
-        }
-      : null;
+    let seismogram: Map3dReportData['seismogram'] = null;
+    if (real && selectedStation) {
+      seismogram = {
+        station: selectedStation,
+        t: real.t,
+        north: real.canales.N ?? [],
+        east: real.canales.E ?? [],
+        vertical: real.canales.Z ?? [],
+        tP: null, tS: null, // los datos reales no traen tP/tS calculados
+        isReal: true,
+      };
+    } else if (syn && selectedStation) {
+      seismogram = {
+        station: selectedStation,
+        t: syn.t, north: syn.north, east: syn.east, vertical: syn.vertical,
+        tP: syn.tP_detectado, tS: syn.tS_detectado,
+        isReal: false,
+      };
+    }
 
     return {
       title,

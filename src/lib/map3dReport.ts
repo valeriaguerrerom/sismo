@@ -57,6 +57,8 @@ export interface Map3dSeismogram {
   vertical: number[];
   tP?: number | null;
   tS?: number | null;
+  /** true si son datos reales MiniSEED; false/undefined si es sintético FDM. */
+  isReal?: boolean;
 }
 
 /** Datos completos del reporte del Mapa 3D. */
@@ -498,9 +500,15 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     const traceH = 24, gap = 7;
     // Reserva al menos la primera traza para que no quede el título solo.
     section(`Sismograma triaxial · Estación ${data.seismogram.station}`, traceH + gap + 4);
-    // Nota aclaratoria: estos son sintéticos generados por el motor FDM, no datos reales MiniSEED.
-    doc.setFontSize(8); doc.setFont('Inter', 'normal'); doc.setTextColor(180, 150, 70);
-    doc.text('Sismograma sintético generado por el motor de Diferencias Finitas (FDM) para esta estación.', MARGIN, y);
+    // Nota aclaratoria sobre el origen de los datos (real MiniSEED o sintético FDM).
+    doc.setFontSize(8); doc.setFont('Inter', 'normal');
+    if (sg.isReal) {
+      doc.setTextColor(45, 106, 79); // verde: datos reales
+      doc.text('Registro real MiniSEED (filtrado 1 a 10 Hz) de esta estación.', MARGIN, y);
+    } else {
+      doc.setTextColor(180, 150, 70); // dorado: sintético
+      doc.text('Sismograma sintético generado por el motor de Diferencias Finitas (FDM) para esta estación.', MARGIN, y);
+    }
     y += 4;
     const traces: [number[], [number, number, number], string][] = [
       [sg.north, COLORS.green, 'Norte (N)'],
@@ -546,7 +554,12 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
       y += traceH + gap;
     }
     doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
-    doc.text('Líneas punteadas: arribo P (verde) y S (cian). Amplitud normalizada por traza.', MARGIN, y);
+    doc.text(
+      sg.isReal
+        ? 'Amplitud normalizada por traza. Registro real de velocidad del suelo.'
+        : 'Líneas punteadas: arribo P (verde) y S (cian). Amplitud normalizada por traza.',
+      MARGIN, y,
+    );
     y += 6;
   }
 
@@ -653,6 +666,7 @@ export function buildMap3dCsv(data: Map3dReportData, opts: Map3dReportOptions): 
   if (opts.sismograma && data.seismogram && data.seismogram.t.length > 1) {
     const sg = data.seismogram;
     lines.push(`# SISMOGRAMA TRIAXIAL · ESTACION ${sg.station}`);
+    lines.push(`# origen: ${sg.isReal ? 'registro real MiniSEED (1-10 Hz)' : 'sintetico FDM'}`);
     lines.push('tiempo_s,norte,este,vertical');
     // Submuestrear a ~1000 puntos para que el CSV no sea gigante.
     const step = Math.max(1, Math.floor(sg.t.length / 1000));
@@ -692,21 +706,22 @@ export function downloadMap3dJson(data: Map3dReportData, _opts: Map3dReportOptio
       sourceType: data.sourceType,
       magnitude: data.magnitude,
       model: data.model,
-      vp: data.vp,
-      vs: data.vs,
-      density: data.density,
+      vp: data.medium.vp,
+      vs: data.medium.vs,
+      density: data.medium.density,
     },
     stations: data.stations.map(s => ({
       code: s.code,
       name: s.name,
-      lat: s.lat,
-      lon: s.lon,
-      distanceKm: s.distanceKm,
+      lat: s.latitude,
+      lon: s.longitude,
+      distanceKm: s.distancia_epicentral_km,
       tP: s.tP,
       tS: s.tS,
     })),
     seismograms: data.seismogram ? {
       station: data.seismogram.station,
+      origen: data.seismogram.isReal ? 'real-miniseed' : 'sintetico-fdm',
       tP: data.seismogram.tP,
       tS: data.seismogram.tS,
       waveData: {

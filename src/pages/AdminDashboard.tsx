@@ -21,7 +21,6 @@ import {
   bulkInsertEvents, createEvent, deleteEvent, deleteFactRow, deleteQuizRow, deleteReport, deleteTimelineRow,
   loadDashboardStats, loadEvents, loadFactRows, loadQuizRows, loadReports, loadTimelineRows, loadUsers,
   saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, deactivateUser, reactivateUser, updateEvent,
-  loadMseedUploadLogs, loadMseedUploadStats, loadTopMseedUploaders, loadMseedFailureReasons,
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
@@ -1821,9 +1820,6 @@ function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void 
       notify(e instanceof Error ? e.message : 'Error exportando', 'error');
     }
   };
-
-  const successCount = logs.filter(l => l.success).length;
-  const failCount = logs.length - successCount;
 
   return (
     <div className="space-y-6">
