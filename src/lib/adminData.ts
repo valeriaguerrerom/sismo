@@ -425,9 +425,13 @@ export async function loadMseedUploadLogs(
 ): Promise<{ logs: MseedUploadLog[]; total: number }> {
   if (!supabase) return { logs: [], total: 0 };
 
+  // NOTA: NO se usa un JOIN embebido profiles(...) porque mseed_upload_logs
+  // tiene su FK hacia auth.users, no hacia profiles; PostgREST no encuentra la
+  // relación y la consulta falla (y el panel queda vacío). Se resuelven los
+  // perfiles con una segunda consulta por user_id.
   let query = supabase
     .from('mseed_upload_logs')
-    .select('*, profiles(full_name, email)', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .order('uploaded_at', { ascending: false });
 
   if (filters?.success !== undefined) {
@@ -450,7 +454,23 @@ export async function loadMseedUploadLogs(
   const { data, count, error } = await query;
   if (error) throw error;
 
-  return { logs: (data as MseedUploadLog[]) || [], total: count || 0 };
+  const logs = (data as MseedUploadLog[]) || [];
+
+  // Resolver nombre/email de cada usuario con una sola consulta a profiles.
+  const userIds = [...new Set(logs.map(l => l.user_id).filter(Boolean))];
+  if (userIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', userIds);
+    const byId = new Map((profs ?? []).map(p => [p.id, p]));
+    for (const log of logs) {
+      const p = byId.get(log.user_id);
+      log.profiles = p ? { full_name: p.full_name, email: p.email } : null;
+    }
+  }
+
+  return { logs, total: count || 0 };
 }
 
 /**
