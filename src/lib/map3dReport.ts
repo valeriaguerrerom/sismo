@@ -80,6 +80,12 @@ export interface Map3dReportData {
   selectedStation?: string | null;
   /** Captura PNG (data URL) de la escena 3D, tomada al generar el reporte. */
   sceneImage?: string | null;
+  /**
+   * Capturas de las vistas de cámara (Norte, Corte, Superior) tomadas mientras
+   * se reproduce el sismo. Si está presente, el PDF muestra las tres; si no,
+   * usa `sceneImage` (una sola captura) por compatibilidad.
+   */
+  sceneViews?: { label: string; image: string }[] | null;
   /** Silueta del departamento de Nariño como anillo [lon, lat][] (opcional). */
   outline?: [number, number][] | null;
 }
@@ -106,7 +112,7 @@ export const DEFAULT_MAP3D_OPTIONS: Map3dReportOptions = {
   tiemposViaje: true,
   mapa: true,
   registro: true,
-  sismograma: false,
+  sismograma: true,
 };
 
 // ─── Estilo (compartido en pdfStyle.ts, coherente con reportPdfBuilder.ts) ───
@@ -149,8 +155,19 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
   );
   y += 8;
 
-  const section = (label: string) => {
-    if (y > 265) { doc.addPage(); y = MARGIN; }
+  // Alto del encabezado de sección (título + línea + espacio).
+  const SECTION_HEADER_H = 6.5;
+  // Límite inferior útil de la página (A4 = 297 mm; se deja margen para el pie).
+  const PAGE_BOTTOM = 282;
+
+  /**
+   * Dibuja el encabezado de una sección. `needsHeight` es el alto que ocupará
+   * el CONTENIDO que va justo debajo; si el título + ese contenido no caben en
+   * lo que queda de página, se salta a una nueva ANTES de pintar el título.
+   * Así nunca queda un título solo al final de una hoja y el contenido abajo.
+   */
+  const section = (label: string, needsHeight = 10) => {
+    if (y + SECTION_HEADER_H + needsHeight > PAGE_BOTTOM) { doc.addPage(); y = MARGIN; }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...COLORS.green);
@@ -207,38 +224,71 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
   }
 
   // ── Captura de la vista 3D (imagen del bloque de terreno con ondas) ──
-  if (opts.vista3d && data.sceneImage) {
-    section('Vista 3D de la propagación');
-    // Relación de aspecto de la escena (aprox 16:10); si la imagen es más alta,
-    // se limita por altura. Encaja dentro del ancho de contenido.
-    let imgW = CONTENT_W;
-    let imgH = imgW * 0.6;
-    const maxH = 105;
-    if (imgH > maxH) { imgH = maxH; imgW = imgH / 0.6; }
-    if (y + imgH + 8 > 285) { doc.addPage(); y = MARGIN; }
-    const imgX = MARGIN + (CONTENT_W - imgW) / 2;
-    // Marco sutil
-    doc.setDrawColor(...COLORS.line); doc.setLineWidth(0.3);
-    doc.rect(imgX, y, imgW, imgH);
-    try {
-      doc.addImage(data.sceneImage, 'PNG', imgX, y, imgW, imgH, undefined, 'FAST');
-    } catch (e) {
-      doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
-      doc.text('No se pudo insertar la captura de la escena 3D.', imgX + 3, y + 8);
-      console.warn('[map3dReport] addImage falló:', e);
+  const sceneViews = (data.sceneViews ?? []).filter(v => v.image);
+  if (opts.vista3d && (sceneViews.length > 0 || data.sceneImage)) {
+    if (sceneViews.length > 0) {
+      // Varias vistas (Norte / Corte / Superior) capturadas durante el sismo.
+      // Dos por fila para que las tres quepan sin ocupar demasiadas páginas.
+      const colGap = 6;
+      const vW = (CONTENT_W - colGap) / 2;
+      const vH = vW * 0.62;
+      const rowH = vH + 9; // imagen + rótulo
+      // Reserva el título + la primera fila (al menos una imagen) juntos.
+      section('Vistas de la propagación en 3D', rowH + 4);
+      doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
+      doc.text('Capturas de la escena durante la reproducción del sismo. Ondas P (terracota) y S (verde) sobre el relieve de Nariño.', MARGIN, y);
+      y += 5;
+      sceneViews.forEach((v, i) => {
+        const col = i % 2;
+        if (col === 0 && y + rowH > PAGE_BOTTOM) { doc.addPage(); y = MARGIN; }
+        const vx = MARGIN + col * (vW + colGap);
+        // Rótulo de la vista
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...COLORS.green);
+        doc.text(v.label, vx, y);
+        doc.setFont('helvetica', 'normal');
+        const iy = y + 2;
+        doc.setDrawColor(...COLORS.line); doc.setLineWidth(0.3);
+        doc.rect(vx, iy, vW, vH);
+        try {
+          doc.addImage(v.image, 'PNG', vx, iy, vW, vH, undefined, 'FAST');
+        } catch (e) {
+          doc.setFontSize(7); doc.setTextColor(...COLORS.muted);
+          doc.text('No se pudo insertar la captura.', vx + 2, iy + 6);
+          console.warn('[map3dReport] addImage (vista) falló:', e);
+        }
+        // Avanza y al terminar cada fila (col 1) o la última imagen.
+        if (col === 1 || i === sceneViews.length - 1) y += rowH;
+      });
+      y += 4;
+    } else if (data.sceneImage) {
+      // Compatibilidad: una sola captura (reportes guardados antiguos).
+      let imgW = CONTENT_W;
+      let imgH = imgW * 0.6;
+      const maxH = 105;
+      if (imgH > maxH) { imgH = maxH; imgW = imgH / 0.6; }
+      section('Vista 3D de la propagación', imgH + 12);
+      const imgX = MARGIN + (CONTENT_W - imgW) / 2;
+      doc.setDrawColor(...COLORS.line); doc.setLineWidth(0.3);
+      doc.rect(imgX, y, imgW, imgH);
+      try {
+        doc.addImage(data.sceneImage, 'PNG', imgX, y, imgW, imgH, undefined, 'FAST');
+      } catch (e) {
+        doc.setFontSize(8); doc.setTextColor(...COLORS.muted);
+        doc.text('No se pudo insertar la captura de la escena 3D.', imgX + 3, y + 8);
+        console.warn('[map3dReport] addImage falló:', e);
+      }
+      y += imgH + 4;
+      doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
+      doc.text('Captura de la escena 3D. Ondas P (terracota) y S (verde) sobre el relieve de Nariño.', MARGIN, y);
+      y += 6;
     }
-    y += imgH + 4;
-    doc.setFontSize(6.5); doc.setTextColor(...COLORS.muted);
-    doc.text('Captura de la escena 3D en el momento de generar el reporte. Ondas P (terracota) y S (verde) sobre el relieve de Nariño.', MARGIN, y);
-    y += 6;
   }
 
   // ── Mini-mapa de vista superior (estaciones + epicentro por lat/lon) ──
   const stationsWithCoords = data.stations.filter(s => s.latitude != null && s.longitude != null);
   if (opts.mapa && stationsWithCoords.length > 0) {
-    section('Mapa de estaciones (vista superior)');
     const mapH = 78;
-    if (y + mapH + 10 > 285) { doc.addPage(); y = MARGIN; }
+    section('Mapa de estaciones (vista superior)', mapH + 12);
     const mx = MARGIN, my = y, mw = CONTENT_W, mh = mapH;
 
     // Límites geográficos: estaciones + epicentro + silueta de Nariño (si hay),
@@ -331,10 +381,9 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
   // ── Registro sísmico multi-estación (réplica de la columna izquierda) ──
   const tracesForPlot = (data.traces ?? []).filter(t => t.t.length > 1 && t.values.length > 1);
   if (opts.registro && tracesForPlot.length > 0) {
-    section('Registro sísmico por estación');
     const sorted = [...tracesForPlot].sort((a, b) => a.dist - b.dist);
     const plotH = 82;
-    if (y + plotH + 12 > 285) { doc.addPage(); y = MARGIN; }
+    section('Registro sísmico por estación', plotH + 12);
     const rx = MARGIN, ry = y, rw = CONTENT_W, rh = plotH;
     doc.setFillColor(15, 20, 32); doc.rect(rx, ry, rw, rh, 'F'); // fondo oscuro como en la app
     // Tiempo máximo global para escalar el eje Y (tiempo hacia abajo).
@@ -393,7 +442,8 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
 
   // ── Tabla de tiempos de viaje por estación ──
   if (opts.tiemposViaje && data.stations.length > 0) {
-    section('Tiempos de viaje por estación');
+    // Reserva cabecera de tabla + ~3 filas para no dejar el título solo.
+    section('Tiempos de viaje por estación', 20);
     const cols = [
       { h: 'Estación', w: 26 },
       { h: 'Dist. epi (km)', w: 28 },
@@ -438,15 +488,16 @@ export function buildMap3dPdf(data: Map3dReportData, opts: Map3dReportOptions): 
     y += 3;
     doc.setFontSize(6.5);
     doc.setTextColor(...COLORS.muted);
-    doc.text('~ ubicación aproximada (pendiente de confirmación SGC).', MARGIN, y);
+    doc.text('~ ubicación aproximada de la estación.', MARGIN, y);
     y += 6;
   }
 
   // ── Sismograma de la estación seleccionada ──
   if (opts.sismograma && data.seismogram && data.seismogram.t.length > 1) {
-    section(`Sismograma triaxial · Estación ${data.seismogram.station}`);
     const sg = data.seismogram;
     const traceH = 24, gap = 7;
+    // Reserva al menos la primera traza para que no quede el título solo.
+    section(`Sismograma triaxial · Estación ${data.seismogram.station}`, traceH + gap + 4);
     const traces: [number[], [number, number, number], string][] = [
       [sg.north, COLORS.green, 'Norte (N)'],
       [sg.east, COLORS.primary, 'Este (E)'],

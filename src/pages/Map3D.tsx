@@ -20,7 +20,7 @@ import { Legend } from '../components/map3d/Legend';
 import { RecordSection } from '../components/map3d/RecordSection';
 import { loadNarinoRing } from '../components/map3d/narinoSilhouette';
 import {
-  getStations, getTravelTimes, getSynthetic, getRayPath, getWaveform,
+  getStations, getTravelTimes, getSynthetic, getRayPath,
   getSceneGeometry, getSceneEvents,
   type Station, type StationTravelTime, type SyntheticResult, type TravelModel,
   type RayPathResult, type WaveformResult, type SceneGeometry, type SceneHypocenter,
@@ -142,8 +142,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [stationDetail, setStationDetail] = useState<SyntheticResult | null>(null);
   const [rayPath, setRayPath] = useState<RayPathResult | null>(null);
-  // Señal real por estación (waveforms): disponibilidad, si se muestra, y datos.
-  const [realAvailable, setRealAvailable] = useState<Record<string, boolean>>({});
+  // Señal real por estación (waveforms): si se muestra y datos.
+  // setRealAvailable se conserva para el flujo de carga de MiniSEED.
+  const [, setRealAvailable] = useState<Record<string, boolean>>({});
   const [showReal, setShowReal] = useState<Record<string, boolean>>({});
   const [realWave, setRealWave] = useState<Record<string, WaveformResult | null>>({});
   const [showTriaxial, setShowTriaxial] = useState(false);
@@ -226,6 +227,36 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   }, []);
   const [viewCommand, setViewCommand] = useState<{ view: 'north' | 'cut' | 'top' | 'fit'; nonce: number } | null>(null);
   const setView = (view: 'north' | 'cut' | 'top' | 'fit') => setViewCommand({ view, nonce: Date.now() });
+  // true mientras se capturan las vistas para el reporte (deshabilita botones).
+  const [capturingViews, setCapturingViews] = useState(false);
+
+  /**
+   * Captura las vistas de cámara (Norte, Corte, Superior) para el reporte PDF.
+   * Mueve la cámara a cada vista, espera a que termine la transición (800 ms en
+   * Scene3D) y toma la captura del canvas. La vista "Corte" solo tiene sentido
+   * con una estación seleccionada; si no hay, se omite. Al final restaura la
+   * vista oblicua por defecto. La reproducción del sismo sigue corriendo, así
+   * que las capturas muestran los frentes de onda en movimiento.
+   */
+  const captureAllViews = useCallback(async (): Promise<{ label: string; image: string }[]> => {
+    const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const views: { view: 'north' | 'cut' | 'top'; label: string }[] = [
+      { view: 'north', label: 'Vista Norte (de frente)' },
+      ...(selectedStation ? [{ view: 'cut' as const, label: 'Vista Corte (en profundidad)' }] : []),
+      { view: 'top', label: 'Vista Superior (en planta)' },
+    ];
+    const out: { label: string; image: string }[] = [];
+    for (const v of views) {
+      setView(v.view);
+      await wait(950); // transición de cámara (800 ms) + margen para repintar
+      const img = captureScene();
+      if (img) out.push({ label: v.label, image: img });
+    }
+    // Restaurar la vista por defecto.
+    setView('fit');
+    await wait(300);
+    return out;
+  }, [captureScene, selectedStation]);
   // Filtros de la lista de eventos.
   // Filtros de la lista de eventos (misma lógica que el Explorador, en
   // src/lib/eventFilters.ts). Orden aparte (no es un filtro).
@@ -642,34 +673,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     }
   };
 
-  const toggleReal = async (code: string) => {
-    // Si ya lo mostramos, volver a sintético.
-    if (showReal[code]) { setShowReal(s => ({ ...s, [code]: false })); return; }
-    if (!currentEventId) { setRealAvailable(a => ({ ...a, [code]: false })); return; }
-    // Pedir waveform real si no lo tenemos aún.
-    if (realWave[code] === undefined) {
-      try {
-        const wf = await getWaveform(currentEventId, code, { freqmin: 1, freqmax: 10 });
-        setRealWave(w => ({ ...w, [code]: wf }));
-        setRealAvailable(a => ({ ...a, [code]: true }));
-        setShowReal(s => ({ ...s, [code]: true }));
-      } catch (e) {
-        const err = e as ApiError;
-        setRealAvailable(a => ({ ...a, [code]: false }));
-        setRealWave(w => ({ ...w, [code]: null }));
-        if (err.status === 404) {
-          setMessage('Esta estación no tiene señal real archivada para este evento.');
-        } else {
-          setMessage(friendlyError(e, 'No se pudo cargar la señal real'));
-        }
-      }
-    } else if (realWave[code]) {
-      setShowReal(s => ({ ...s, [code]: true }));
-    } else {
-      setRealAvailable(a => ({ ...a, [code]: false }));
-    }
-  };
-
   const reset = () => { setElapsed(0); setPlaying(false); };
 
   const fmtTime = (s: number) => {
@@ -679,8 +682,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   };
 
   // ── Reporte del Mapa 3D ──
-  /** Arma los datos del reporte con el estado actual (epicentro, tiempos, etc.). */
-  const buildReportData = useCallback((): Map3dReportData | null => {
+  /**
+   * Arma los datos del reporte con el estado actual (epicentro, tiempos, etc.).
+   * `sceneViews` son las capturas de las vistas (Norte/Corte/Superior); si no se
+   * pasan, se toma una sola captura de la escena como está (fallback).
+   */
+  const buildReportData = useCallback((sceneViews?: { label: string; image: string }[]): Map3dReportData | null => {
     if (!epicenter) return null;
     const ev = events.find(e => e.id === currentEventId) ?? null;
     const fecha = new Date().toISOString().slice(0, 10);
@@ -718,8 +725,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       })),
       seismogram,
       selectedStation,
-      // Captura de la escena 3D en el momento de generar el reporte.
-      sceneImage: captureScene(),
+      // Capturas de las vistas (Norte/Corte/Superior) si se tomaron; si no, una
+      // sola captura de la escena como está en pantalla.
+      sceneViews: sceneViews && sceneViews.length > 0 ? sceneViews : null,
+      sceneImage: sceneViews && sceneViews.length > 0 ? null : captureScene(),
       // Silueta del departamento para el mapa de vista superior.
       outline: narinoRingRef.current,
       // Trazas de todas las estaciones con señal (componente vertical) para el
@@ -742,8 +751,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes, captureScene]);
 
   /** Descarga el reporte en el formato elegido (PDF o CSV). */
-  const handleDownloadReport = () => {
-    const data = buildReportData();
+  const handleDownloadReport = async () => {
+    // Para PDF con la sección "Vista 3D" activa, se capturan las tres vistas
+    // (Norte/Corte/Superior) moviendo la cámara mientras corre el sismo. El CSV
+    // no lleva imágenes, así que no se captura nada.
+    let views: { label: string; image: string }[] | undefined;
+    if (reportFormat === 'pdf' && reportOpts.vista3d) {
+      setCapturingViews(true);
+      try { views = await captureAllViews(); }
+      finally { setCapturingViews(false); }
+    }
+    const data = buildReportData(views);
     if (!data) return;
     if (reportFormat === 'pdf') downloadMap3dPdf(data, reportOpts);
     else downloadMap3dCsv(data, reportOpts);
@@ -1282,21 +1300,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 <div>tP: <span className="font-mono">{stationDetail.tP_detectado.toFixed(2)}</span> s, tS: <span className="font-mono">{stationDetail.tS_detectado.toFixed(2)}</span> s</div>
                 <div className="text-stone-500">Malla <span className="font-mono">{stationDetail.nx}×{stationDetail.nz}</span>, <span className="font-mono">{stationDetail.tiempo_computo_ms.toFixed(0)}</span> ms, CFL {stationDetail.cfl_ok ? 'ok' : 'ajustado'}</div>
               </div>
-              {/* Botón real / sintético */}
-              <button
-                onClick={() => toggleReal(selectedStation)}
-                disabled={realAvailable[selectedStation] === false}
-                title={realAvailable[selectedStation] === false ? 'Sin registro para este evento' : 'Alternar señal real o sintética'}
-                className={`w-full text-[11px] font-bold py-2 rounded-lg border ${
-                  realAvailable[selectedStation] === false
-                    ? 'bg-white/5 text-stone-600 border-white/10 cursor-not-allowed'
-                    : showReal[selectedStation]
-                      ? 'bg-[#2D6A4F] text-white border-[#2D6A4F]'
-                      : 'bg-white/5 text-stone-300 border-white/10'
-                }`}
-              >
-                {showReal[selectedStation] ? 'Mostrando señal real' : 'Mostrar señal real'}
-              </button>
               <button
                 onClick={() => setShowTriaxial(v => !v)}
                 className="w-full text-[11px] font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300"
@@ -1609,11 +1612,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   </button>
                   <button
                     onClick={handleDownloadReport}
-                    disabled={!reportSaved}
+                    disabled={!reportSaved || capturingViews}
                     title={!reportSaved ? 'Primero guarda el reporte' : undefined}
                     className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <FileDown size={13} /> 2. Descargar {reportFormat.toUpperCase()}
+                    {capturingViews
+                      ? <><Loader size={13} className="animate-spin" /> Capturando vistas…</>
+                      : <><FileDown size={13} /> 2. Descargar {reportFormat.toUpperCase()}</>}
                   </button>
                   {!reportSaved && (
                     <p className="text-[10px] text-stone-500 text-center">Guarda el reporte para habilitar la descarga.</p>
@@ -1623,9 +1628,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 <div className="space-y-2 pt-1">
                   <button
                     onClick={handleDownloadReport}
-                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg"
+                    disabled={capturingViews}
+                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
                   >
-                    <FileDown size={13} /> Descargar {reportFormat.toUpperCase()}
+                    {capturingViews
+                      ? <><Loader size={13} className="animate-spin" /> Capturando vistas…</>
+                      : <><FileDown size={13} /> Descargar {reportFormat.toUpperCase()}</>}
                   </button>
                   <p className="text-[10px] text-stone-500 text-center">Inicia sesión para guardar el reporte en "Mis Reportes".</p>
                 </div>
