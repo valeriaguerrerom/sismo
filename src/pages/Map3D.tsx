@@ -516,6 +516,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // mostrar una barra de progreso real. Un `runId` garantiza que solo la última
   // generación escriba estado (evita que una carga vieja pise a la nueva).
   const runIdRef = useRef(0);
+  // Estación que tiene datos reales MiniSEED activos. El useEffect de travelTimes
+  // NO debe sobreescribir esta selección con la estación más cercana (sintético).
+  const realStationRef = useRef<string | null>(null);
 
   const loadSynthetics = useCallback(async (tts: StationTravelTime[]) => {
     const runId = ++runIdRef.current;
@@ -555,21 +558,21 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       });
     }));
     
-    // Cuando termine de generar todos los sintéticos, abrir el panel triaxial
-    // automáticamente SOLO si no hay una estación ya seleccionada (por datos reales)
+    // Cuando termine de generar todos los sintéticos, abrir el panel triaxial.
     if (runId === runIdRef.current && tts.length > 0) {
       setTimeout(() => {
-        setSelectedStation(current => {
-          // Si ya hay una estación seleccionada (datos reales), mantenerla
-          if (current) {
-            console.log(`[Map3D] Manteniendo estación seleccionada: ${current}`);
-            return current;
-          }
-          // Si no, seleccionar la más cercana (sintética)
-          const nearest = tts[0]?.code;
-          console.log(`[Map3D] Auto-seleccionando estación más cercana: ${nearest}`);
-          return nearest || current;
-        });
+        // Prioridad ABSOLUTA: si hay datos reales activos, mantener esa estación.
+        if (realStationRef.current) {
+          console.log(`[Map3D] loadSynthetics: Manteniendo estación REAL: ${realStationRef.current}`);
+          setSelectedStation(realStationRef.current);
+        } else {
+          setSelectedStation(current => {
+            if (current) return current;
+            const nearest = tts[0]?.code;
+            console.log(`[Map3D] loadSynthetics: Auto-seleccionando más cercana: ${nearest}`);
+            return nearest || current;
+          });
+        }
         setShowTriaxial(true);
       }, 200);
     }
@@ -603,10 +606,16 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         setTimeout(() => setRealigning(false), 150);
       }
       // Seleccionar por defecto la estación más cercana (define el corte).
-      const nearest = travelTimes[0]?.code;
-      if (nearest && !selectedStation) {
-        selectStation(nearest);
-        // NO abrir el panel aquí, se abrirá en loadSynthetics cuando terminen de generarse
+      // PERO si hay datos reales activos, respetar esa estación (no sobreescribir).
+      if (realStationRef.current) {
+        // Hay datos reales: asegurar que la estación real esté seleccionada
+        selectStation(realStationRef.current);
+      } else {
+        const nearest = travelTimes[0]?.code;
+        if (nearest && !selectedStation) {
+          selectStation(nearest);
+          // NO abrir el panel aquí, se abrirá en loadSynthetics cuando terminen de generarse
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -738,7 +747,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           
           setRealWave(prev => ({ ...prev, [stationCode]: wf }));
           setShowReal(prev => ({ ...prev, [stationCode]: true }));
+          realStationRef.current = stationCode; // marcar como estación real activa
           setSelectedStation(stationCode);
+          setStationDetail(traces[stationCode] ?? null);
           setShowTriaxial(true);
           
           console.log(`[Map3D] ✅ DATOS REALES CARGADOS y panel abierto para ${stationCode}`);
@@ -753,6 +764,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // SOLO resetear el estado real si NO se cargaron datos reales
     if (!hasRealData) {
       console.log('[Map3D] >>> NO hay datos reales, reseteando estado');
+      realStationRef.current = null;
       resetRealState();
     }
   };
@@ -809,6 +821,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         .then(setRayPath)
         .catch(() => setRayPath(null));
     }
+  };
+
+  // Handler para el clic MANUAL del usuario en una estación. A diferencia de
+  // selectStation (uso interno), este limpia realStationRef SOLO si el usuario
+  // elige una estación distinta a la que tiene datos reales, para que el panel
+  // muestre el sintético de esa otra estación sin que el sistema lo revierta.
+  const handleUserSelectStation = (code: string) => {
+    if (realStationRef.current && code !== realStationRef.current) {
+      realStationRef.current = null; // el usuario eligió otra: liberar el "lock"
+    }
+    selectStation(code);
   };
 
   const fmtTime = (s: number) => {
@@ -1201,7 +1224,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 elapsed={elapsed}
                 maxTime={maxTime}
                 selectedStation={selectedStation}
-                onSelectStation={selectStation}
+                onSelectStation={handleUserSelectStation}
               />
             </div>
           )}
@@ -1228,7 +1251,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             sceneGeometry={sceneGeometry}
             hypocenters={hypocenters}
             model={model}
-            onSelectStation={selectStation}
+            onSelectStation={handleUserSelectStation}
             onPlaceEpicenter={placeEpicenter}
           />
           <Legend scaleBar={sceneGeometry?.scale_bar ?? null} domainWidthKm={sceneGeometry?.domain_width_km ?? null} depthRamp={depthRamp} />
