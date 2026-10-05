@@ -644,6 +644,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   useEffect(() => {
     if (!mseedLoad) return;
     const code = mseedLoad.station.toUpperCase();
+    console.log(`[Map3D] >>> mseedLoad (ARCHIVO SUBIDO) cargado en estación: ${code}`);
     const wd = mseedLoad.waveData;
     // Convertir waveData {time,north,east,vertical} al formato WaveformResult.
     const wf: WaveformResult = {
@@ -660,6 +661,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setRealWave(w => ({ ...w, [code]: wf }));
     setRealAvailable(a => ({ ...a, [code]: true }));
     setShowReal(s => ({ ...s, [code]: true }));
+    realStationRef.current = code; // marcar estación real para que no se pise con sintético
     setSelectedStation(code);
     setUploadedStation(code);
     // NO abrir el panel aquí - se abrirá después de colocar epicentro y generar sintéticos
