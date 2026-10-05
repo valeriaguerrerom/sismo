@@ -701,7 +701,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setEpicenter({ lat, lon, depthKm });
     setCurrentEventId(null); // epicentro manual: sin registro real asociado
     setPlacingEpicenter(false); // ya se colocó: salir del modo "colocar"
-    resetRealState();
+    // CRÍTICO: NO borrar los datos reales si hay un archivo MiniSEED subido
+    // (realStationRef marca la estación con datos reales). Colocar el epicentro
+    // es para ver la propagación sintética SIN perder la traza real del usuario.
+    if (!realStationRef.current) {
+      resetRealState();
+    } else {
+      console.log(`[Map3D] applyEpicenter: PRESERVANDO datos reales de ${realStationRef.current}`);
+    }
     setElapsed(0);
     setPlaying(false);
   };
