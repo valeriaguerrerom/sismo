@@ -10,7 +10,6 @@ import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dRep
 import type { SimulationParams, Page } from '../lib/types';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { Pagination } from '../components/ui/Pagination';
-import { FeedbackSection } from '../components/ui/FeedbackSection';
 
 /** Reportes por página en la lista. */
 const REPORTS_PER_PAGE = 8;
@@ -441,20 +440,6 @@ export function MyReports({ onNavigate }: Props) {
             )}
           </>
         )}
-
-        {/* ── ¿Algo que añadir? Formulario de feedback para investigadores ── */}
-        <div className="mt-12 pt-10 border-t border-stone-200/60">
-          <FeedbackSection
-            userEmail={user?.email ?? ''}
-            title="¿Algo que te gustaría ver en SismoNariño?"
-            description="Como investigador, tus ideas pesan. Cuéntanos qué añadirías: un evento sísmico, una estación, una pregunta del quiz, un dato curioso o cualquier mejora."
-            items={[
-              { t: 'Un evento o estación', d: 'Un sismo o una estación que te gustaría encontrar en el explorador o el mapa.' },
-              { t: 'Contenido educativo', d: 'Una pregunta de quiz, un dato curioso de ondas o un hito para la línea de tiempo.' },
-              { t: 'Mejoras o errores', d: 'Algo que harías distinto en la simulación, o algo que no funciona como esperabas.' },
-            ]}
-          />
-        </div>
       </div>
 
       {/* ── Diálogo de confirmación de borrado (con el nombre del reporte) ── */}

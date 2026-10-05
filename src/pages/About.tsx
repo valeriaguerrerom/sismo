@@ -567,7 +567,15 @@ export function About(_: Props) {
         <Credits />
         <Objectives />
         <section className="app-container">
-          <FeedbackSection userEmail={user?.email ?? ''} />
+          <FeedbackSection
+            userEmail={user?.email ?? ''}
+            items={[
+              { t: 'Sugerencias', d: 'Ideas para mejorar la simulación, el mapa 3D o el centro educativo.' },
+              { t: 'Un evento o estación', d: 'Un sismo o una estación que te gustaría ver en el explorador o el mapa.' },
+              { t: 'Contenido educativo', d: 'Una pregunta de quiz, un dato curioso de ondas o un hito para la línea de tiempo.' },
+              { t: 'Reportes de error', d: 'Algo que no funciona, se ve mal o da un resultado extraño.' },
+            ]}
+          />
         </section>
         <Footer />
       </div>
