@@ -8,8 +8,24 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import type { AdminReport, AdminUser, DashboardStats } from './adminData';
-import type { Characterization } from './adminChars';
+import { characterize, type Characterization } from './adminChars';
 import { sanitizeCell } from './csvSafe';
+
+/** Paleta de marca para los gráficos del PDF (RGB). */
+const PDF_COLORS = {
+  terracotta: [196, 85, 58] as [number, number, number],
+  forest: [45, 106, 79] as [number, number, number],
+  gold: [212, 168, 83] as [number, number, number],
+  purple: [107, 91, 149] as [number, number, number],
+  ink: [26, 26, 46] as [number, number, number],
+  grayTrack: [237, 229, 228] as [number, number, number],
+  grayText: [120, 113, 108] as [number, number, number],
+};
+
+/** Serie de colores para barras de categorías (en orden). */
+const PDF_BAR_SERIES: [number, number, number][] = [
+  PDF_COLORS.terracotta, PDF_COLORS.forest, PDF_COLORS.purple, PDF_COLORS.gold, PDF_COLORS.grayText,
+];
 
 /** Sanea cada celda de texto de una fila contra inyección de fórmulas (XLSX). */
 function safeRow<T>(row: T[]): (T | string)[] {
@@ -100,9 +116,159 @@ export function exportAdminExcel(input: AdminReportInput): void {
   XLSX.writeFile(wb, `sismonarino_reporte_admin_${stamp}.xlsx`);
 }
 
-/** Descarga el reporte administrativo como PDF. */
+/**
+ * Dibuja un gráfico de barras verticales en el PDF.
+ * @returns la coordenada Y debajo del gráfico.
+ */
+function drawBarChart(
+  doc: jsPDF, x: number, y: number, w: number, h: number,
+  data: { label: string; count: number }[],
+  color: [number, number, number],
+): number {
+  const max = Math.max(1, ...data.map(d => d.count));
+  const n = Math.max(1, data.length);
+  const gap = 3;
+  const barW = (w - gap * (n - 1)) / n;
+  const baseY = y + h;
+
+  // Líneas guía horizontales + eje.
+  doc.setDrawColor(...PDF_COLORS.grayTrack);
+  doc.setLineWidth(0.2);
+  for (let i = 0; i <= 4; i++) {
+    const gy = y + (h * i) / 4;
+    doc.line(x, gy, x + w, gy);
+  }
+
+  data.forEach((d, i) => {
+    const bh = (d.count / max) * h;
+    const bx = x + i * (barW + gap);
+    const by = baseY - bh;
+    doc.setFillColor(...color);
+    doc.roundedRect(bx, by, barW, Math.max(0.5, bh), 1, 1, 'F');
+    // Valor encima de la barra.
+    doc.setFontSize(7);
+    doc.setTextColor(...PDF_COLORS.ink);
+    doc.text(String(d.count), bx + barW / 2, by - 1.5, { align: 'center' });
+    // Etiqueta debajo del eje.
+    doc.setFontSize(6.5);
+    doc.setTextColor(...PDF_COLORS.grayText);
+    doc.text(d.label, bx + barW / 2, baseY + 4, { align: 'center' });
+  });
+
+  return baseY + 8;
+}
+
+/**
+ * Dibuja un "donut" de dos categorías con leyenda a la derecha.
+ * jsPDF no tiene arcos, así que se aproxima con segmentos de triángulo (pie)
+ * y un círculo blanco al centro para el efecto donut.
+ * @returns la coordenada Y debajo del gráfico.
+ */
+function drawDonut(
+  doc: jsPDF, cx: number, cy: number, r: number,
+  parts: { label: string; value: number; color: [number, number, number] }[],
+  legendX: number,
+): number {
+  const total = Math.max(1, parts.reduce((a, p) => a + p.value, 0));
+  let startAngle = -Math.PI / 2; // arranca arriba
+  const steps = 90;
+
+  for (const p of parts) {
+    const frac = p.value / total;
+    const endAngle = startAngle + frac * Math.PI * 2;
+    doc.setFillColor(...p.color);
+    // Aproximar el sector con triángulos finos (abanico desde el centro).
+    const segs = Math.max(1, Math.round(steps * frac));
+    for (let i = 0; i < segs; i++) {
+      const a0 = startAngle + ((endAngle - startAngle) * i) / segs;
+      const a1 = startAngle + ((endAngle - startAngle) * (i + 1)) / segs;
+      doc.triangle(
+        cx, cy,
+        cx + r * Math.cos(a0), cy + r * Math.sin(a0),
+        cx + r * Math.cos(a1), cy + r * Math.sin(a1),
+        'F',
+      );
+    }
+    startAngle = endAngle;
+  }
+
+  // Centro blanco → efecto donut.
+  doc.setFillColor(255, 255, 255);
+  doc.circle(cx, cy, r * 0.58, 'F');
+  // Total al centro.
+  doc.setFontSize(11);
+  doc.setTextColor(...PDF_COLORS.ink);
+  doc.setFont('helvetica', 'bold');
+  doc.text(String(total), cx, cy + 1, { align: 'center' });
+  doc.setFontSize(6);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...PDF_COLORS.grayText);
+  doc.text('usuarios', cx, cy + 4.5, { align: 'center' });
+
+  // Leyenda.
+  let ly = cy - r + 2;
+  for (const p of parts) {
+    const pct = Math.round((p.value / total) * 100);
+    doc.setFillColor(...p.color);
+    doc.circle(legendX + 1.5, ly - 1, 1.5, 'F');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_COLORS.ink);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${p.label}: ${p.value} (${pct}%)`, legendX + 5, ly);
+    ly += 7;
+  }
+  doc.setFont('helvetica', 'normal');
+
+  return cy + r + 6;
+}
+
+/**
+ * Dibuja barras horizontales de una dimensión de caracterización.
+ * @returns la coordenada Y debajo del bloque.
+ */
+function drawHBars(
+  doc: jsPDF, x: number, y: number, w: number,
+  title: string, buckets: { label: string; count: number }[], total: number,
+): number {
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...PDF_COLORS.ink);
+  doc.text(title, x, y);
+  doc.setFont('helvetica', 'normal');
+  let cy = y + 4;
+
+  const max = Math.max(1, ...buckets.map(b => b.count));
+  if (buckets.length === 0) {
+    doc.setFontSize(7);
+    doc.setTextColor(...PDF_COLORS.grayText);
+    doc.text('Sin datos.', x, cy);
+    return cy + 4;
+  }
+
+  buckets.forEach((b, i) => {
+    const pct = Math.round((b.count / total) * 100);
+    doc.setFontSize(7);
+    doc.setTextColor(...PDF_COLORS.ink);
+    const label = b.label.length > 24 ? b.label.slice(0, 23) + '…' : b.label;
+    doc.text(label, x, cy);
+    doc.setTextColor(...PDF_COLORS.grayText);
+    doc.text(`${b.count} · ${pct}%`, x + w, cy, { align: 'right' });
+    // Pista + barra.
+    const barY = cy + 1.2;
+    doc.setFillColor(...PDF_COLORS.grayTrack);
+    doc.roundedRect(x, barY, w, 1.6, 0.8, 0.8, 'F');
+    const barW = (b.count / max) * w;
+    doc.setFillColor(...PDF_BAR_SERIES[i % PDF_BAR_SERIES.length]);
+    doc.roundedRect(x, barY, Math.max(0.8, barW), 1.6, 0.8, 0.8, 'F');
+    cy += 6;
+  });
+  return cy + 2;
+}
+
+/** Descarga el reporte administrativo como PDF (con gráficas). */
 export function exportAdminPdf(input: AdminReportInput): void {
   const { stats, users, reports, period } = input;
+  const chars = characterize(users);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 15;
   const W = 210 - M * 2;
@@ -171,9 +337,44 @@ export function exportAdminPdf(input: AdminReportInput): void {
     ['Preguntas quiz / datos de ondas / línea de tiempo', `${stats.questions} / ${stats.facts} / ${stats.timeline}`],
   ], [110, 70]);
 
+  // ── Gráficas: simulaciones por mes (barras) + roles (donut) ──
   heading('Simulaciones por mes');
   const byMonth = simulationsByMonth(reports);
-  table(['Mes', 'Simulaciones'], byMonth.length ? byMonth.map(m => [m.month, m.count]) : [['—', 0]], [60, 40]);
+  if (byMonth.length) {
+    // Etiqueta corta "YYYY-MM" → "MM/YY" para que quepa.
+    const barData = byMonth.map(m => {
+      const [yr, mo] = m.month.split('-');
+      return { label: `${mo}/${yr.slice(2)}`, count: m.count };
+    });
+    y = drawBarChart(doc, M, y, W, 35, barData, PDF_COLORS.terracotta);
+    y += 2;
+  } else {
+    doc.setFontSize(8); doc.setTextColor(...PDF_COLORS.grayText);
+    doc.text('Sin simulaciones en el período.', M, y); y += 6;
+  }
+
+  heading('Distribución de roles');
+  y = drawDonut(doc, M + 20, y + 18, 16, [
+    { label: 'Administradores', value: stats.roles.admin, color: PDF_COLORS.terracotta },
+    { label: 'Investigadores', value: stats.roles.user, color: PDF_COLORS.forest },
+  ], M + 50);
+  y += 2;
+
+  // ── Caracterización de usuarios (barras horizontales en dos columnas) ──
+  heading('Caracterización de investigadores');
+  {
+    const colW = (W - 8) / 2;
+    const leftX = M;
+    const rightX = M + colW + 8;
+    const startY = y;
+    const yl1 = drawHBars(doc, leftX, startY, colW, 'Por ocupación', chars.ocupacion, chars.total);
+    const yr1 = drawHBars(doc, rightX, startY, colW, 'Por institución', chars.institucion, chars.total);
+    let rowY = Math.max(yl1, yr1) + 3;
+    if (rowY > 250) { doc.addPage(); rowY = M; }
+    const yl2 = drawHBars(doc, leftX, rowY, colW, 'Por área de interés', chars.area, chars.total);
+    const yr2 = drawHBars(doc, rightX, rowY, colW, 'Por ciudad', chars.ciudad, chars.total);
+    y = Math.max(yl2, yr2) + 4;
+  }
 
   heading('Usuarios registrados');
   table(
