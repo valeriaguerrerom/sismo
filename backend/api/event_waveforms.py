@@ -25,7 +25,15 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.config import supabase
+# Supabase client para consultar eventos (opcional, no rompe si no existe)
+try:
+    import os as _os
+    from supabase import create_client as _create_client
+    _url = _os.getenv("SUPABASE_URL", "")
+    _key = _os.getenv("SUPABASE_ANON_KEY", "")
+    supabase = _create_client(_url, _key) if (_url and _key) else None
+except Exception:
+    supabase = None
 
 router = APIRouter(tags=["Datos Sísmicos"])
 

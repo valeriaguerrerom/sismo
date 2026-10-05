@@ -24,9 +24,19 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Request, Uploa
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from core.config import require_user_id, supabase
+from core.config import require_user_id
 from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
+
+# Supabase client para logging (opcional, no rompe si no existe)
+try:
+    import os as _os
+    from supabase import create_client as _create_client
+    _url = _os.getenv("SUPABASE_URL", "")
+    _key = _os.getenv("SUPABASE_ANON_KEY", "")
+    supabase = _create_client(_url, _key) if (_url and _key) else None
+except Exception:
+    supabase = None
 
 # Archivos MiniSEED de ejemplo servidos por el backend (se incluyen en la imagen
 # Docker; ver backend/Dockerfile: COPY . . y .dockerignore no excluye example_data).
