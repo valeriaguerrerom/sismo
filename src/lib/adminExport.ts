@@ -721,7 +721,7 @@ export function exportMseedLogsPdf(input: MseedLogsExportInput) {
     const filename = l.filename.length > 25 ? l.filename.slice(0, 22) + '...' : l.filename;
     doc.text(filename, margin + 30, y);
     
-    doc.setTextColor(l.success ? ...PDF_COLORS.forest : ...PDF_COLORS.terracotta);
+    doc.setTextColor(...(l.success ? PDF_COLORS.forest : PDF_COLORS.terracotta));
     doc.text(l.success ? 'OK' : 'Error', margin + 90, y);
     
     if (!l.success && l.error_reason) {
