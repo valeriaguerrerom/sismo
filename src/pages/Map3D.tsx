@@ -411,16 +411,25 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // Al cambiar SOLO el modelo (homogéneo/IASP91) los sintéticos NO cambian (solo
   // cambian las marcas tP/tS), así que no se regeneran ni se muestra el loader:
   // la reproducción en curso sigue sin cortarse.
+
+  // Ref para leer vp/vs/model siempre frescos desde el closure de
+  // recomputeTravelTimes, sin que un stale closure provoque un 422 por enviar
+  // valores desactualizados (p. ej. al cargar un evento volcánico que cambia
+  // setVp/setVs en el mismo batch que setEpicenter).
+  const vpVsModelRef = useRef({ vp, vs, model });
+  useEffect(() => { vpVsModelRef.current = { vp, vs, model }; }, [vp, vs, model]);
+
   const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }, regenerate = true) => {
     // Solo el flujo que regenera trazas levanta `loadingTT` (y con él el overlay
     // de carga a pantalla completa). Al cambiar SOLO el modelo usamos `realigning`
     // (indicador chico en el panel) para no interrumpir la reproducción.
     if (regenerate) { setLoadingTT(true); setMessage('Calculando tiempos de viaje...'); }
     else { setRealigning(true); }
+    const { vp: vpVal, vs: vsVal, model: modelVal } = vpVsModelRef.current;
     try {
       const res = await getTravelTimes({
         lat: epi.lat, lon: epi.lon, depth_km: epi.depthKm,
-        vp_km_s: vp, vs_km_s: vs, model,
+        vp_km_s: vpVal, vs_km_s: vsVal, model: modelVal,
       });
       // El effect de [travelTimes] leerá esta bandera para decidir si regenera
       // los sismogramas o solo actualiza las marcas tP/tS.
@@ -441,7 +450,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     } finally {
       if (regenerate) setLoadingTT(false);
     }
-  }, [vp, vs, model]);
+  }, []); // vp/vs/model se leen del ref (siempre frescos), no son deps del callback
 
   // Recalcular al colocar/cambiar epicentro: regenera sismogramas (nuevo sismo).
   useEffect(() => {
