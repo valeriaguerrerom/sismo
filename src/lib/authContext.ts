@@ -28,7 +28,14 @@ export interface AuthContextType {
    * cuando el registro ya dejó la sesión abierta (se entra directo).
    */
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
-  signIn: (email: string, password: string) => Promise<string | null>;
+  /**
+   * Inicia sesión con correo y contraseña. Devuelve `error` (o null) y
+   * `mfaRequired`: true cuando la cuenta tiene verificación en dos pasos y falta
+   * introducir el código del segundo factor (la UI muestra el paso del código).
+   */
+  signIn: (email: string, password: string) => Promise<{ error: string | null; mfaRequired: boolean }>;
+  /** Verifica el código del segundo factor (2FA) para completar el inicio de sesión. */
+  verifyMfa: (code: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<string | null>;
   signOut: () => Promise<void>;
   /**
@@ -66,7 +73,8 @@ export const AuthContext = createContext<AuthContextType>({
   deactivateOwnAccount: async () => 'Auth no disponible',
   recoveryMode: false,
   signUp: async () => ({ error: 'Auth no disponible', needsConfirmation: false }),
-  signIn: async () => 'Auth no disponible',
+  signIn: async () => ({ error: 'Auth no disponible', mfaRequired: false }),
+  verifyMfa: async () => 'Auth no disponible',
   signInWithGoogle: async () => 'Auth no disponible',
   signOut: async () => {},
   updateProfile: async () => 'Auth no disponible',

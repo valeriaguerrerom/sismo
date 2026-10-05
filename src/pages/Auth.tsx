@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/authContext';
-import { Mail, User, ArrowRight, Check } from '../lib/icons';
+import { Mail, User, ArrowRight, Check, Shield } from '../lib/icons';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { Field } from '../components/auth/ResearcherFields';
 import { inputCls } from '../components/auth/researcherFieldsConstants';
@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNoticeSeen }: Props) {
-  const { signIn, signUp, signInWithGoogle, sendPasswordReset, blockedMessage } = useAuth();
+  const { signIn, verifyMfa, signUp, signInWithGoogle, sendPasswordReset, blockedMessage } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,6 +39,10 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
+  // Paso de verificación en dos pasos: tras validar la contraseña, si la cuenta
+  // tiene 2FA activo se pide el código de 6 dígitos de la app autenticadora.
+  const [mfaStep, setMfaStep] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
   // Aviso de un solo uso (p. ej. "Tu contraseña se actualizó"): se copia a
   // estado local, se limpia del estado global de inmediato y se auto-oculta,
   // para que NO reaparezca al cerrar sesión o volver a esta pantalla.
@@ -69,8 +73,9 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
 
     try {
       if (mode === 'login') {
-        const err = await signIn(email, password);
+        const { error: err, mfaRequired } = await signIn(email, password);
         if (err) setError(err);
+        else if (mfaRequired) setMfaStep(true); // falta el segundo factor
         else onSuccess();
       } else if (mode === 'forgot') {
         await sendPasswordReset(email);
@@ -107,12 +112,74 @@ export function Auth({ onSuccess, onHome, initialMode = 'login', notice, onNotic
     if (err) { setError(err); setLoading(false); }
   };
 
-  const title = isRegister ? 'Registrarse' : isForgot ? 'Recuperar contraseña' : 'Iniciar sesión';
-  const subtitle = isRegister
-    ? 'Crea tu cuenta. Después completarás tu perfil de investigador.'
-    : isForgot
-      ? 'Te enviaremos un enlace a tu correo para restablecerla'
-      : 'Accede a los módulos de SismoNariño';
+  // Envía el código del segundo factor para completar el inicio de sesión.
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const err = await verifyMfa(mfaCode);
+      if (err) setError(err);
+      else onSuccess();
+    } finally {
+      setMfaCode('');
+      setLoading(false);
+    }
+  };
+
+  // Cancela el paso 2FA y vuelve al formulario de inicio de sesión.
+  const cancelMfa = () => { setMfaStep(false); setMfaCode(''); setError(''); };
+
+  const title = mfaStep ? 'Verificación en dos pasos' : isRegister ? 'Registrarse' : isForgot ? 'Recuperar contraseña' : 'Iniciar sesión';
+  const subtitle = mfaStep
+    ? 'Escribe el código de 6 dígitos de tu app autenticadora'
+    : isRegister
+      ? 'Crea tu cuenta. Después completarás tu perfil de investigador.'
+      : isForgot
+        ? 'Te enviaremos un enlace a tu correo para restablecerla'
+        : 'Accede a los módulos de SismoNariño';
+
+  // Paso de verificación en dos pasos: código de la app autenticadora.
+  if (mfaStep) {
+    return (
+      <AuthLayout title={title} subtitle={subtitle} onHome={onHome}>
+        <form onSubmit={handleMfaSubmit} className="bg-white rounded-2xl border border-stone-200/60 shadow-sm p-5 space-y-3">
+          <p className="text-xs text-stone-500">
+            Abre tu app (Google Authenticator, Microsoft Authenticator, etc.) y escribe el código que muestra para SismoNariño. Cambia cada 30 segundos.
+          </p>
+          <Field icon={<Shield size={16} />} label="Código de verificación">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={mfaCode}
+              onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456"
+              autoFocus
+              required
+              className={`${inputCls} tracking-[0.4em] text-center font-mono text-lg`}
+            />
+          </Field>
+
+          {error && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>}
+
+          <button type="submit" disabled={loading || mfaCode.length !== 6}
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm shadow-sm btn-hover ${
+              loading || mfaCode.length !== 6 ? 'bg-stone-200 text-stone-500 cursor-not-allowed' : 'bg-[#C4553A] text-white'
+            }`}>
+            {loading ? 'Verificando...' : 'Verificar'}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-stone-400 mt-3">
+          <button onClick={cancelMfa} className="text-[#C4553A] font-semibold">Volver a iniciar sesión</button>
+        </p>
+      </AuthLayout>
+    );
+  }
 
   // Motivo por el que el botón de registro está deshabilitado (para guiar al
   // usuario). Prioriza los campos base, luego la contraseña y por último el

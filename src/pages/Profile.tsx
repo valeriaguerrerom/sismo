@@ -5,7 +5,7 @@
  * texto) con modo edición en el sitio, además de secciones de Seguridad,
  * Privacidad y eliminación permanente de la cuenta. Solo esta página.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ShieldCheck, Pencil, Check, X, Lock, Trash2, AlertTriangle, ArrowRight,
   Calendar, Mail, Eye, EyeSlash, UserX, Image as ImageIcon,
@@ -16,6 +16,7 @@ import type { ResearcherSignUp } from '../lib/authTypes';
 import { ResearcherFields } from '../components/auth/ResearcherFields';
 import { PASSWORD_RULES, isPasswordStrong, DATA_POLICY_URL } from '../lib/authConsent';
 import { deleteOwnAccount } from '../lib/account';
+import { hasVerifiedTotp, startEnrollment, verifyEnrollment, disableTotp } from '../lib/mfa';
 
 const C = { terracotta: '#C4553A', forest: '#2D6A4F', ink: '#1A1A2E', cream: '#FAFAF8', muted: '#5A5A5A' };
 
@@ -111,6 +112,23 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
+
+  // Verificación en dos pasos (2FA TOTP)
+  const [mfaOn, setMfaOn] = useState(false);          // ya tiene un factor verificado
+  const [mfaLoading, setMfaLoading] = useState(true); // consultando estado al montar
+  const [mfaEnroll, setMfaEnroll] = useState<{ factorId: string; qr: string; secret: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);      // operación en curso (activar/verificar/desactivar)
+
+  // Consulta al montar si la cuenta ya tiene la verificación en dos pasos activa.
+  useEffect(() => {
+    let alive = true;
+    hasVerifiedTotp()
+      .then(on => { if (alive) setMfaOn(on); })
+      .finally(() => { if (alive) setMfaLoading(false); });
+    return () => { alive = false; };
+  }, []);
 
   // Desactivación de cuenta
   const [deacOpen, setDeacOpen] = useState(false);
@@ -217,6 +235,57 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
       setPw('');
       setCurrentPw('');
       setPwSaving(false);
+    }
+  };
+
+  // Inicia el enrolamiento: pide a Supabase el QR y el secreto para mostrarlos.
+  const beginMfaEnroll = async () => {
+    setMfaError('');
+    setMfaCode('');
+    setMfaBusy(true);
+    try {
+      const { data, error } = await startEnrollment();
+      if (error || !data) { setMfaError(error ?? 'No se pudo iniciar la activación.'); return; }
+      setMfaEnroll(data);
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  // Confirma el enrolamiento con el primer código de la app autenticadora.
+  const confirmMfaEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaEnroll) return;
+    setMfaError('');
+    setMfaBusy(true);
+    try {
+      const err = await verifyEnrollment(mfaEnroll.factorId, mfaCode);
+      if (err) { setMfaError(err); return; }
+      setMfaOn(true);
+      setMfaEnroll(null);
+      setToast('Verificación en dos pasos activada');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setMfaCode('');
+      setMfaBusy(false);
+    }
+  };
+
+  // Cancela el enrolamiento a medias (el factor sin verificar se limpia luego).
+  const cancelMfaEnroll = () => { setMfaEnroll(null); setMfaCode(''); setMfaError(''); };
+
+  // Desactiva la verificación en dos pasos quitando los factores TOTP.
+  const turnOffMfa = async () => {
+    setMfaError('');
+    setMfaBusy(true);
+    try {
+      const err = await disableTotp();
+      if (err) { setMfaError(err); return; }
+      setMfaOn(false);
+      setToast('Verificación en dos pasos desactivada');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setMfaBusy(false);
     }
   };
 
@@ -455,6 +524,84 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               Política de protección de datos de la Universidad Mariana
             </a>
           </div>
+        </div>
+
+        {/* ── Verificación en dos pasos (2FA TOTP, opcional) ── */}
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5 mt-4">
+          <h2 className="text-sm font-bold flex items-center gap-2 mb-1" style={{ color: C.ink }}>
+            <ShieldCheck size={15} className="text-[#2D6A4F]" /> Verificación en dos pasos
+          </h2>
+          <p className="text-xs leading-relaxed mb-3" style={{ color: C.muted }}>
+            Añade una capa extra: al iniciar sesión pedimos un código de tu app autenticadora
+            (Google Authenticator, Microsoft Authenticator, etc.) además de la contraseña. Es opcional.
+          </p>
+
+          {mfaLoading ? (
+            <div className="h-5 w-5 rounded-full border-2 border-stone-200 border-t-[#C4553A] animate-spin" aria-label="Cargando" />
+          ) : mfaOn ? (
+            // Ya activa: estado + botón para desactivar.
+            <div className="space-y-3">
+              <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2D6A4F] bg-green-50 border border-green-100 rounded-lg px-3 py-1.5">
+                <Check size={13} /> Activa en esta cuenta
+              </p>
+              {mfaError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{mfaError}</p>}
+              <div>
+                <button onClick={turnOffMfa} disabled={mfaBusy}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:border-red-300 hover:text-red-700 transition-colors disabled:opacity-50">
+                  {mfaBusy ? 'Desactivando…' : 'Desactivar'}
+                </button>
+              </div>
+            </div>
+          ) : mfaEnroll ? (
+            // Enrolamiento en curso: QR + secreto + código de confirmación.
+            <form onSubmit={confirmMfaEnroll} className="space-y-3">
+              <ol className="text-xs space-y-1 list-decimal pl-4" style={{ color: C.muted }}>
+                <li>Abre tu app autenticadora y escanea este código QR.</li>
+                <li>Escribe el código de 6 dígitos que aparece para confirmar.</li>
+              </ol>
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                <img src={mfaEnroll.qr} alt="Código QR para la app autenticadora" width={160} height={160}
+                  className="rounded-lg border border-stone-200 bg-white p-1" />
+                <div className="text-xs" style={{ color: C.muted }}>
+                  <p className="mb-1">¿No puedes escanear? Escribe esta clave en la app:</p>
+                  <code className="block break-all bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 font-mono text-[11px]" style={{ color: C.ink }}>
+                    {mfaEnroll.secret}
+                  </code>
+                </div>
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={mfaCode}
+                onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
+                className="w-40 px-3 py-2.5 rounded-xl border border-stone-200 text-sm text-center font-mono tracking-[0.3em] focus:outline-none focus:border-[#C4553A] bg-stone-50"
+              />
+              {mfaError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{mfaError}</p>}
+              <div className="flex gap-2">
+                <button type="submit" disabled={mfaBusy || mfaCode.length !== 6}
+                  className="flex items-center gap-2 bg-[#C4553A] text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 btn-hover">
+                  {mfaBusy ? 'Verificando…' : 'Activar'} <Check size={14} />
+                </button>
+                <button type="button" onClick={cancelMfaEnroll} disabled={mfaBusy}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-stone-500 text-sm font-semibold disabled:opacity-50">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          ) : (
+            // Inactiva: botón para empezar.
+            <div className="space-y-3">
+              {mfaError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100">{mfaError}</p>}
+              <button onClick={beginMfaEnroll} disabled={mfaBusy}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:border-[#C4553A]/40 hover:text-[#C4553A] transition-colors disabled:opacity-50">
+                <ShieldCheck size={13} /> {mfaBusy ? 'Preparando…' : 'Activar verificación en dos pasos'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Tu cuenta (desactivar / eliminar) ── */}

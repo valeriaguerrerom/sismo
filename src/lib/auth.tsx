@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { deriveAuthSecret } from './passwordDerive';
+import { needsMfaChallenge, completeMfaChallenge } from './mfa';
 import { isPasswordStrong } from './authConsent';
 import { isProfileComplete } from './authTypes';
 import type { UserRole, ResearcherSignUp, UserProfile, DeactivatedInfo } from './authTypes';
@@ -280,14 +281,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
-    if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+  const signIn = useCallback(async (email: string, password: string): Promise<{ error: string | null; mfaRequired: boolean }> => {
+    if (!supabase) return { error: 'Auth no disponible: falta configurar Supabase.', mfaRequired: false };
     // Secreto derivado en el cliente: la contraseña en texto plano no viaja.
     let secret: string;
     try {
       secret = await deriveAuthSecret(email, password);
     } catch (e) {
-      return e instanceof Error ? e.message : 'No se pudo iniciar sesión de forma segura.';
+      return { error: e instanceof Error ? e.message : 'No se pudo iniciar sesión de forma segura.', mfaRequired: false };
     }
     try {
       // Con timeout: si la red a Supabase se cuelga, el botón no se queda
@@ -297,12 +298,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       secret = ''; // limpiar la copia local del secreto derivado
       // Mensaje genérico: no se revela si el correo existe o no.
-      if (error) return 'Correo o contraseña incorrectos.';
-      return null;
+      if (error) return { error: 'Correo o contraseña incorrectos.', mfaRequired: false };
+      // Contraseña correcta. Si la cuenta tiene 2FA, la sesión queda en aal1 y
+      // falta el código del segundo factor: se avisa a la UI (no se entra aún).
+      if (await needsMfaChallenge()) return { error: null, mfaRequired: true };
+      return { error: null, mfaRequired: false };
     } catch (e) {
-      return e instanceof Error ? e.message : 'No se pudo iniciar sesión. Revisa tu conexión.';
+      return { error: e instanceof Error ? e.message : 'No se pudo iniciar sesión. Revisa tu conexión.', mfaRequired: false };
     }
   }, []);
+
+  const verifyMfa = useCallback(async (code: string): Promise<string | null> => {
+    if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
+    const err = await completeMfaChallenge(code);
+    if (err) return err;
+    // Al subir a aal2, recargar el perfil para entrar con la sesión plena.
+    const { data } = await supabase.auth.getSession();
+    await loadProfile(data.session);
+    return null;
+  }, [loadProfile]);
 
   const signInWithGoogle = useCallback(async (): Promise<string | null> => {
     if (!supabase) return 'Auth no disponible: falta configurar Supabase.';
@@ -584,7 +598,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, blockedMessage, deactivatedInfo, reactivateOwnAccount, deactivateOwnAccount, recoveryMode, signUp, signIn, signInWithGoogle, signOut, updateProfile, updateAvatar, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
+    <AuthContext.Provider value={{ user, loading, blockedMessage, deactivatedInfo, reactivateOwnAccount, deactivateOwnAccount, recoveryMode, signUp, signIn, verifyMfa, signInWithGoogle, signOut, updateProfile, updateAvatar, sendPasswordReset, updatePassword, clearRecovery, markTourSeen }}>
       {children}
     </AuthContext.Provider>
   );
