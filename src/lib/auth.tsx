@@ -251,6 +251,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         secret = ''; // limpiar la copia local del secreto derivado
         if (error) return { error: translateError(error.message), needsConfirmation: false };
 
+        // Correo YA registrado: con "Confirm email" activo, Supabase NO devuelve
+        // error (para no revelar que la cuenta existe); devuelve un usuario con
+        // `identities` vacío y sin sesión. Lo detectamos para no dar a entender
+        // que se creó una cuenta nueva, e invitamos a iniciar sesión o recuperar.
+        const identities = (data.user?.identities ?? []) as unknown[];
+        if (data.user && identities.length === 0 && !data.session) {
+          return {
+            error: 'Ese correo ya está registrado. Inicia sesión o usa "¿Olvidaste tu contraseña?" para recuperarla.',
+            needsConfirmation: false,
+          };
+        }
+
         // Si no hay confirmación de email, ya hay sesión: asegurar los datos.
         // onAuthStateChange cargará el perfil y la app irá a "Completa tu perfil".
         if (data.session && data.user) {
