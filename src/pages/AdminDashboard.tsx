@@ -12,7 +12,7 @@ import { ROLE_LABELS } from '../lib/authTypes';
 import { supabase } from '../lib/supabase';
 import {
   Users, Database, FileText, Settings, Trash2, Shield, BarChart3, Plus, Pencil, Upload,
-  BookOpen, Check, X, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle,
+  BookOpen, Check, X, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle, Copy, CopyCheck,
   MoreVertical, UserCheck, UserX, Download, ArrowRight, Mail, MessageSquare,
 } from '../lib/icons';
 import type { SeismicEvent } from '../lib/types';
@@ -396,6 +396,7 @@ function UsersTab({ users, meId, onChange, notify }: {
   const [reason, setReason] = useState('');
   const [reasonOther, setReasonOther] = useState('');
   const [delEmail, setDelEmail] = useState('');
+  const [emailCopied, setEmailCopied] = useState(false); // feedback del botón "copiar correo"
 
   const REASONS = ['Cuenta de prueba', 'Solicitud del usuario', 'Inactividad', 'Uso indebido', 'Otro'];
 
@@ -441,8 +442,16 @@ function UsersTab({ users, meId, onChange, notify }: {
   };
 
   const openReasonDialog = (u: AdminUser, mode: 'deactivate' | 'delete') => {
-    setReason(''); setReasonOther(''); setDelEmail('');
+    setReason(''); setReasonOther(''); setDelEmail(''); setEmailCopied(false);
     setReasonDlg({ u, mode });
+  };
+
+  // Copia el correo del usuario al portapapeles y rellena el campo de confirmación.
+  const copyEmailToConfirm = async (email: string) => {
+    try { await navigator.clipboard.writeText(email); } catch { /* el navegador puede bloquearlo */ }
+    setDelEmail(email);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
   };
 
   const onAction = (u: AdminUser, a: 'role' | 'active' | 'delete') => {
@@ -614,8 +623,26 @@ function UsersTab({ users, meId, onChange, notify }: {
 
               {isDelete && (
                 <>
-                  <p className="text-sm mt-3 text-stone-500">Para confirmar, escribe su correo <b className="text-[#1A1A2E]">{u.email}</b>:</p>
-                  <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder={u.email} autoComplete="off"
+                  {/* Instrucción destacada: para confirmar hay que escribir ESTE correo. */}
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                      <AlertTriangle size={13} /> Para confirmar, escribe el correo exactamente igual:
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <code className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 font-mono text-sm font-semibold text-[#1A1A2E]" title={u.email}>
+                        {u.email}
+                      </code>
+                      <button type="button" onClick={() => copyEmailToConfirm(u.email)}
+                        className={`shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${
+                          emailCopied ? 'border-[#2D6A4F] text-[#2D6A4F] bg-green-50' : 'border-red-300 text-red-600 bg-white hover:bg-red-100'
+                        }`}
+                        aria-label="Copiar correo y rellenar la confirmación">
+                        {emailCopied ? <><CopyCheck size={13} /> ¡Copiado!</> : <><Copy size={13} /> Copiar</>}
+                      </button>
+                    </div>
+                  </div>
+                  <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder="Escribe o pega el correo aquí" autoComplete="off"
+                    aria-label="Confirma el correo electrónico"
                     className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50" />
                 </>
               )}
