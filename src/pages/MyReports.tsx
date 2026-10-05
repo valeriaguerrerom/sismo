@@ -10,6 +10,7 @@ import { downloadMap3dPdf, downloadMap3dCsv, type Map3dReportData, type Map3dRep
 import type { SimulationParams, Page } from '../lib/types';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { Pagination } from '../components/ui/Pagination';
+import { FeedbackSection } from '../components/ui/FeedbackSection';
 
 /** Reportes por página en la lista. */
 const REPORTS_PER_PAGE = 8;
@@ -235,13 +236,19 @@ export function MyReports({ onNavigate }: Props) {
 
   const inputCls = 'w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-[#C4553A] bg-white';
 
+  // Saludo según la hora del día (toque personal).
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const firstName = (user?.full_name || user?.email || '').split(/\s+/)[0];
+
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
       {/* Encabezado */}
       <div className="bg-white border-b border-stone-200/60 px-4 sm:px-6 py-4">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
-            <FileText size={20} className="text-[#C4553A]" />
+          <p className="text-xs font-semibold text-[#C4553A] uppercase tracking-wide">{greeting}{firstName ? `, ${firstName}` : ''}</p>
+          <h1 className="text-[#1A1A2E] font-black text-2xl flex items-center gap-2 mt-0.5">
+            <FileText size={22} className="text-[#C4553A]" />
             Mis reportes
           </h1>
           <p className="text-stone-400 text-xs mt-0.5">
@@ -434,6 +441,20 @@ export function MyReports({ onNavigate }: Props) {
             )}
           </>
         )}
+
+        {/* ── ¿Algo que añadir? Formulario de feedback para investigadores ── */}
+        <div className="mt-12 pt-10 border-t border-stone-200/60">
+          <FeedbackSection
+            userEmail={user?.email ?? ''}
+            title="¿Algo que te gustaría ver en SismoNariño?"
+            description="Como investigador, tus ideas pesan. Cuéntanos qué añadirías: un evento sísmico, una estación, una pregunta del quiz, un dato curioso o cualquier mejora."
+            items={[
+              { t: 'Un evento o estación', d: 'Un sismo o una estación que te gustaría encontrar en el explorador o el mapa.' },
+              { t: 'Contenido educativo', d: 'Una pregunta de quiz, un dato curioso de ondas o un hito para la línea de tiempo.' },
+              { t: 'Mejoras o errores', d: 'Algo que harías distinto en la simulación, o algo que no funciona como esperabas.' },
+            ]}
+          />
+        </div>
       </div>
 
       {/* ── Diálogo de confirmación de borrado (con el nombre del reporte) ── */}
