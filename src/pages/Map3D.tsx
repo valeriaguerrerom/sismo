@@ -562,7 +562,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // Cuando termine de generar todos los sintéticos, abrir el panel triaxial.
     if (runId === runIdRef.current && tts.length > 0) {
       setTimeout(() => {
-        // Prioridad ABSOLUTA: si hay datos reales activos, mantener esa estación.
+        // Dejar una estación seleccionada (define el corte y el panel), pero NO
+        // abrir el panel triaxial automáticamente: solo se muestra cuando el
+        // usuario pulsa "Ver panel triaxial".
         if (realStationRef.current) {
           setSelectedStation(realStationRef.current);
         } else {
@@ -572,7 +574,6 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             return nearest || current;
           });
         }
-        setShowTriaxial(true);
       }, 200);
     }
   }, [vp, vs, density, magnitude, depthKm, sourceType]);
@@ -749,7 +750,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           realStationRef.current = stationCode; // marcar como estación real activa
           setSelectedStation(stationCode);
           setStationDetail(traces[stationCode] ?? null);
-          setShowTriaxial(true);
+          // NO abrir el panel triaxial automáticamente: el usuario lo abre con
+          // el botón "Ver panel triaxial" cuando quiera.
         }
       } catch (error) {
         console.warn('[Map3D] No se pudieron cargar datos reales:', error);
@@ -807,14 +809,13 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   }, [traces, selectedStation]);
 
   // GARANTÍA FINAL: cuando se cargan datos reales (realWave cambia) y el ref
-  // apunta a una estación real, forzar que esa estación quede seleccionada.
-  // Esto gana cualquier carrera con el useEffect de travelTimes que pudiera
-  // haber seleccionado la estación más cercana (sintético) por timing.
+  // apunta a una estación real, forzar que esa estación quede seleccionada
+  // (para que, SI el usuario abre el panel, muestre la señal real). NO abre el
+  // panel: solo mantiene la estación correcta seleccionada.
   useEffect(() => {
     const realCode = realStationRef.current;
     if (realCode && realWave[realCode] && selectedStation !== realCode) {
       setSelectedStation(realCode);
-      setShowTriaxial(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realWave, selectedStation]);
@@ -1463,7 +1464,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               </p>
             )}
             <ParamSlider label="ρ" value={density} min={1800} max={3300} step={50} unit="kg/m³" onChange={setDensity} />
-            <ParamSlider label="Prof." value={depthKm} min={0.1} max={200} step={0.1} unit="km" onChange={(v) => { setDepthKm(v); setDepthAssumed(false); if (epicenter) setEpicenter({ ...epicenter, depthKm: v }); }} />
+            <ParamSlider label="Prof." value={depthKm} min={0.1} max={200} step={0.1} unit="km" onChange={(v) => { setDepthKm(v); setDepthAssumed(false); }} />
             {depthAssumed && currentEventId && (
               <p className="text-[10px] text-[#D4A853] leading-snug -mt-1">
                 Profundidad no disponible en el catálogo; se usa {depthKm} km para la simulación.
@@ -1477,7 +1478,18 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               block
             >
               <button
-                onClick={() => epicenter && recomputeTravelTimes(epicenter)}
+                onClick={() => {
+                  if (!epicenter) return;
+                  // Aplicar la profundidad del slider al epicentro y recalcular.
+                  // Mutar el epicentro dispara el useEffect([epicenter]) que llama
+                  // a recomputeTravelTimes; si la profundidad no cambió, se llama
+                  // aquí directo para que el botón siempre regenere.
+                  if (epicenter.depthKm !== depthKm) {
+                    setEpicenter({ ...epicenter, depthKm });
+                  } else {
+                    recomputeTravelTimes(epicenter);
+                  }
+                }}
                 disabled={!epicenter}
                 className="w-full text-[11px] font-bold py-2 rounded-lg bg-white/5 border border-white/10 text-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
               >
