@@ -535,6 +535,20 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         return next;
       });
     }));
+    
+    // Cuando termine de generar todos los sintéticos, abrir el panel triaxial
+    // automáticamente con la primera estación (la más cercana)
+    if (runId === runIdRef.current && tts.length > 0) {
+      const stationToShow = tts[0]?.code;
+      if (stationToShow) {
+        // Esperar un poco para que los estados se actualicen
+        setTimeout(() => {
+          setSelectedStation(stationToShow);
+          setShowTriaxial(true);
+          console.log(`[Map3D] Panel triaxial abierto automáticamente para estación ${stationToShow}`);
+        }, 200);
+      }
+    }
   }, [vp, vs, density, magnitude, depthKm, sourceType]);
 
   useEffect(() => {
@@ -562,7 +576,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       }
       // Seleccionar por defecto la estación más cercana (define el corte).
       const nearest = travelTimes[0]?.code;
-      if (nearest && !selectedStation) selectStation(nearest);
+      if (nearest && !selectedStation) {
+        selectStation(nearest);
+        // NO abrir el panel aquí, se abrirá en loadSynthetics cuando terminen de generarse
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [travelTimes]);
