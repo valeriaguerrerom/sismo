@@ -145,8 +145,8 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds,
                   {p.badge}
                 </LeafletTooltip>
               )}
-              <Popup>
-                <div style={{ fontSize: 12, maxWidth: 250 }}>
+              <Popup maxWidth={320} minWidth={200}>
+                <div style={{ fontSize: 12, wordWrap: 'break-word', whiteSpace: 'normal' }}>
                   <strong>{p.label}</strong>
                   {p.sublabel && <div style={{ color: '#78716c' }}>{p.sublabel}</div>}
                 </div>
@@ -173,8 +173,8 @@ export function SeismicMap({ points, selectedId, onSelect, center, zoom, bounds,
                 {p.badge}
               </LeafletTooltip>
             )}
-            <Popup>
-              <div style={{ fontSize: 12, maxWidth: 250 }}>
+            <Popup maxWidth={320} minWidth={200}>
+              <div style={{ fontSize: 12, wordWrap: 'break-word', whiteSpace: 'normal' }}>
                 <strong>{p.label}</strong>
                 {p.sublabel && <div style={{ color: '#78716c' }}>{p.sublabel}</div>}
               </div>

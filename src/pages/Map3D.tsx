@@ -659,9 +659,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       const realData = await fetchEventWaveforms(ev.id);
       if (realData) {
         // Datos reales encontrados: cargar en el estado
+        const stationCode = realData.station;
         setRealWave(prev => ({
           ...prev,
-          [realData.station]: {
+          [stationCode]: {
             t: realData.waveData.time,
             north: realData.waveData.north,
             east: realData.waveData.east,
@@ -670,8 +671,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             tS_detectado: null,
           },
         }));
-        setShowReal(prev => ({ ...prev, [realData.station]: true }));
-        console.log(`[Map3D] Datos reales cargados para evento ${ev.id}: ${realData.station}`);
+        setShowReal(prev => ({ ...prev, [stationCode]: true }));
+        
+        // CRÍTICO: Automáticamente seleccionar la estación que tiene datos reales
+        // para que el usuario vea los datos reales en lugar de sintéticos
+        setSelectedStation(stationCode);
+        setShowTriaxial(true); // Abrir el panel triaxial automáticamente
+        
+        console.log(`[Map3D] Datos reales cargados para evento ${ev.id}: ${stationCode} - MOSTRANDO AUTOMÁTICAMENTE`);
       }
     } catch (error) {
       console.warn(`[Map3D] No se pudieron cargar datos reales para evento ${ev.id}:`, error);
