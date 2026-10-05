@@ -571,6 +571,7 @@ export function About(_: Props) {
             // Con sesión: invita a pedir contenido concreto (eventos, quiz, datos…).
             <FeedbackSection
               userEmail={user.email ?? ''}
+              requireEmail
               title="¿Qué te gustaría que añadiéramos?"
               description="Como investigador registrado, tus solicitudes pesan. Pide lo que quieras ver en SismoNariño: un evento, una estación, contenido educativo o cualquier mejora."
               items={[

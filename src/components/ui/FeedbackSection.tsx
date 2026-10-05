@@ -35,6 +35,12 @@ export interface FeedbackSectionProps {
    * Si no se pasa, se usan los tres por defecto (sugerencias, errores, datos).
    */
   items?: { t: string; d: string }[];
+  /**
+   * Si es true, el correo es obligatorio y se muestra fijo (el del usuario
+   * autenticado). Se usa en "Acerca de" cuando hay sesión: ya sabemos su correo
+   * y le responderemos a él, así que no tiene sentido que sea opcional ni editable.
+   */
+  requireEmail?: boolean;
   /** Clases extra para el contenedor externo. */
   className?: string;
 }
@@ -44,6 +50,7 @@ export function FeedbackSection({
   title = '¿Qué le falta a SismoNariño?',
   description = 'Es un proyecto vivo y nos ayuda saber cómo lo usas. No necesitas iniciar sesión.',
   items,
+  requireEmail = false,
   className = '',
 }: FeedbackSectionProps) {
   const defaultItems = [
@@ -63,16 +70,19 @@ export function FeedbackSection({
   const [error, setError] = useState('');
 
   const hasEmail = email.trim() !== '';
+  const missingEmail = requireEmail && !hasEmail;
+  // El consentimiento se pide siempre que haya correo (opcional o requerido).
   const needsConsent = hasEmail && !consent;
   const emptyMessage = message.trim() === '';
   const overLimit = message.length > FEEDBACK_MAX_LENGTH;
-  const canSend = !emptyMessage && !overLimit && !needsConsent && !sending;
+  const canSend = !emptyMessage && !overLimit && !needsConsent && !missingEmail && !sending;
 
   const disabledReason =
     emptyMessage ? 'Escribe un mensaje para enviar'
       : overLimit ? 'El mensaje es demasiado largo'
-        : needsConsent ? 'Autoriza el tratamiento de tu correo'
-          : '';
+        : missingEmail ? 'Necesitamos tu correo para responderte'
+          : needsConsent ? 'Autoriza el tratamiento de tu correo'
+            : '';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -163,11 +173,17 @@ export function FeedbackSection({
             {/* Correo */}
             <div>
               <label className="block text-xs font-semibold text-stone-500 mb-1.5">
-                Correo <span className="font-normal text-stone-400">(opcional, solo si quieres que te respondamos)</span>
+                Correo {requireEmail
+                  ? <span className="text-red-500">*</span>
+                  : <span className="font-normal text-stone-400">(opcional, solo si quieres que te respondamos)</span>}
               </label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                readOnly={requireEmail}
                 placeholder="tucorreo@ejemplo.com"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#C4553A] bg-stone-50" />
+                className={`w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#C4553A] bg-stone-50 ${requireEmail ? 'text-stone-500 cursor-not-allowed' : ''}`} />
+              {requireEmail && (
+                <p className="text-[11px] text-stone-400 mt-1">Te responderemos a este correo (el de tu cuenta).</p>
+              )}
             </div>
 
             {/* Consentimiento */}
