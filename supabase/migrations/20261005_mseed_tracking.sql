@@ -2,6 +2,23 @@
 -- Fecha: 2026-10-05
 -- Descripción: Permite rastrear todas las cargas de usuarios y asociar eventos del catálogo con archivos MiniSEED
 
+-- NOTA: Esta migración es idempotente - puede ejecutarse múltiples veces sin errores
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 0. Limpiar objetos existentes si es re-ejecución
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+-- Eliminar funciones si existen
+DROP FUNCTION IF EXISTS get_top_mseed_uploaders(INTEGER);
+DROP FUNCTION IF EXISTS get_mseed_failure_reasons(INTEGER);
+DROP FUNCTION IF EXISTS refresh_mseed_upload_stats();
+
+-- Eliminar vista materializada si existe
+DROP MATERIALIZED VIEW IF EXISTS mseed_upload_stats;
+
+-- Eliminar tabla si existe (esto borrará datos previos - comentar si hay datos importantes)
+-- DROP TABLE IF EXISTS mseed_upload_logs CASCADE;
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 1. Tabla de logs de cargas MiniSEED (tracking completo de uso)
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -41,10 +58,10 @@ CREATE TABLE IF NOT EXISTS mseed_upload_logs (
 );
 
 -- Índices para búsquedas rápidas
-CREATE INDEX idx_mseed_logs_user ON mseed_upload_logs(user_id);
-CREATE INDEX idx_mseed_logs_success ON mseed_upload_logs(success);
-CREATE INDEX idx_mseed_logs_uploaded_at ON mseed_upload_logs(uploaded_at DESC);
-CREATE INDEX idx_mseed_logs_station ON mseed_upload_logs(selected_station) WHERE selected_station IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mseed_logs_user ON mseed_upload_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_mseed_logs_success ON mseed_upload_logs(success);
+CREATE INDEX IF NOT EXISTS idx_mseed_logs_uploaded_at ON mseed_upload_logs(uploaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mseed_logs_station ON mseed_upload_logs(selected_station) WHERE selected_station IS NOT NULL;
 
 -- RLS: usuarios pueden ver solo sus propios logs, admins ven todos
 ALTER TABLE mseed_upload_logs ENABLE ROW LEVEL SECURITY;
