@@ -176,9 +176,57 @@ export function MyReports({ onNavigate }: Props) {
     });
   };
 
-  /** Descarga el CSV (solo aplica a reportes del Mapa 3D). */
-  const exportMap3dCsv = (report: Report) => {
-    if (isMap3d(report)) downloadMap3dCsv(report.results.map3d!, map3dOpts(report));
+  /** Descarga el CSV del reporte (Mapa 3D o simulación según su tipo). */
+  const exportCsv = (report: Report) => {
+    if (isMap3d(report)) {
+      downloadMap3dCsv(report.results.map3d!, map3dOpts(report));
+      return;
+    }
+    // Reporte de simulación: exportar metadatos + serie temporal triaxial.
+    const res = report.results;
+    const p = report.params;
+    const lines: string[] = [];
+    lines.push(`# ${report.title}`);
+    lines.push(`# fecha_exportacion,${new Date().toISOString()}`);
+    lines.push(`# origen,${res.isRealRecord ? 'registro real' : 'pseudo-sismograma simulado (FDM)'}`);
+    if (res.realLabel) lines.push(`# registro,${res.realLabel}`);
+    lines.push('');
+    lines.push('# PARAMETROS');
+    lines.push('clave,valor');
+    if (p) {
+      lines.push(`tipo_fuente,${p.sourceType}`);
+      lines.push(`magnitud,${p.magnitude}`);
+      lines.push(`profundidad_km,${p.depth}`);
+      lines.push(`vp_m_s,${p.vp}`);
+      lines.push(`vs_m_s,${p.vs}`);
+      lines.push(`densidad_kg_m3,${p.density}`);
+      lines.push(`epicentro_lat,${p.epicenterLat}`);
+      lines.push(`epicentro_lon,${p.epicenterLon}`);
+      lines.push(`duracion_s,${p.duration}`);
+    }
+    lines.push('');
+    lines.push('# METRICAS');
+    lines.push('clave,valor');
+    lines.push(`amplitud_maxima,${res.maxAmplitude}`);
+    lines.push(`frecuencia_dominante_hz,${res.dominantFrequency}`);
+    lines.push(`llegada_P_s,${res.pArrival}`);
+    lines.push(`llegada_S_s,${res.sArrival}`);
+    lines.push('');
+    const wd = res.waveData;
+    if (wd && wd.time.length > 1) {
+      lines.push('# SISMOGRAMA TRIAXIAL');
+      lines.push('tiempo_s,norte,este,vertical');
+      for (let i = 0; i < wd.time.length; i++) {
+        lines.push(`${wd.time[i]},${wd.north[i] ?? ''},${wd.east[i] ?? ''},${wd.vertical[i] ?? ''}`);
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte_${report.title.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   /** Descarga el JSON (solo aplica a reportes del Mapa 3D). */
@@ -425,11 +473,9 @@ export function MyReports({ onNavigate }: Props) {
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C4553A]/5 text-[#C4553A] border border-[#C4553A]/20 text-xs font-bold">
                           <FileDown size={14} /> PDF
                         </button>
-                        {map3d && (
-                          <button onClick={() => exportMap3dCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
-                            <Download size={14} /> CSV
-                          </button>
-                        )}
+                        <button onClick={() => exportCsv(r)} title="Descargar CSV" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6A4F]/5 text-[#2D6A4F] border border-[#2D6A4F]/20 text-xs font-bold">
+                          <Download size={14} /> CSV
+                        </button>
                         <button
                           onClick={() => map3d ? exportMap3dJson(r) : exportJSON(r)}
                           title="Descargar JSON"

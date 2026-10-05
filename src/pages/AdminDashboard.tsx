@@ -1860,7 +1860,7 @@ function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void 
             <div>
               <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">Tasa Éxito</p>
               <p className="text-3xl font-black text-[#D4A853] mt-1">
-                {totalLogs > 0 ? Math.round((stats.reduce((sum, s) => sum + s.successful_uploads, 0) / stats.reduce((sum, s) => sum + s.total_uploads, 0)) * 100) : 0}%
+                {logs.length > 0 ? Math.round((logs.filter(l => l.success).length / logs.length) * 100) : 0}%
               </p>
             </div>
             <BarChart3 size={24} className="text-[#D4A853]" />

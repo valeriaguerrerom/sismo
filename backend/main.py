@@ -22,6 +22,13 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
+
+# IMPORTANTE: cargar las variables de entorno ANTES de importar los routers.
+# Varios routers (p. ej. api.mseed_upload) crean su cliente de Supabase al ser
+# importados, leyendo SUPABASE_URL/KEY del entorno. Si load_dotenv() corre
+# después, esos clientes quedan en None y el logging/consultas no funcionan.
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,8 +53,6 @@ from api.mseed_upload import router as mseed_upload_router
 from api.account import router as account_router
 from api.feedback import router as feedback_router
 from api.event_waveforms import router as event_waveforms_router
-
-load_dotenv()
 
 # ─── Configuración por entorno (seguridad) ───
 # IS_PRODUCTION y safe_error_detail viven en core.config para compartirse con

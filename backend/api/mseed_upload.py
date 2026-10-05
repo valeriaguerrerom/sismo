@@ -28,12 +28,15 @@ from core.config import require_user_id
 from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
 
-# Supabase client para logging (opcional, no rompe si no existe)
+# Supabase client para logging. Usa la SERVICE ROLE KEY (no la anónima) porque
+# la tabla mseed_upload_logs tiene RLS sin política de INSERT: solo el service
+# role puede escribir. Con la anónima el INSERT se bloquea en silencio y el
+# panel admin queda siempre en 0. Si no hay service role, cae a la anónima.
 try:
     import os as _os
     from supabase import create_client as _create_client
     _url = _os.getenv("SUPABASE_URL", "")
-    _key = _os.getenv("SUPABASE_ANON_KEY", "")
+    _key = _os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or _os.getenv("SUPABASE_ANON_KEY", "")
     supabase = _create_client(_url, _key) if (_url and _key) else None
 except Exception:
     supabase = None
@@ -244,6 +247,12 @@ def _log_upload_attempt(
     """
     if not supabase:
         return  # Sin Supabase no se registra nada (entorno local/testing)
+
+    # user_id debe ser un UUID real (FK a auth.users). En local sin token,
+    # require_user_id devuelve 'anon-local', que no es un UUID válido: en ese
+    # caso no se registra (evita un error de FK/formato en cada carga).
+    if not user_id or user_id == "anon-local":
+        return
 
     try:
         log_data = {
