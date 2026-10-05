@@ -28,6 +28,8 @@ export {
   ChevronLeft,
   ChevronRight,
   CardChecklist as ClipboardList,
+  Clipboard as Copy,
+  ClipboardCheck as CopyCheck,
   Clock,
   CodeSlash as Code2,
   Cpu,

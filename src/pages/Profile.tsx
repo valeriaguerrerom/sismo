@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ShieldCheck, Pencil, Check, X, Lock, Trash2, AlertTriangle, ArrowRight,
-  Calendar, Mail, Eye, EyeSlash, UserX, Image as ImageIcon,
+  Calendar, Mail, Eye, EyeSlash, UserX, Image as ImageIcon, Copy, CopyCheck,
 } from '../lib/icons';
 import { useAuth } from '../lib/authContext';
 import { ROLE_LABELS } from '../lib/authTypes';
@@ -140,6 +140,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
   const [delEmail, setDelEmail] = useState('');
   const [delError, setDelError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false); // feedback del botón "copiar correo"
 
   function blankForm(): ResearcherSignUp {
     return {
@@ -312,6 +313,20 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
     } finally {
       setDeleting(false);
     }
+  };
+
+  // Copia el correo al portapapeles y rellena el campo de confirmación, para que
+  // no haya que escribirlo a mano. Muestra feedback breve en el botón.
+  const copyEmailToConfirm = async () => {
+    if (!user) return;
+    try {
+      await navigator.clipboard.writeText(user.email);
+    } catch {
+      // Si el navegador bloquea el portapapeles, igual rellenamos el campo.
+    }
+    setDelEmail(user.email);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
   };
 
   const isGoogle = user.provider === 'google';
@@ -612,7 +627,7 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-stone-200 text-stone-600 hover:border-[#C4553A]/40 hover:text-[#C4553A] transition-colors">
               <UserX size={13} /> Desactivar mi cuenta
             </button>
-            <button onClick={() => { setDelEmail(''); setDelError(''); setDelOpen(true); }}
+            <button onClick={() => { setDelEmail(''); setDelError(''); setEmailCopied(false); setDelOpen(true); }}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
               <Trash2 size={13} /> Eliminar mi cuenta
             </button>
@@ -664,15 +679,35 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
             <p className="text-sm mt-2 leading-relaxed" style={{ color: C.muted }}>
               Se eliminarán el perfil y los datos personales de forma permanente. Las simulaciones se conservarán sin ningún dato que identifique a la persona, solo con fines estadísticos del proyecto.
             </p>
-            <p className="text-sm mt-3" style={{ color: C.muted }}>
-              Para confirmar, escribe tu correo <b style={{ color: C.ink }}>{user.email}</b>:
-            </p>
+            {/* Instrucción destacada: para confirmar hay que escribir ESTE correo. */}
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                <AlertTriangle size={13} /> Para confirmar, escribe tu correo exactamente igual:
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 font-mono text-sm font-semibold" style={{ color: C.ink }} title={user.email}>
+                  {user.email}
+                </code>
+                <button
+                  type="button"
+                  onClick={copyEmailToConfirm}
+                  className={`shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${
+                    emailCopied
+                      ? 'border-[#2D6A4F] text-[#2D6A4F] bg-green-50'
+                      : 'border-red-300 text-red-600 bg-white hover:bg-red-100'
+                  }`}
+                  aria-label="Copiar correo y rellenar la confirmación">
+                  {emailCopied ? <><CopyCheck size={13} /> ¡Copiado!</> : <><Copy size={13} /> Copiar</>}
+                </button>
+              </div>
+            </div>
             <input
               type="email"
               value={delEmail}
               onChange={e => setDelEmail(e.target.value)}
-              placeholder={user.email}
+              placeholder="Escribe o pega tu correo aquí"
               autoComplete="off"
+              aria-label="Confirma tu correo electrónico"
               className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50"
             />
             {delError && <p role="alert" className="text-red-700 text-xs bg-red-50 rounded-lg p-2 border border-red-100 mt-3">{delError}</p>}
