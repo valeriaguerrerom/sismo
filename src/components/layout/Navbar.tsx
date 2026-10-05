@@ -52,7 +52,7 @@ export function Navbar({ currentPage, authMode, onNavigate, darkMode }: NavbarPr
       <div className="app-container">
         <div className="flex items-center justify-between h-16 gap-2">
           <button onClick={() => go('home')} className="flex items-center flex-shrink-0">
-            <Logo size={38} />
+            <Logo size={38} dark={darkMode} />
           </button>
 
           {/* ─── Navegación desktop (md+) ─── */}

@@ -7,7 +7,6 @@
  */
 import { useState } from 'react';
 import { useAuth } from '../lib/authContext';
-import { CONTACT_EMAIL } from '../lib/authConsent';
 import { ArrowRight, AlertTriangle, RotateCcw } from '../lib/icons';
 import { Logo } from '../components/ui/Logo';
 
@@ -66,8 +65,7 @@ export function DeactivatedAccount({ onHome, onReactivated }: Props) {
             <>
               <h1 className="text-xl font-black text-[#1A1A2E]">Cuenta desactivada</h1>
               <p className="text-sm text-stone-600 leading-relaxed">
-                Tu cuenta fue desactivada por un administrador. Si crees que es un error, escribe a{' '}
-                <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#2D6A4F] font-semibold hover:underline">{CONTACT_EMAIL}</a>.
+                Tu cuenta fue desactivada por un administrador. Si crees que es un error, comunícate con el equipo de SismoNariño.
               </p>
               <button onClick={onHome}
                 className="w-full flex items-center justify-center gap-2 bg-[#C4553A] text-white py-3 rounded-xl font-bold text-sm shadow-sm btn-hover">

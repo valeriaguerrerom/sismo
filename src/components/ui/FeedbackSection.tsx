@@ -6,7 +6,7 @@
  * El envío pasa por POST /api/feedback (backend); no escribe en Supabase directamente.
  */
 import { useState } from 'react';
-import { DATA_POLICY_URL, CONTACT_EMAIL } from '../../lib/authConsent';
+import { DATA_POLICY_URL } from '../../lib/authConsent';
 import {
   submitFeedback, FEEDBACK_TYPE_LABELS, FEEDBACK_MAX_LENGTH,
   type FeedbackType,
@@ -114,10 +114,7 @@ export function FeedbackSection({
           ))}
         </ul>
         <p className="text-xs text-stone-400 mt-5 max-w-md leading-relaxed">
-          También puedes escribirnos a{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold hover:underline" style={{ color: C.forest }}>
-            {CONTACT_EMAIL}
-          </a>. Respondemos si dejas un correo.
+          Déjanos tu correo en el formulario y te responderemos.
         </p>
       </div>
 
