@@ -297,8 +297,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.auth.signInWithPassword({ email, password: secret }), 12000, 'inicio de sesión',
       );
       secret = ''; // limpiar la copia local del secreto derivado
-      // Mensaje genérico: no se revela si el correo existe o no.
-      if (error) return { error: 'Correo o contraseña incorrectos.', mfaRequired: false };
+      if (error) {
+        const m = error.message.toLowerCase();
+        // Caso accionable: la cuenta existe pero el correo no está confirmado.
+        // Se muestra un mensaje específico (guía al usuario a revisar su correo)
+        // en vez del genérico, porque no revela nada que no sepa quien se acaba
+        // de registrar y evita el confuso "contraseña incorrecta".
+        if (m.includes('email not confirmed') || m.includes('not confirmed') || m.includes('email_not_confirmed')) {
+          return { error: 'Tu correo aún no está confirmado. Abre el enlace que te enviamos (revisa también spam) y luego inicia sesión.', mfaRequired: false };
+        }
+        // Resto: mensaje genérico, no se revela si el correo existe o no.
+        return { error: 'Correo o contraseña incorrectos.', mfaRequired: false };
+      }
       // Contraseña correcta. Si la cuenta tiene 2FA, la sesión queda en aal1 y
       // falta el código del segundo factor: se avisa a la UI (no se entra aún).
       if (await needsMfaChallenge()) return { error: null, mfaRequired: true };

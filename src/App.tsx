@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Page, SimulationParams, WaveData } from './lib/types';
 import { defaultParams } from './lib/simulation';
 import { AuthProvider } from './lib/auth';
@@ -129,6 +129,35 @@ function AppContent() {
       setPage('home');
     }
   }, [user, loading, page]);
+
+  // Enlace de confirmación de correo: Supabase redirige a la app con `type=signup`
+  // (en el hash o en la query). Lo detectamos UNA vez al cargar para mostrar
+  // "¡Correo confirmado!" en Iniciar sesión y limpiar la URL. Si el enlace trae
+  // error (p. ej. expirado), lo mostramos como aviso en su lugar.
+  const confirmHandled = useRef(false);
+  useEffect(() => {
+    if (confirmHandled.current) return;
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const query = new URLSearchParams(window.location.search);
+    const type = hash.get('type') ?? query.get('type');
+    const errorDesc = hash.get('error_description') ?? query.get('error_description');
+
+    if (type === 'signup' || type === 'email_change' || errorDesc) {
+      confirmHandled.current = true;
+      if (errorDesc) {
+        const expired = /expired|invalid/i.test(errorDesc);
+        setAuthNotice(expired
+          ? 'El enlace de confirmación expiró o ya se usó. Inicia sesión; si hace falta, te reenviaremos uno nuevo.'
+          : 'No se pudo confirmar el correo con ese enlace. Intenta iniciar sesión.');
+      } else {
+        setAuthNotice('¡Correo confirmado! Ya puedes iniciar sesión con tu correo y contraseña.');
+      }
+      setAuthMode('login');
+      setPage('auth');
+      // Quita los tokens/params de la URL para que no reaparezca el aviso al refrescar.
+      window.history.replaceState(null, '', window.location.origin + window.location.pathname);
+    }
+  }, []);
 
   const handleAuthSuccess = useCallback(() => {
     const target = pendingPage && pendingPage !== 'admin' ? pendingPage : 'home';
