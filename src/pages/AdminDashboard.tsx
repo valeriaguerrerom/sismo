@@ -76,8 +76,8 @@ function Toast({ msg, type, onClose }: { msg: string; type: 'ok' | 'error'; onCl
 
 /* ─────────────────────────────── Overview ─────────────────────────────── */
 
-/** Barra horizontal de la caracterización con acento de color. */
-function CharBars({ title, buckets, total }: { title: string; buckets: { label: string; count: number }[]; total: number }) {
+/** Barra horizontal de la caracterización con acento de color y crecimiento al entrar. */
+function CharBars({ title, buckets, total, animate = true }: { title: string; buckets: { label: string; count: number }[]; total: number; animate?: boolean }) {
   const max = Math.max(1, ...buckets.map(b => b.count));
   return (
     <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
@@ -97,8 +97,12 @@ function CharBars({ title, buckets, total }: { title: string; buckets: { label: 
                   <span className="text-stone-400 font-semibold shrink-0 ml-2">{b.count} <span className="text-stone-300">·</span> {pct}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${widthPct}%`, backgroundColor: isEmpty ? '#D6D3D1' : i === 0 ? '#C4553A' : i === 1 ? '#2D6A4F' : i === 2 ? '#6B5B95' : i === 3 ? '#D4A853' : '#78716C' }} />
+                  <div className="h-full rounded-full"
+                    style={{
+                      width: animate ? `${widthPct}%` : '0%',
+                      backgroundColor: isEmpty ? '#D6D3D1' : i === 0 ? '#C4553A' : i === 1 ? '#2D6A4F' : i === 2 ? '#6B5B95' : i === 3 ? '#D4A853' : '#78716C',
+                      transition: `width 0.7s cubic-bezier(0.22,1,0.36,1) ${i * 0.06}s`,
+                    }} />
                 </div>
               </li>
             );
@@ -223,10 +227,13 @@ function Overview({ stats, users, newMessages, onRefresh, onGoTab }: {
     URL.revokeObjectURL(url);
   };
 
+  const maxMonth = Math.max(1, ...(stats?.reportsPerMonth.map(m => m.count) ?? [1]));
+  const total = Math.max(1, (stats?.roles.admin ?? 0) + (stats?.roles.user ?? 0));
+  const adminPct = Math.round(((stats?.roles.admin ?? 0) / total) * 100);
+  // Número animado del centro del donut (debe llamarse en cada render, no tras un return).
+  const totalCount = useCountUp(total, animate);
+
   if (!stats) return <div className="py-12"><VolcanoLoader size={44} label="Cargando indicadores…" /></div>;
-  const maxMonth = Math.max(1, ...stats.reportsPerMonth.map(m => m.count));
-  const total = Math.max(1, stats.roles.admin + stats.roles.user);
-  const adminPct = Math.round((stats.roles.admin / total) * 100);
 
   // Colores, acentos y pestaña destino por tarjeta (todas clicables).
   const cards: { label: string; sub: string; value: number; icon: React.ReactNode; accent: string; tab: Tab }[] = [
@@ -325,29 +332,43 @@ function Overview({ stats, users, newMessages, onRefresh, onGoTab }: {
           </div>
         </div>
 
-        {/* Donut de roles */}
+        {/* Donut de roles (los arcos crecen al entrar + número animado) */}
         <div className="lg:col-span-1 bg-white rounded-2xl border border-stone-200/60 p-5 flex flex-col">
           <h3 className="text-sm font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-4">
             <Shield size={14} className="text-[#6B5B95]" /> Roles
           </h3>
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
-            {/* Donut más grande */}
-            <div className="relative w-28 h-28">
-              <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                <circle cx="18" cy="18" r="14" fill="none" stroke="#F5F5F4" strokeWidth="5" />
-                <circle cx="18" cy="18" r="14" fill="none" stroke="#C4553A" strokeWidth="5"
-                  strokeDasharray={`${adminPct * 0.879} ${(100 - adminPct) * 0.879}`}
-                  strokeLinecap="round" strokeDashoffset="0" />
-                <circle cx="18" cy="18" r="14" fill="none" stroke="#2D6A4F" strokeWidth="5"
-                  strokeDasharray={`${(100 - adminPct) * 0.879} ${adminPct * 0.879}`}
-                  strokeLinecap="round"
-                  strokeDashoffset={`${-(adminPct * 0.879)}`} />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-black text-[#1A1A2E]">{total}</span>
-                <span className="text-[10px] text-stone-400 font-semibold">usuarios</span>
-              </div>
-            </div>
+            {/* Donut: circunferencia ≈ 2πr = 87.96 para r=14 */}
+            {(() => {
+              const CIRC = 87.96;
+              // Fracción visible según animación (0 → 1).
+              const adminLen = (adminPct / 100) * CIRC;
+              const userLen = ((100 - adminPct) / 100) * CIRC;
+              return (
+                <div className="relative w-28 h-28">
+                  <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                    {/* Pista de fondo */}
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#F5F5F4" strokeWidth="5" />
+                    {/* Arco admins: se dibuja de 0 a su longitud (dashoffset animado) */}
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#C4553A" strokeWidth="5"
+                      strokeLinecap="round"
+                      strokeDasharray={`${adminLen} ${CIRC - adminLen}`}
+                      strokeDashoffset={animate ? 0 : adminLen}
+                      style={{ transition: 'stroke-dashoffset 0.9s cubic-bezier(0.22,1,0.36,1)' }} />
+                    {/* Arco investigadores: empieza donde termina el de admins */}
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#2D6A4F" strokeWidth="5"
+                      strokeLinecap="round"
+                      strokeDasharray={`${userLen} ${CIRC - userLen}`}
+                      strokeDashoffset={animate ? -adminLen : -adminLen - userLen}
+                      style={{ transition: 'stroke-dashoffset 0.9s cubic-bezier(0.22,1,0.36,1) 0.25s' }} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-black text-[#1A1A2E] tabular-nums">{totalCount}</span>
+                    <span className="text-[10px] text-stone-400 font-semibold">usuarios</span>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="w-full space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#C4553A]" /> Admins</span>
@@ -412,10 +433,10 @@ function Overview({ stats, users, newMessages, onRefresh, onGoTab }: {
           </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <CharBars title="Por ocupación" buckets={chars.ocupacion} total={chars.total} />
-          <CharBars title="Por institución (5 principales)" buckets={chars.institucion} total={chars.total} />
-          <CharBars title="Por área de interés" buckets={chars.area} total={chars.total} />
-          <CharBars title="Por ciudad" buckets={chars.ciudad} total={chars.total} />
+          <CharBars title="Por ocupación" buckets={chars.ocupacion} total={chars.total} animate={animate} />
+          <CharBars title="Por institución (5 principales)" buckets={chars.institucion} total={chars.total} animate={animate} />
+          <CharBars title="Por área de interés" buckets={chars.area} total={chars.total} animate={animate} />
+          <CharBars title="Por ciudad" buckets={chars.ciudad} total={chars.total} animate={animate} />
         </div>
       </div>
     </div>
