@@ -152,7 +152,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // Señal real por estación (waveforms): si se muestra y datos.
   // setRealAvailable se conserva para el flujo de carga de MiniSEED.
   const [, setRealAvailable] = useState<Record<string, boolean>>({});
-  const [showReal, setShowReal] = useState<Record<string, boolean>>({});
+  // showReal: flag de "mostrar señal real" por estación. El render del panel ya
+  // no lo lee (usa realWave directamente para evitar problemas de timing), pero
+  // se conserva el setter para el flujo de carga.
+  const [, setShowReal] = useState<Record<string, boolean>>({});
   const [realWave, setRealWave] = useState<Record<string, WaveformResult | null>>({});
   const [showTriaxial, setShowTriaxial] = useState(false);
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
@@ -386,6 +389,17 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     async function loadEvents() {
       const catalog = await loadCatalog();
       setCatalogRows(catalog);
+      // DEBUG: verificar que el catálogo trae los campos mseed
+      const withMseed = catalog.filter(r => r.mseed_available).length;
+      console.log(`[Map3D] Catálogo cargado: ${catalog.length} eventos, ${withMseed} con mseed_available=true`);
+      if (catalog[0]) {
+        console.log('[Map3D] Primer evento:', {
+          event_id: catalog[0].event_id,
+          mseed_available: catalog[0].mseed_available,
+          mseed_data_source: catalog[0].mseed_data_source,
+          mseed_station: catalog[0].mseed_station,
+        });
+      }
       const out: CatalogEvent[] = catalog
         .filter(r => r.latitude != null && r.longitude != null)
         .map(r => {
@@ -811,6 +825,20 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   useEffect(() => {
     if (selectedStation) setStationDetail(traces[selectedStation] ?? null);
   }, [traces, selectedStation]);
+
+  // GARANTÍA FINAL: cuando se cargan datos reales (realWave cambia) y el ref
+  // apunta a una estación real, forzar que esa estación quede seleccionada.
+  // Esto gana cualquier carrera con el useEffect de travelTimes que pudiera
+  // haber seleccionado la estación más cercana (sintético) por timing.
+  useEffect(() => {
+    const realCode = realStationRef.current;
+    if (realCode && realWave[realCode] && selectedStation !== realCode) {
+      console.log(`[Map3D] ⚡ Forzando selección a estación real: ${realCode} (estaba en ${selectedStation})`);
+      setSelectedStation(realCode);
+      setShowTriaxial(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realWave, selectedStation]);
 
   const selectStation = (code: string) => {
     setSelectedStation(code);
@@ -1302,14 +1330,19 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           </div>
 
           {/* Panel triaxial desplegable (N/E/Z con tP/tS) */}
-          {showTriaxial && selectedStation && (
+          {showTriaxial && selectedStation && (() => {
+            // ROBUSTO: una estación muestra señal REAL si tiene datos en realWave,
+            // sin depender del flag showReal (que puede llegar con retraso por el
+            // timing async). Si realWave[selectedStation] existe → es real.
+            const hasRealForSelected = !!realWave[selectedStation];
+            return (
             <div className="absolute bottom-0 left-0 right-0 z-10 bg-black/70 backdrop-blur-sm border-t border-white/10 p-3">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-bold text-stone-200">
-                    Panel triaxial, {selectedStation}, {showReal[selectedStation] ? 'señal real (1 a 10 Hz)' : 'sintético FDM'}
+                    Panel triaxial, {selectedStation}, {hasRealForSelected ? 'señal real (1 a 10 Hz)' : 'sintético FDM'}
                   </span>
-                  {!showReal[selectedStation] && (
+                  {!hasRealForSelected && (
                     <span className="text-[9px] text-[#D4A853] leading-tight">
                       Sismograma sintético generado con Diferencias Finitas. No coincide con datos reales MiniSEED.
                     </span>
@@ -1319,10 +1352,11 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
               </div>
               <TriaxialTraces
                 syn={traces[selectedStation] ?? null}
-                real={showReal[selectedStation] ? realWave[selectedStation] ?? null : null}
+                real={hasRealForSelected ? realWave[selectedStation] ?? null : null}
               />
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* ── DERECHA: Controles ── */}
