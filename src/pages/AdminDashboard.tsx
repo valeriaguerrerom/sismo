@@ -21,6 +21,7 @@ import {
   bulkInsertEvents, createEvent, deleteEvent, deleteFactRow, deleteQuizRow, deleteReport, deleteTimelineRow,
   loadDashboardStats, loadEvents, loadFactRows, loadQuizRows, loadReports, loadTimelineRows, loadUsers,
   saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, deactivateUser, reactivateUser, updateEvent,
+  loadMseedUploadLogs, loadMseedUploadStats, loadTopMseedUploaders, loadMseedFailureReasons,
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
@@ -51,7 +52,7 @@ function longDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-type Tab = 'overview' | 'users' | 'events' | 'education' | 'reports' | 'messages';
+type Tab = 'overview' | 'users' | 'events' | 'education' | 'reports' | 'mseed' | 'messages';
 type EduTab = 'quiz' | 'facts' | 'timeline';
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:border-[#C4553A]';
@@ -1654,6 +1655,7 @@ export function AdminDashboard() {
     { id: 'events', label: 'Eventos sísmicos', icon: <Database size={16} /> },
     { id: 'education', label: 'Contenido educativo', icon: <BookOpen size={16} /> },
     { id: 'reports', label: 'Reportes', icon: <FileText size={16} /> },
+    { id: 'mseed', label: 'Cargas MiniSEED', icon: <Upload size={16} /> },
     { id: 'messages', label: 'Mensajes', icon: <MessageSquare size={16} />, badge: newMessages },
   ];
 
@@ -1732,10 +1734,282 @@ export function AdminDashboard() {
         {tab === 'events' && <EventsTab notify={notify} />}
         {tab === 'education' && <EducationTab notify={notify} />}
         {tab === 'reports' && <ReportsTab stats={stats} users={users} notify={notify} />}
+        {tab === 'mseed' && <MseedTab notify={notify} />}
         {tab === 'messages' && <MessagesTab notify={notify} onChange={reloadNewMessages} />}
       </div>
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MseedTab — Cargas MiniSEED por usuarios
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void }) {
+  const [logs, setLogs] = useState<import('../lib/adminData').MseedUploadLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [filterSuccess, setFilterSuccess] = useState<'all' | 'success' | 'fail'>('all');
+  const [search, setSearch] = useState('');
+  const [stats, setStats] = useState<import('../lib/adminData').MseedUploadStats[]>([]);
+  const [topUploaders, setTopUploaders] = useState<import('../lib/adminData').TopMseedUploader[]>([]);
+  const [failureReasons, setFailureReasons] = useState<import('../lib/adminData').MseedFailureReason[]>([]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const filters: { success?: boolean; search?: string } = {};
+      if (filterSuccess === 'success') filters.success = true;
+      if (filterSuccess === 'fail') filters.success = false;
+      if (search.trim()) filters.search = search.trim();
+
+      const { logs: l, total } = await import('../lib/adminData').then(m => m.loadMseedUploadLogs(page, ADMIN_PAGE_SIZE, filters));
+      setLogs(l);
+      setTotalLogs(total);
+
+      // Cargar estadísticas adicionales solo en la primera página
+      if (page === 1) {
+        const [statsData, topData, failData] = await Promise.all([
+          import('../lib/adminData').then(m => m.loadMseedUploadStats(30)),
+          import('../lib/adminData').then(m => m.loadTopMseedUploaders(10)),
+          import('../lib/adminData').then(m => m.loadMseedFailureReasons(15)),
+        ]);
+        setStats(statsData);
+        setTopUploaders(topData);
+        setFailureReasons(failData);
+      }
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Error cargando logs MiniSEED', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, filterSuccess, search, notify]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const exportLogs = async (format: 'excel' | 'pdf') => {
+    try {
+      // Cargar TODOS los logs sin paginación para la exportación
+      const filters: { success?: boolean; search?: string } = {};
+      if (filterSuccess === 'success') filters.success = true;
+      if (filterSuccess === 'fail') filters.success = false;
+      if (search.trim()) filters.search = search.trim();
+
+      const { logs: allLogs } = await import('../lib/adminData').then(m => m.loadMseedUploadLogs(1, 10000, filters));
+      
+      const input: import('../lib/adminExport').MseedLogsExportInput = {
+        logs: allLogs,
+        stats,
+        topUploaders,
+        failureReasons,
+        period: {}, // Sin filtro de período por ahora
+      };
+
+      if (format === 'excel') {
+        const { exportMseedLogsExcel } = await import('../lib/adminExport');
+        exportMseedLogsExcel(input);
+        notify('Excel descargado');
+      } else {
+        const { exportMseedLogsPdf } = await import('../lib/adminExport');
+        exportMseedLogsPdf(input);
+        notify('PDF descargado');
+      }
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Error exportando', 'error');
+    }
+  };
+
+  const successCount = logs.filter(l => l.success).length;
+  const failCount = logs.length - successCount;
+
+  return (
+    <div className="space-y-6">
+      {/* ── Estadísticas resumidas ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">Total Cargas</p>
+              <p className="text-3xl font-black text-[#1A1A2E] mt-1">{totalLogs}</p>
+            </div>
+            <Upload size={24} className="text-stone-300" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">Exitosas</p>
+              <p className="text-3xl font-black text-[#2D6A4F] mt-1">{logs.filter(l => l.success).length}</p>
+            </div>
+            <Check size={24} className="text-[#2D6A4F]" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">Fallidas</p>
+              <p className="text-3xl font-black text-[#C4553A] mt-1">{logs.filter(l => !l.success).length}</p>
+            </div>
+            <AlertTriangle size={24} className="text-[#C4553A]" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">Tasa Éxito</p>
+              <p className="text-3xl font-black text-[#D4A853] mt-1">
+                {totalLogs > 0 ? Math.round((stats.reduce((sum, s) => sum + s.successful_uploads, 0) / stats.reduce((sum, s) => sum + s.total_uploads, 0)) * 100) : 0}%
+              </p>
+            </div>
+            <BarChart3 size={24} className="text-[#D4A853]" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Top usuarios y razones de fallo ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top usuarios */}
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+            <UserCheck size={14} /> Top Usuarios
+          </h3>
+          {topUploaders.length === 0 ? (
+            <p className="text-xs text-stone-400">Sin datos aún.</p>
+          ) : (
+            <ul className="space-y-2">
+              {topUploaders.slice(0, 5).map((u, i) => (
+                <li key={u.user_id} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-stone-400 font-bold w-5">{i + 1}.</span>
+                    <span className="font-medium text-[#1A1A2E] truncate">{u.user_name || u.user_email}</span>
+                  </div>
+                  <span className="text-[#2D6A4F] font-bold ml-2">{u.successful_uploads}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Razones de fallo */}
+        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
+          <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+            <AlertTriangle size={14} /> Razones de Fallo
+          </h3>
+          {failureReasons.length === 0 ? (
+            <p className="text-xs text-stone-400">Sin fallos registrados.</p>
+          ) : (
+            <ul className="space-y-2">
+              {failureReasons.slice(0, 5).map((f, i) => (
+                <li key={i} className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-[#1A1A2E] truncate flex-1">
+                    {f.error_reason.split(':')[0].replace(/_/g, ' ')}
+                  </span>
+                  <span className="text-[#C4553A] font-bold ml-2">{f.failure_count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tabla de logs ── */}
+      <div className="bg-white rounded-2xl border border-stone-200/60">
+        <div className="p-5 border-b border-stone-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 className="text-sm font-bold text-[#1A1A2E]">Logs de Cargas</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Filtros */}
+              <select value={filterSuccess} onChange={e => { setFilterSuccess(e.target.value as any); setPage(1); }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50">
+                <option value="all">Todas</option>
+                <option value="success">Exitosas</option>
+                <option value="fail">Fallidas</option>
+              </select>
+
+              <input type="text" placeholder="Buscar archivo, estación..." value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 w-48" />
+
+              {/* Exportar */}
+              <button onClick={() => exportLogs('excel')} className={btnGhost}>
+                <FileSpreadsheet size={13} /> Excel
+              </button>
+              <button onClick={() => exportLogs('pdf')} className={btnGhost}>
+                <FileDown size={13} /> PDF
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <VolcanoLoader size={48} label="Cargando logs..." />
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="text-center py-20 text-stone-400 text-sm">
+            <Upload size={48} className="mx-auto mb-3 text-stone-300" />
+            <p className="font-semibold">No hay cargas MiniSEED registradas.</p>
+            <p className="text-xs mt-1">Los investigadores aún no han subido archivos.</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-stone-50 border-b border-stone-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Fecha</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Usuario</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Archivo</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Estado</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Estación</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Duración</th>
+                    <th className="text-left px-4 py-3 font-bold text-stone-500 uppercase tracking-wide">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map(l => (
+                    <tr key={l.id} className="border-b border-stone-50 hover:bg-stone-50/50">
+                      <td className="px-4 py-3 text-stone-600">{fmtDate(l.uploaded_at, true)}</td>
+                      <td className="px-4 py-3 text-stone-700 font-medium truncate max-w-[150px]">
+                        {l.profiles?.full_name || l.profiles?.email || 'Usuario'}
+                      </td>
+                      <td className="px-4 py-3 text-stone-600 font-mono text-[10px] truncate max-w-[200px]" title={l.filename}>
+                        {l.filename}
+                      </td>
+                      <td className="px-4 py-3">
+                        {l.success ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2D6A4F]/10 text-[#2D6A4F] font-bold">
+                            <Check size={10} /> OK
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C4553A]/10 text-[#C4553A] font-bold">
+                            <X size={10} /> Error
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-stone-600 font-semibold">{l.selected_station || '—'}</td>
+                      <td className="px-4 py-3 text-stone-600">{l.duration_seconds ? `${l.duration_seconds.toFixed(1)}s` : '—'}</td>
+                      <td className="px-4 py-3 text-[#C4553A] text-[10px] truncate max-w-[200px]" title={l.error_reason || ''}>
+                        {l.error_reason || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-stone-100">
+              <Pagination page={page} totalItems={totalLogs} pageSize={ADMIN_PAGE_SIZE} onChange={setPage} />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

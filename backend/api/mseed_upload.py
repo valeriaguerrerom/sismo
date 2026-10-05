@@ -16,13 +16,15 @@ from __future__ import annotations
 
 import io
 import math
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from core.config import require_user_id
+from core.config import require_user_id, supabase
 from core.rate_limit import RateLimiter, client_ip
 from core.stations import ACCEPTED_STATION_CODES, is_accepted_station
 
@@ -202,6 +204,64 @@ def _component_of(channel: str) -> str | None:
 def _sensor_kind(prefix: str) -> str:
     """Clasifica el prefijo de canal en velocímetro o acelerómetro."""
     return "acelerometro" if prefix.upper() in ("HN", "HL") else "velocimetro"
+
+
+def _log_upload_attempt(
+    user_id: str,
+    filename: str,
+    file_size: int,
+    success: bool,
+    error_reason: str | None = None,
+    metadata: dict | None = None,
+    processing_time_ms: int | None = None,
+) -> None:
+    """Registra un intento de carga MiniSEED en mseed_upload_logs.
+
+    Args:
+        user_id: UUID del usuario autenticado.
+        filename: Nombre del archivo subido.
+        file_size: Tamaño en bytes.
+        success: True si se procesó correctamente, False si falló.
+        error_reason: Razón del fallo (solo si success=False).
+        metadata: Diccionario con metadatos extraídos (solo si success=True):
+            station_count, selected_station, channels, duration_seconds,
+            sample_rate_hz, start_time, end_time, detrend_applied,
+            bandpass_applied, bandpass_freq_min_hz, bandpass_freq_max_hz,
+            decimation_factor, final_sample_count.
+        processing_time_ms: Tiempo de procesamiento en milisegundos.
+    """
+    if not supabase:
+        return  # Sin Supabase no se registra nada (entorno local/testing)
+
+    try:
+        log_data = {
+            "user_id": user_id,
+            "filename": filename,
+            "file_size_bytes": file_size,
+            "success": success,
+            "error_reason": error_reason,
+            "processing_time_ms": processing_time_ms,
+        }
+        if success and metadata:
+            log_data.update({
+                "station_count": metadata.get("station_count"),
+                "selected_station": metadata.get("selected_station"),
+                "channels": metadata.get("channels"),
+                "duration_seconds": metadata.get("duration_seconds"),
+                "sample_rate_hz": metadata.get("sample_rate_hz"),
+                "start_time": metadata.get("start_time"),
+                "end_time": metadata.get("end_time"),
+                "detrend_applied": metadata.get("detrend_applied", True),
+                "bandpass_applied": metadata.get("bandpass_applied", False),
+                "bandpass_freq_min_hz": metadata.get("bandpass_freq_min_hz"),
+                "bandpass_freq_max_hz": metadata.get("bandpass_freq_max_hz"),
+                "decimation_factor": metadata.get("decimation_factor"),
+                "final_sample_count": metadata.get("final_sample_count"),
+            })
+        supabase.table("mseed_upload_logs").insert(log_data).execute()
+    except Exception as e:
+        # Log en consola pero no falla la carga si el tracking falla
+        print(f"[WARNING] Failed to log mseed upload: {e}")
 
 
 # Relación de velocidades Vp/Vs ≈ 1.73 (roca de corteza). Con Vp≈6.3 km/s la
@@ -472,14 +532,20 @@ async def upload_mseed(
     autenticados, así que el token se verifica contra Supabase del lado del
     servidor (no basta con que la interfaz oculte el botón sin sesión).
 
+    Registra cada intento de carga (éxito o fallo) en mseed_upload_logs para
+    análisis de uso y debugging.
+
     Raises:
         HTTPException 401: sin sesión o token inválido.
         HTTPException 400: archivo vacío, demasiado grande o ilegible.
         HTTPException 404: estación inexistente o sin componente vertical.
+        HTTPException 422: estación fuera del proyecto o falta componente.
         HTTPException 429: si se supera el límite de cargas por IP.
     """
-    require_user_id(authorization)  # exige sesión válida; lanza 401 si no la hay
+    start_time = time.perf_counter()
+    user_id = require_user_id(authorization)  # exige sesión válida; lanza 401 si no la hay
     _upload_limiter.check(client_ip(request))
+    
     # Se lee por bloques y se aborta en cuanto se supera el límite, para no
     # cargar en memoria un archivo gigante antes de rechazarlo (DoS por memoria).
     chunks: list[bytes] = []
@@ -490,15 +556,86 @@ async def upload_mseed(
             break
         total += len(chunk)
         if total > MAX_BYTES:
+            _log_upload_attempt(
+                user_id, file.filename or "unknown", total, False,
+                error_reason="file_too_large",
+                processing_time_ms=int((time.perf_counter() - start_time) * 1000),
+            )
             raise HTTPException(status_code=400, detail="El archivo supera los 50 MB.")
         chunks.append(chunk)
+    
     data = b"".join(chunks)
+    file_size = len(data)
+    
     if not data:
+        _log_upload_attempt(
+            user_id, file.filename or "unknown", 0, False,
+            error_reason="empty_file",
+            processing_time_ms=int((time.perf_counter() - start_time) * 1000),
+        )
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    
     try:
-        return process_mseed_bytes(data, file.filename or "archivo.mseed", station, freqmin, freqmax)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        result = process_mseed_bytes(data, file.filename or "archivo.mseed", station, freqmin, freqmax)
+        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+        
+        # Registrar carga exitosa con metadatos completos
+        metadata = {
+            "station_count": len(result.stations),
+            "selected_station": result.station,
+            "channels": list(result.channels.values()),
+            "duration_seconds": float(result.duration),
+            "sample_rate_hz": float(result.sampling_rate),
+            "start_time": result.starttime_utc,
+            "end_time": None,  # Se puede calcular: start + duration
+            "detrend_applied": True,
+            "bandpass_applied": result.filtro is not None,
+            "bandpass_freq_min_hz": float(result.filtro["freqmin"]) if result.filtro else None,
+            "bandpass_freq_max_hz": float(result.filtro["freqmax"]) if result.filtro else None,
+            "decimation_factor": None,  # Se calcula internamente en _decimate
+            "final_sample_count": result.num_samples,
+        }
+        _log_upload_attempt(
+            user_id, result.filename, file_size, True,
+            metadata=metadata, processing_time_ms=processing_time_ms,
+        )
+        return result
+        
+    except HTTPException as http_exc:
+        # Errores controlados (422 estación no aceptada, 404 sin componente, etc.)
+        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+        error_map = {
+            422: "station_not_accepted_or_missing_component",
+            404: "station_not_found",
+            400: "invalid_format",
+        }
+        error_reason = error_map.get(http_exc.status_code, "http_error")
+        _log_upload_attempt(
+            user_id, file.filename or "unknown", file_size, False,
+            error_reason=f"{error_reason}: {http_exc.detail}",
+            processing_time_ms=processing_time_ms,
+        )
+        raise
+        
+    except ValueError as val_exc:
+        # Error de lectura de ObsPy (formato inválido, corrupto, etc.)
+        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+        _log_upload_attempt(
+            user_id, file.filename or "unknown", file_size, False,
+            error_reason=f"invalid_format: {str(val_exc)}",
+            processing_time_ms=processing_time_ms,
+        )
+        raise HTTPException(status_code=400, detail=str(val_exc)) from val_exc
+        
+    except Exception as exc:
+        # Error inesperado en procesamiento
+        processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+        _log_upload_attempt(
+            user_id, file.filename or "unknown", file_size, False,
+            error_reason=f"processing_error: {type(exc).__name__}",
+            processing_time_ms=processing_time_ms,
+        )
+        raise HTTPException(status_code=500, detail="Error interno procesando el archivo.") from exc
 
 
 @router.get("/api/examples/mseed", summary="Descargar el MiniSEED de ejemplo (estación CUM)")

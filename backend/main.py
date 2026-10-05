@@ -45,6 +45,7 @@ from api.quakeml import router as quakeml_router
 from api.mseed_upload import router as mseed_upload_router
 from api.account import router as account_router
 from api.feedback import router as feedback_router
+from api.event_waveforms import router as event_waveforms_router
 
 load_dotenv()
 
@@ -244,6 +245,8 @@ app.include_router(stats_home_router)
 app.include_router(quakeml_router)
 # Carga de MiniSEED por investigadores
 app.include_router(mseed_upload_router)
+# Waveforms reales de eventos del catálogo
+app.include_router(event_waveforms_router)
 # Autogestión de la cuenta (eliminación por el propio usuario)
 app.include_router(account_router)
 

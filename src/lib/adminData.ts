@@ -355,3 +355,148 @@ export async function deleteReport(id: string): Promise<void> {
   const { error } = await ensure().from('simulation_reports').delete().eq('id', id);
   fail(error);
 }
+
+// ─── Cargas MiniSEED (RF tracking de uso) ───
+
+export interface MseedUploadLog {
+  id: string;
+  user_id: string;
+  filename: string;
+  file_size_bytes: number | null;
+  success: boolean;
+  error_reason: string | null;
+  station_count: number | null;
+  selected_station: string | null;
+  channels: string[] | null;
+  duration_seconds: number | null;
+  sample_rate_hz: number | null;
+  start_time: string | null;
+  end_time: string | null;
+  detrend_applied: boolean | null;
+  bandpass_applied: boolean | null;
+  bandpass_freq_min_hz: number | null;
+  bandpass_freq_max_hz: number | null;
+  decimation_factor: number | null;
+  final_sample_count: number | null;
+  uploaded_at: string;
+  processing_time_ms: number | null;
+  // Join con profiles
+  profiles?: { full_name: string; email: string } | null;
+}
+
+export interface MseedUploadStats {
+  upload_date: string;
+  total_uploads: number;
+  successful_uploads: number;
+  failed_uploads: number;
+  success_rate_pct: number;
+  unique_users: number;
+  avg_processing_time_ms: number;
+  total_bytes_processed: number;
+}
+
+export interface TopMseedUploader {
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  total_uploads: number;
+  successful_uploads: number;
+  failed_uploads: number;
+  success_rate_pct: number;
+  total_duration_hours: number;
+  last_upload: string;
+}
+
+export interface MseedFailureReason {
+  error_reason: string;
+  failure_count: number;
+  percentage: number;
+  example_filename: string;
+  last_occurrence: string;
+}
+
+/**
+ * Carga los logs de cargas MiniSEED con paginación y filtros.
+ */
+export async function loadMseedUploadLogs(
+  page: number = 1,
+  pageSize: number = 10,
+  filters?: { success?: boolean; search?: string; dateFrom?: string; dateTo?: string }
+): Promise<{ logs: MseedUploadLog[]; total: number }> {
+  if (!supabase) return { logs: [], total: 0 };
+
+  let query = supabase
+    .from('mseed_upload_logs')
+    .select('*, profiles(full_name, email)', { count: 'exact' })
+    .order('uploaded_at', { ascending: false });
+
+  if (filters?.success !== undefined) {
+    query = query.eq('success', filters.success);
+  }
+  if (filters?.search) {
+    query = query.or(`filename.ilike.%${filters.search}%,selected_station.ilike.%${filters.search}%,error_reason.ilike.%${filters.search}%`);
+  }
+  if (filters?.dateFrom) {
+    query = query.gte('uploaded_at', filters.dateFrom);
+  }
+  if (filters?.dateTo) {
+    query = query.lte('uploaded_at', filters.dateTo);
+  }
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  query = query.range(from, to);
+
+  const { data, count, error } = await query;
+  if (error) throw error;
+
+  return { logs: (data as MseedUploadLog[]) || [], total: count || 0 };
+}
+
+/**
+ * Obtiene estadísticas agregadas por día de cargas MiniSEED.
+ */
+export async function loadMseedUploadStats(limit: number = 30): Promise<MseedUploadStats[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('mseed_upload_stats')
+    .select('*')
+    .order('upload_date', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data as MseedUploadStats[]) || [];
+}
+
+/**
+ * Obtiene top N usuarios por cargas exitosas.
+ */
+export async function loadTopMseedUploaders(limit: number = 10): Promise<TopMseedUploader[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase.rpc('get_top_mseed_uploaders', { limit_count: limit });
+  if (error) throw error;
+  return (data as TopMseedUploader[]) || [];
+}
+
+/**
+ * Obtiene las razones de fallo más comunes.
+ */
+export async function loadMseedFailureReasons(limit: number = 20): Promise<MseedFailureReason[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase.rpc('get_mseed_failure_reasons', { limit_count: limit });
+  if (error) throw error;
+  return (data as MseedFailureReason[]) || [];
+}
+
+/**
+ * Refresca la vista materializada de estadísticas (ejecuta refresh_mseed_upload_stats).
+ */
+export async function refreshMseedStats(): Promise<void> {
+  if (!supabase) return;
+
+  const { error } = await supabase.rpc('refresh_mseed_upload_stats');
+  if (error) throw error;
+}

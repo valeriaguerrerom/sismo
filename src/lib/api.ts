@@ -186,3 +186,48 @@ export async function fetchSimulationFull(
 
   return { result, heatmapGrid };
 }
+
+// ─── Waveforms Reales de Eventos ───
+
+/**
+ * Respuesta del endpoint /api/events/{id}/waveforms.
+ */
+export interface EventWaveformResponse {
+  event_id: string;
+  event_label: string;
+  station: string;
+  network: string | null;
+  source: 'galeras' | 'cm' | 'user';
+  date: string;
+  time: string | null;
+  sampling_rate: number | null;
+  duration: number;
+  num_samples: number;
+  magnitude: number | null;
+  depth_km: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  event_type: 'tectonic' | 'volcanic' | null;
+  volcanic_subtype: string | null;
+  waveData: import('./types').WaveData;
+}
+
+/**
+ * Obtiene los datos reales MiniSEED de un evento del catálogo si existen.
+ * 
+ * @param eventId - UUID del evento en seismic_events.
+ * @returns EventWaveformResponse con waveData triaxial y metadatos, o null si no hay datos.
+ * @throws Error si el evento no existe o hay error de red.
+ */
+export async function fetchEventWaveforms(eventId: string): Promise<EventWaveformResponse | null> {
+  try {
+    return await fetchAPI<EventWaveformResponse>(`/api/events/${eventId}/waveforms`);
+  } catch (error) {
+    // 404 significa que el evento no tiene datos reales → retornar null
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    // Otros errores se propagan (500, red caída, etc.)
+    throw error;
+  }
+}

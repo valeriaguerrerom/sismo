@@ -498,3 +498,240 @@ export function exportCharacterizationPdf(c: Characterization): void {
   const stamp = new Date().toISOString().slice(0, 10);
   doc.save(`sismonarino_caracterizacion_${stamp}.pdf`);
 }
+
+// ─── Exportación de logs de cargas MiniSEED ───
+
+export interface MseedLogsExportInput {
+  logs: import('./adminData').MseedUploadLog[];
+  stats?: import('./adminData').MseedUploadStats[];
+  topUploaders?: import('./adminData').TopMseedUploader[];
+  failureReasons?: import('./adminData').MseedFailureReason[];
+  period: { from?: string; to?: string };
+}
+
+/**
+ * Exporta los logs de cargas MiniSEED a Excel con múltiples hojas.
+ */
+export function exportMseedLogsExcel(input: MseedLogsExportInput) {
+  const wb = XLSX.utils.book_new();
+  const period = periodLabel(input.period);
+
+  // Hoja 1: Logs detallados
+  const logsSheet = XLSX.utils.aoa_to_sheet([
+    safeRow(['Logs de Cargas MiniSEED', `Período: ${period}`]),
+    [],
+    safeRow(['Fecha/Hora', 'Usuario', 'Archivo', 'Tamaño (KB)', 'Éxito', 'Error', 'Estación', 'Duración (s)', 'Muestras', 'Tiempo Proc. (ms)']),
+    ...input.logs.map(l => safeRow([
+      fmt(l.uploaded_at),
+      l.profiles?.full_name || l.profiles?.email || 'Usuario',
+      l.filename,
+      l.file_size_bytes ? Math.round(l.file_size_bytes / 1024) : '—',
+      l.success ? 'Sí' : 'No',
+      l.error_reason || '—',
+      l.selected_station || '—',
+      l.duration_seconds?.toFixed(2) || '—',
+      l.final_sample_count || '—',
+      l.processing_time_ms || '—',
+    ])),
+  ]);
+  XLSX.utils.book_append_sheet(wb, logsSheet, 'Logs');
+
+  // Hoja 2: Estadísticas por día (si existen)
+  if (input.stats && input.stats.length > 0) {
+    const statsSheet = XLSX.utils.aoa_to_sheet([
+      safeRow(['Estadísticas Agregadas por Día']),
+      [],
+      safeRow(['Fecha', 'Total', 'Exitosas', 'Fallidas', 'Tasa Éxito %', 'Usuarios Únicos', 'Tiempo Prom. (ms)', 'MB Procesados']),
+      ...input.stats.map(s => safeRow([
+        s.upload_date,
+        s.total_uploads,
+        s.successful_uploads,
+        s.failed_uploads,
+        s.success_rate_pct.toFixed(2),
+        s.unique_users,
+        s.avg_processing_time_ms,
+        (s.total_bytes_processed / (1024 * 1024)).toFixed(2),
+      ])),
+    ]);
+    XLSX.utils.book_append_sheet(wb, statsSheet, 'Estadísticas');
+  }
+
+  // Hoja 3: Top usuarios (si existen)
+  if (input.topUploaders && input.topUploaders.length > 0) {
+    const topSheet = XLSX.utils.aoa_to_sheet([
+      safeRow(['Top Usuarios por Cargas Exitosas']),
+      [],
+      safeRow(['Usuario', 'Email', 'Total Cargas', 'Exitosas', 'Fallidas', 'Tasa Éxito %', 'Duración Total (h)', 'Última Carga']),
+      ...input.topUploaders.map(u => safeRow([
+        u.user_name || 'Sin nombre',
+        u.user_email,
+        u.total_uploads,
+        u.successful_uploads,
+        u.failed_uploads,
+        u.success_rate_pct.toFixed(2),
+        u.total_duration_hours.toFixed(2),
+        fmt(u.last_upload),
+      ])),
+    ]);
+    XLSX.utils.book_append_sheet(wb, topSheet, 'Top Usuarios');
+  }
+
+  // Hoja 4: Razones de fallo (si existen)
+  if (input.failureReasons && input.failureReasons.length > 0) {
+    const failSheet = XLSX.utils.aoa_to_sheet([
+      safeRow(['Razones de Fallo Más Frecuentes']),
+      [],
+      safeRow(['Razón', 'Cantidad', 'Porcentaje %', 'Ejemplo', 'Última Vez']),
+      ...input.failureReasons.map(f => safeRow([
+        f.error_reason,
+        f.failure_count,
+        f.percentage.toFixed(2),
+        f.example_filename,
+        fmt(f.last_occurrence),
+      ])),
+    ]);
+    XLSX.utils.book_append_sheet(wb, failSheet, 'Fallos');
+  }
+
+  const fileName = `cargas_miniseed_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Exporta los logs de cargas MiniSEED a PDF.
+ */
+export function exportMseedLogsPdf(input: MseedLogsExportInput) {
+  const doc = new jsPDF();
+  const margin = 14;
+  let y = margin;
+
+  // Helper para agregar nueva página si no hay espacio
+  const checkPage = (needed: number) => {
+    if (y + needed > 280) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  // Título
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(...PDF_COLORS.ink);
+  doc.text('Reporte de Cargas MiniSEED', margin, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...PDF_COLORS.grayText);
+  doc.text(`Período: ${periodLabel(input.period)}`, margin, y);
+  y += 10;
+
+  // Resumen general
+  const totalLogs = input.logs.length;
+  const successCount = input.logs.filter(l => l.success).length;
+  const failCount = totalLogs - successCount;
+  const successRate = totalLogs > 0 ? ((successCount / totalLogs) * 100).toFixed(1) : '0';
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...PDF_COLORS.ink);
+  doc.text('Resumen', margin, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Total de cargas: ${totalLogs}`, margin + 2, y);
+  y += 5;
+  doc.setTextColor(...PDF_COLORS.forest);
+  doc.text(`Exitosas: ${successCount} (${successRate}%)`, margin + 2, y);
+  y += 5;
+  doc.setTextColor(...PDF_COLORS.terracotta);
+  doc.text(`Fallidas: ${failCount}`, margin + 2, y);
+  y += 10;
+
+  // Top usuarios (si existen)
+  if (input.topUploaders && input.topUploaders.length > 0) {
+    checkPage(40);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...PDF_COLORS.ink);
+    doc.text('Top Usuarios', margin, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    input.topUploaders.slice(0, 10).forEach((u, i) => {
+      checkPage(5);
+      doc.setTextColor(...PDF_COLORS.grayText);
+      doc.text(`${i + 1}. ${u.user_name || u.user_email}`, margin + 2, y);
+      doc.setTextColor(...PDF_COLORS.ink);
+      doc.text(`${u.successful_uploads}/${u.total_uploads} exitosas`, 120, y);
+      y += 5;
+    });
+    y += 5;
+  }
+
+  // Razones de fallo (si existen)
+  if (input.failureReasons && input.failureReasons.length > 0) {
+    checkPage(40);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...PDF_COLORS.ink);
+    doc.text('Razones de Fallo', margin, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    input.failureReasons.slice(0, 10).forEach((f, i) => {
+      checkPage(5);
+      doc.setTextColor(...PDF_COLORS.grayText);
+      const reason = f.error_reason.length > 40 ? f.error_reason.slice(0, 37) + '...' : f.error_reason;
+      doc.text(`${i + 1}. ${reason}`, margin + 2, y);
+      doc.setTextColor(...PDF_COLORS.terracotta);
+      doc.text(`${f.failure_count} (${f.percentage.toFixed(1)}%)`, 140, y);
+      y += 5;
+    });
+    y += 5;
+  }
+
+  // Tabla de logs (solo últimos 50 para no sobrecargar el PDF)
+  checkPage(40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...PDF_COLORS.ink);
+  doc.text('Logs Recientes', margin, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...PDF_COLORS.grayText);
+  doc.text('Fecha', margin, y);
+  doc.text('Archivo', margin + 30, y);
+  doc.text('Estado', margin + 90, y);
+  doc.text('Error', margin + 110, y);
+  y += 5;
+
+  doc.setFont('helvetica', 'normal');
+  input.logs.slice(0, 50).forEach(l => {
+    checkPage(5);
+    doc.setTextColor(...PDF_COLORS.ink);
+    const date = l.uploaded_at ? new Date(l.uploaded_at).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' }) : '—';
+    doc.text(date, margin, y);
+    
+    const filename = l.filename.length > 25 ? l.filename.slice(0, 22) + '...' : l.filename;
+    doc.text(filename, margin + 30, y);
+    
+    doc.setTextColor(l.success ? ...PDF_COLORS.forest : ...PDF_COLORS.terracotta);
+    doc.text(l.success ? 'OK' : 'Error', margin + 90, y);
+    
+    if (!l.success && l.error_reason) {
+      doc.setTextColor(...PDF_COLORS.grayText);
+      const error = l.error_reason.length > 30 ? l.error_reason.slice(0, 27) + '...' : l.error_reason;
+      doc.text(error, margin + 110, y);
+    }
+    y += 4;
+  });
+
+  const fileName = `cargas_miniseed_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(fileName);
+}

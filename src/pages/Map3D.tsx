@@ -26,6 +26,7 @@ import {
   type RayPathResult, type WaveformResult, type SceneGeometry, type SceneHypocenter,
   type SceneEventInput, ApiError,
 } from '../lib/api3d';
+import { fetchEventWaveforms } from '../lib/api';
 import { alignSyntheticToModel } from '../lib/alignSynthetic';
 import { loadCatalog, type CatalogRow } from '../lib/catalog';
 import {
@@ -634,7 +635,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setPlaying(false);
   };
 
-  const applyEvent = (ev: CatalogEvent) => {
+  const applyEvent = async (ev: CatalogEvent) => {
     setSourceType(ev.sourceType);
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
@@ -652,6 +653,30 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setShowEventList(false);
     setMessage(`Evento cargado: ${ev.label}`);
     setView('fit'); // transición de cámara suave al encuadre
+    
+    // Intentar cargar datos reales MiniSEED si están disponibles
+    try {
+      const realData = await fetchEventWaveforms(ev.id);
+      if (realData) {
+        // Datos reales encontrados: cargar en el estado
+        setRealWave(prev => ({
+          ...prev,
+          [realData.station]: {
+            t: realData.waveData.time,
+            north: realData.waveData.north,
+            east: realData.waveData.east,
+            vertical: realData.waveData.vertical,
+            tP_detectado: null, // Se detectará al procesar
+            tS_detectado: null,
+          },
+        }));
+        setShowReal(prev => ({ ...prev, [realData.station]: true }));
+        console.log(`[Map3D] Datos reales cargados para evento ${ev.id}: ${realData.station}`);
+      }
+    } catch (error) {
+      console.warn(`[Map3D] No se pudieron cargar datos reales para evento ${ev.id}:`, error);
+      // No se bloquea la carga del evento si fallan los datos reales
+    }
   };
 
   // Al hacer clic en un evento de la lista, SIEMPRE pide confirmación (no carga
