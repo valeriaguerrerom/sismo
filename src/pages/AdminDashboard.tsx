@@ -109,12 +109,86 @@ function CharBars({ title, buckets, total }: { title: string; buckets: { label: 
   );
 }
 
-function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
-  stats: DashboardStats | null; users: AdminUser[]; newMessages: number; onRefresh: () => void; onGoMessages: () => void;
+/**
+ * Hook de "count-up": anima un número de 0 hasta `target` cuando se activa
+ * `run`. Devuelve el valor actual (entero). Usa requestAnimationFrame con una
+ * curva easeOut para que arranque rápido y frene suave.
+ */
+function useCountUp(target: number, run: boolean, duration = 900): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!run) { setValue(0); return; }
+    if (target <= 0) { setValue(0); return; }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      setValue(Math.round(target * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, run, duration]);
+  return value;
+}
+
+/** Una tarjeta de indicador con número animado y clic a su pestaña. */
+function StatCard({ value, label, sub, icon, accent, run, onClick }: {
+  value: number; label: string; sub: string; icon: React.ReactNode; accent: string; run: boolean; onClick?: () => void;
+}) {
+  const n = useCountUp(value, run);
+  return (
+    <button onClick={onClick} disabled={!onClick}
+      className="text-left bg-white rounded-2xl border border-stone-200/60 p-4 card-hover flex items-center gap-4 group disabled:cursor-default w-full">
+      <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105"
+        style={{ backgroundColor: `${accent}18`, color: accent }}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="text-3xl font-black text-[#1A1A2E] leading-none tabular-nums">{n}</span>
+        <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">{label}</div>
+        <div className="text-[10px] text-stone-400 leading-tight truncate group-hover:text-[#C4553A] transition-colors">
+          {onClick ? 'toca para revisar →' : sub}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/** Tarjeta de mensajes nuevos: se resalta en dorado si hay pendientes. */
+function MessagesStatCard({ value, run, onClick }: { value: number; run: boolean; onClick: () => void }) {
+  const n = useCountUp(value, run);
+  const has = value > 0;
+  return (
+    <button onClick={onClick}
+      className={`text-left bg-white rounded-2xl border p-4 card-hover flex items-center gap-4 group w-full ${has ? 'border-[#D4A853]/50 ring-1 ring-[#D4A853]/30' : 'border-stone-200/60'}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 ${has ? 'bg-[#D4A853]/15 text-[#D4A853]' : 'bg-stone-100 text-stone-400'}`}>
+        <MessageSquare size={22} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="text-3xl font-black text-[#1A1A2E] leading-none tabular-nums">{n}</span>
+        <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">Mensajes nuevos</div>
+        <div className="text-[10px] text-stone-400 leading-tight group-hover:text-[#C4553A] transition-colors">toca para revisar →</div>
+      </div>
+    </button>
+  );
+}
+
+function Overview({ stats, users, newMessages, onRefresh, onGoTab }: {
+  stats: DashboardStats | null; users: AdminUser[]; newMessages: number; onRefresh: () => void; onGoTab: (t: Tab) => void;
 }) {
   const chars = useMemo(() => characterize(users), [users]);
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Dispara las animaciones de entrada (count-up, barras) una vez que hay datos.
+  const [animate, setAnimate] = useState(false);
+  useEffect(() => {
+    if (stats) {
+      const t = setTimeout(() => setAnimate(true), 60);
+      return () => clearTimeout(t);
+    }
+  }, [stats]);
 
   const handleExportPdf = async () => {
     if (!stats) return;
@@ -154,13 +228,13 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
   const total = Math.max(1, stats.roles.admin + stats.roles.user);
   const adminPct = Math.round((stats.roles.admin / total) * 100);
 
-  // Colores y acentos por tarjeta
-  const cards = [
-    { label: 'Investigadores', sub: 'cuentas registradas', value: stats.users, icon: <Users size={18} />, accent: '#2D6A4F', bg: 'bg-[#2D6A4F]/8' },
-    { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={18} />, accent: '#C4553A', bg: 'bg-[#C4553A]/8' },
-    { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={18} />, accent: '#6B5B95', bg: 'bg-[#6B5B95]/8' },
-    { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} hechos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={18} />, accent: '#D4A853', bg: 'bg-[#D4A853]/10' },
-    { label: 'Cuentas eliminadas', sub: 'reportes anonimizados', value: stats.deletedAccounts, icon: <Trash2 size={18} />, accent: '#A8A29E', bg: 'bg-stone-100' },
+  // Colores, acentos y pestaña destino por tarjeta (todas clicables).
+  const cards: { label: string; sub: string; value: number; icon: React.ReactNode; accent: string; tab: Tab }[] = [
+    { label: 'Investigadores', sub: 'cuentas registradas', value: stats.users, icon: <Users size={22} />, accent: '#2D6A4F', tab: 'users' },
+    { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={22} />, accent: '#C4553A', tab: 'reports' },
+    { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={22} />, accent: '#6B5B95', tab: 'events' },
+    { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} hechos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={22} />, accent: '#D4A853', tab: 'education' },
+    { label: 'Cuentas eliminadas', sub: 'reportes anonimizados', value: stats.deletedAccounts, icon: <Trash2 size={22} />, accent: '#A8A29E', tab: 'users' },
   ];
 
   // Tiempo relativo para últimos accesos
@@ -186,34 +260,14 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
         <button onClick={onRefresh} className={`${btnGhost} gap-1.5`}><RefreshCw size={13} /> Actualizar</button>
       </div>
 
-      {/* ── Tarjetas de indicadores (layout horizontal: ícono + número) ── */}
+      {/* ── Tarjetas de indicadores (número animado, todas clicables) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {cards.map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-stone-200/60 p-4 card-hover flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${s.accent}18`, color: s.accent }}>
-              {s.icon}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-[#1A1A2E] leading-none">{s.value}</span>
-              </div>
-              <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">{s.label}</div>
-              <div className="text-[10px] text-stone-400 leading-tight truncate">{s.sub}</div>
-            </div>
-          </div>
+          <StatCard key={s.label} value={s.value} label={s.label} sub={s.sub}
+            icon={s.icon} accent={s.accent} run={animate} onClick={() => onGoTab(s.tab)} />
         ))}
-        {/* Mensajes nuevos — lleva a la pestaña */}
-        <button onClick={onGoMessages}
-          className={`text-left bg-white rounded-2xl border p-4 card-hover flex items-center gap-4 ${newMessages > 0 ? 'border-[#D4A853]/50 ring-1 ring-[#D4A853]/30' : 'border-stone-200/60'}`}>
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${newMessages > 0 ? 'bg-[#D4A853]/15 text-[#D4A853]' : 'bg-stone-100 text-stone-400'}`}>
-            <MessageSquare size={22} />
-          </div>
-          <div className="min-w-0">
-            <span className="text-3xl font-black text-[#1A1A2E] leading-none">{newMessages}</span>
-            <div className="text-xs font-bold text-stone-600 mt-1 leading-tight">Mensajes nuevos</div>
-            <div className="text-[10px] text-stone-400 leading-tight">toca para revisarlos →</div>
-          </div>
-        </button>
+        {/* Mensajes nuevos — resaltada si hay nuevos */}
+        <MessagesStatCard value={newMessages} run={animate} onClick={() => onGoTab('messages')} />
       </div>
 
       {/* ── Fila central: gráfica + roles + accesos ── */}
@@ -238,7 +292,8 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
               ))}
               {stats.reportsPerMonth.map((m, i) => {
                 const bw = 300 / stats.reportsPerMonth.length;
-                const barH = Math.max(4, (m.count / maxMonth) * 100);
+                const fullH = Math.max(4, (m.count / maxMonth) * 100);
+                const barH = animate ? fullH : 0; // crece al entrar
                 const x = i * bw + bw * 0.15;
                 const bWidth = bw * 0.7;
                 const isHov = hoveredBar === i;
@@ -249,10 +304,10 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
                     style={{ cursor: 'default' }}>
                     {/* Barra de fondo (hover area) */}
                     <rect x={x} y={15} width={bWidth} height={100} rx={6} fill={isHov ? '#FFF5F3' : 'transparent'} />
-                    {/* Barra real */}
+                    {/* Barra real (crece al entrar, con pequeño retardo escalonado) */}
                     <rect x={x} y={115 - barH} width={bWidth} height={barH} rx={6}
                       fill={isHov ? '#A8392A' : '#C4553A'}
-                      style={{ transition: 'fill 0.15s' }} />
+                      style={{ transition: `height 0.6s cubic-bezier(0.22,1,0.36,1) ${i * 0.07}s, y 0.6s cubic-bezier(0.22,1,0.36,1) ${i * 0.07}s, fill 0.15s` }} />
                     {/* Tooltip sobre la barra */}
                     {isHov && (
                       <g>
@@ -1644,7 +1699,7 @@ export function AdminDashboard() {
           backgroundSize: '22px 22px',
         }}>
 
-        {tab === 'overview' && <Overview stats={stats} users={users} newMessages={newMessages} onRefresh={reloadStats} onGoMessages={() => setTab('messages')} />}
+        {tab === 'overview' && <Overview stats={stats} users={users} newMessages={newMessages} onRefresh={reloadStats} onGoTab={setTab} />}
         {tab === 'users' && <UsersTab users={users} meId={user?.id} onChange={() => { reloadUsers(); reloadStats(); }} notify={notify} />}
         {tab === 'events' && <EventsTab notify={notify} />}
         {tab === 'education' && <EducationTab notify={notify} />}
