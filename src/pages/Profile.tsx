@@ -685,9 +685,9 @@ export function Profile({ onDeleted, onDeactivated }: Props) {
                 <AlertTriangle size={13} /> Para confirmar, escribe tu correo exactamente igual:
               </p>
               <div className="mt-2 flex items-center gap-2">
-                <code className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 font-mono text-sm font-semibold" style={{ color: C.ink }} title={user.email}>
+                <span className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold" style={{ color: C.ink }} title={user.email}>
                   {user.email}
-                </code>
+                </span>
                 <button
                   type="button"
                   onClick={copyEmailToConfirm}

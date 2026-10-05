@@ -611,8 +611,13 @@ function UsersTab({ users, meId, onChange, notify }: {
                   : <>La cuenta de <b className="text-[#1A1A2E]">{u.full_name || u.email}</b> quedará desactivada y no podrá iniciar sesión. Sus datos y simulaciones se conservan.</>}
               </p>
 
-              <label className="block text-xs font-semibold text-stone-500 mt-4 mb-1">Motivo</label>
-              <select value={reason} onChange={e => setReason(e.target.value)} className={inputCls}>
+              {/* Motivo: obligatorio y destacado (queda en bitácora, no debe saltarse). */}
+              <label className="block text-sm font-bold text-[#1A1A2E] mt-4 mb-1">
+                Motivo <span className="text-red-500">*</span>
+                <span className="font-normal text-stone-400"> — queda registrado</span>
+              </label>
+              <select value={reason} onChange={e => setReason(e.target.value)}
+                className={`${inputCls} ${reason === '' ? 'border-[#C4553A] ring-1 ring-[#C4553A]/30' : ''}`}>
                 <option value="">Selecciona un motivo…</option>
                 {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
@@ -623,15 +628,19 @@ function UsersTab({ users, meId, onChange, notify }: {
 
               {isDelete && (
                 <>
-                  {/* Instrucción destacada: para confirmar hay que escribir ESTE correo. */}
+                  {/* El bloque de confirmación solo aparece tras elegir el motivo, para
+                      que no se salte ese paso y se corra a escribir el correo. */}
+                  {!reasonOk ? (
+                    <p className="text-xs text-stone-400 mt-3">Elige un motivo para continuar con la confirmación.</p>
+                  ) : (
                   <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
                     <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
                       <AlertTriangle size={13} /> Para confirmar, escribe el correo exactamente igual:
                     </p>
                     <div className="mt-2 flex items-center gap-2">
-                      <code className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 font-mono text-sm font-semibold text-[#1A1A2E]" title={u.email}>
+                      <span className="flex-1 min-w-0 truncate bg-white border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold text-[#1A1A2E]" title={u.email}>
                         {u.email}
-                      </code>
+                      </span>
                       <button type="button" onClick={() => copyEmailToConfirm(u.email)}
                         className={`shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${
                           emailCopied ? 'border-[#2D6A4F] text-[#2D6A4F] bg-green-50' : 'border-red-300 text-red-600 bg-white hover:bg-red-100'
@@ -641,9 +650,11 @@ function UsersTab({ users, meId, onChange, notify }: {
                       </button>
                     </div>
                   </div>
+                  )}
                   <input value={delEmail} onChange={e => setDelEmail(e.target.value)} placeholder="Escribe o pega el correo aquí" autoComplete="off"
+                    disabled={!reasonOk}
                     aria-label="Confirma el correo electrónico"
-                    className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50" />
+                    className="w-full mt-2 px-3 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-red-400 bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed" />
                 </>
               )}
 
