@@ -356,7 +356,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     async function loadEvents() {
       const catalog = await loadCatalog();
       setCatalogRows(catalog);
-      const out: CatalogEvent[] = catalog.map(r => {
+      const out: CatalogEvent[] = catalog
+        .filter(r => r.latitude != null && r.longitude != null)
+        .map(r => {
         const isVolc = r.event_type === 'volcanic';
         const subLabel = r.volcanic_subtype ? SUBTYPE_LABELS[r.volcanic_subtype] ?? '' : '';
         return {
@@ -382,7 +384,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       // Posicionar los eventos del catálogo como hipocentros (backend calcula
       // x/y/z, radio y color por profundidad). Son distintos del epicentro activo.
       try {
-        const input: SceneEventInput[] = out.map(e => ({
+        const input: SceneEventInput[] = out
+          .filter(e => e.lat != null && e.lon != null)
+          .map(e => ({
           id: e.id,
           lat: e.lat,
           lon: e.lon,
@@ -425,6 +429,14 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     // (indicador chico en el panel) para no interrumpir la reproducción.
     if (regenerate) { setLoadingTT(true); setMessage('Calculando tiempos de viaje...'); }
     else { setRealigning(true); }
+    // Coordenadas nunca deben ser null (se filtran al cargar el catálogo), pero
+    // si llegan aquí por alguna razón, salir sin llamar al backend.
+    if (epi.lat == null || epi.lon == null) {
+      setMessage('No se pueden calcular los tiempos de viaje: coordenadas no disponibles para este evento.');
+      if (regenerate) setLoadingTT(false);
+      else setRealigning(false);
+      return;
+    }
     const { vp: vpVal, vs: vsVal, model: modelVal } = vpVsModelRef.current;
     try {
       const res = await getTravelTimes({

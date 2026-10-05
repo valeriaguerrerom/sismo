@@ -128,8 +128,8 @@ def scene_geometry():
 class EventIn(BaseModel):
     """Evento de entrada para posicionar como hipocentro."""
     id: str
-    lat: float
-    lon: float
+    lat: float | None = None
+    lon: float | None = None
     depth_km: float | None = None
     magnitude: float | None = None
     event_type: str | None = None  # 'volcanic' | 'tectonic'
@@ -204,6 +204,9 @@ def scene_events(req: EventsRequest):
     default_depth = {"volcanic": 5.0, "tectonic": 15.0}
     out: list[SceneHypocenter] = []
     for ev in req.events:
+        # Saltar eventos sin coordenadas válidas (lat/lon null en el catálogo).
+        if ev.lat is None or ev.lon is None:
+            continue
         depth = ev.depth_km
         if depth is None:
             depth = default_depth.get((ev.event_type or "").lower(), 15.0)
