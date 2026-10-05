@@ -114,6 +114,20 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
 }) {
   const chars = useMemo(() => characterize(users), [users]);
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!stats) return;
+    setExporting(true);
+    try {
+      const reports = await loadReports();
+      exportAdminPdf({ stats, users, reports, period: {} });
+    } catch (e) {
+      console.error('Error exportando PDF:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -165,7 +179,10 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex gap-2 justify-end">
+        <button onClick={handleExportPdf} disabled={!stats || exporting} className={`${btnGhost} text-[#C4553A] border-[#C4553A]/30`}>
+          <FileDown size={13} /> {exporting ? 'Generando…' : 'Exportar PDF completo'}
+        </button>
         <button onClick={onRefresh} className={`${btnGhost} gap-1.5`}><RefreshCw size={13} /> Actualizar</button>
       </div>
 
@@ -801,7 +818,6 @@ function EventForm({ initial, onSave, onCancel }: { initial: Omit<SeismicEvent, 
       <label className="text-xs text-stone-500">Fecha<input type="date" required className={inputCls} value={form.event_date} onChange={e => set('event_date', e.target.value)} /></label>
       <label className="text-xs text-stone-500">Hora (UTC)<input type="time" step="1" className={inputCls} value={form.event_time} onChange={e => set('event_time', e.target.value)} /></label>
       <label className="text-xs text-stone-500">Magnitud<input type="number" step="0.1" min="0" max="10" required className={inputCls} value={form.magnitude} onChange={e => set('magnitude', Number(e.target.value))} /></label>
-      <label className="text-xs text-stone-500">Profundidad (km)<input type="number" step="0.1" min="0" required className={inputCls} value={form.depth_km} onChange={e => set('depth_km', Number(e.target.value))} /></label>
       <label className="text-xs text-stone-500">Latitud<input type="number" step="0.0001" required className={inputCls} value={form.latitude} onChange={e => set('latitude', Number(e.target.value))} /></label>
       <label className="text-xs text-stone-500">Longitud<input type="number" step="0.0001" required className={inputCls} value={form.longitude} onChange={e => set('longitude', Number(e.target.value))} /></label>
       <label className="text-xs text-stone-500">Tipo
@@ -938,14 +954,14 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
         <table className="w-full text-sm min-w-[820px]">
           <thead>
             <tr className="bg-stone-50 border-b border-stone-200/60">
-              {['Fecha', 'Lugar', 'Mag', 'Prof. (km)', 'Lat / Lon', 'Tipo', 'Fuente', 'Acciones'].map(h => <th key={h} className="text-left px-4 py-3 text-stone-500 font-semibold">{h}</th>)}
+              {['Fecha', 'Lugar', 'Mag', 'Lat / Lon', 'Tipo', 'Fuente', 'Acciones'].map(h => <th key={h} className="text-left px-4 py-3 text-stone-500 font-semibold">{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-stone-400">Cargando…</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">Cargando…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-stone-400">
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-stone-400">
                 {events.length === 0 ? 'La tabla seismic_events está vacía. Crea un evento o importa un catálogo QuakeML del SGC.' : 'Sin resultados para la búsqueda.'}
               </td></tr>
             ) : paged.map(ev => (
@@ -953,7 +969,6 @@ function EventsTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void
                 <td className="px-4 py-2.5 whitespace-nowrap text-stone-600">{ev.event_date} <span className="text-stone-300">{ev.event_time?.slice(0, 5)}</span></td>
                 <td className="px-4 py-2.5 font-medium text-[#1A1A2E] max-w-[220px] truncate">{ev.location_name}</td>
                 <td className="px-4 py-2.5 font-mono">{Number(ev.magnitude).toFixed(1)}</td>
-                <td className="px-4 py-2.5 font-mono">{Number(ev.depth_km).toFixed(1)}</td>
                 <td className="px-4 py-2.5 font-mono text-xs text-stone-500">{Number(ev.latitude).toFixed(3)}, {Number(ev.longitude).toFixed(3)}</td>
                 <td className="px-4 py-2.5"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${ev.event_type === 'volcanic' ? 'bg-[#C4553A]/10 text-[#C4553A]' : 'bg-[#2D6A4F]/10 text-[#2D6A4F]'}`}>{ev.event_type === 'volcanic' ? 'Volcánico' : 'Tectónico'}</span></td>
                 <td className="px-4 py-2.5 text-stone-500 text-xs">{ev.source}</td>
