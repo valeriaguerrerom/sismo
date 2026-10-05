@@ -3,21 +3,7 @@
 -- Descripción: Permite rastrear todas las cargas de usuarios y asociar eventos del catálogo con archivos MiniSEED
 
 -- NOTA: Esta migración es idempotente - puede ejecutarse múltiples veces sin errores
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- 0. Limpiar objetos existentes si es re-ejecución
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- Eliminar funciones si existen
-DROP FUNCTION IF EXISTS get_top_mseed_uploaders(INTEGER);
-DROP FUNCTION IF EXISTS get_mseed_failure_reasons(INTEGER);
-DROP FUNCTION IF EXISTS refresh_mseed_upload_stats();
-
--- Eliminar vista materializada si existe
-DROP MATERIALIZED VIEW IF EXISTS mseed_upload_stats;
-
--- Eliminar tabla si existe (esto borrará datos previos - comentar si hay datos importantes)
--- DROP TABLE IF EXISTS mseed_upload_logs CASCADE;
+-- Las funciones usan CREATE OR REPLACE, las policies se eliminan antes de crear
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 1. Tabla de logs de cargas MiniSEED (tracking completo de uso)
@@ -66,10 +52,12 @@ CREATE INDEX IF NOT EXISTS idx_mseed_logs_station ON mseed_upload_logs(selected_
 -- RLS: usuarios pueden ver solo sus propios logs, admins ven todos
 ALTER TABLE mseed_upload_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own upload logs" ON mseed_upload_logs;
 CREATE POLICY "Users can view own upload logs"
   ON mseed_upload_logs FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Admins can view all upload logs" ON mseed_upload_logs;
 CREATE POLICY "Admins can view all upload logs"
   ON mseed_upload_logs FOR SELECT
   USING (public.current_user_role() = 'admin');
