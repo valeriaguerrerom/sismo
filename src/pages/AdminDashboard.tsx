@@ -11,7 +11,7 @@ import { useAuth } from '../lib/authContext';
 import { ROLE_LABELS } from '../lib/authTypes';
 import { supabase } from '../lib/supabase';
 import {
-  Users, Database, FileText, Settings, Trash2, Shield, BarChart3, Plus, Pencil, Upload,
+  Users, Database, FileText, Trash2, Shield, BarChart3, Plus, Pencil, Upload,
   BookOpen, Check, X, FileSpreadsheet, FileDown, Clock, RefreshCw, AlertTriangle, Copy, CopyCheck,
   MoreVertical, UserCheck, UserX, Download, ArrowRight, Mail, MessageSquare,
 } from '../lib/icons';
@@ -76,27 +76,29 @@ function Toast({ msg, type, onClose }: { msg: string; type: 'ok' | 'error'; onCl
 
 /* ─────────────────────────────── Overview ─────────────────────────────── */
 
-/** Barra horizontal simple de la caracterización. */
+/** Barra horizontal de la caracterización con acento de color. */
 function CharBars({ title, buckets, total }: { title: string; buckets: { label: string; count: number }[]; total: number }) {
   const max = Math.max(1, ...buckets.map(b => b.count));
   return (
     <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
-      <h3 className="text-sm font-bold text-[#1A1A2E] mb-3">{title}</h3>
+      <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wide mb-4">{title}</h3>
       {buckets.length === 0 ? (
         <p className="text-xs text-stone-400">Sin datos aún.</p>
       ) : (
-        <ul className="space-y-2">
-          {buckets.map(b => {
+        <ul className="space-y-3">
+          {buckets.map((b, i) => {
             const pct = Math.round((b.count / total) * 100);
             const isEmpty = b.label === 'Sin dato';
+            const widthPct = (b.count / max) * 100;
             return (
               <li key={b.label}>
-                <div className="flex items-center justify-between text-xs mb-0.5">
-                  <span className={isEmpty ? 'text-stone-300' : 'text-[#1A1A2E]'}>{b.label}</span>
-                  <span className="text-stone-400">{b.count} · {pct}%</span>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className={`font-medium truncate max-w-[60%] ${isEmpty ? 'text-stone-300' : 'text-[#1A1A2E]'}`}>{b.label}</span>
+                  <span className="text-stone-400 font-semibold shrink-0 ml-2">{b.count} <span className="text-stone-300">·</span> {pct}%</span>
                 </div>
-                <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${(b.count / max) * 100}%`, backgroundColor: isEmpty ? '#D6D3D1' : '#C4553A' }} />
+                <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${widthPct}%`, backgroundColor: isEmpty ? '#D6D3D1' : i === 0 ? '#C4553A' : i === 1 ? '#2D6A4F' : i === 2 ? '#6B5B95' : i === 3 ? '#D4A853' : '#78716C' }} />
                 </div>
               </li>
             );
@@ -111,6 +113,7 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
   stats: DashboardStats | null; users: AdminUser[]; newMessages: number; onRefresh: () => void; onGoMessages: () => void;
 }) {
   const chars = useMemo(() => characterize(users), [users]);
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
 
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -137,93 +140,191 @@ function Overview({ stats, users, newMessages, onRefresh, onGoMessages }: {
   const total = Math.max(1, stats.roles.admin + stats.roles.user);
   const adminPct = Math.round((stats.roles.admin / total) * 100);
 
+  // Colores y acentos por tarjeta
+  const cards = [
+    { label: 'Investigadores', sub: 'cuentas registradas', value: stats.users, icon: <Users size={18} />, accent: '#2D6A4F', bg: 'bg-[#2D6A4F]/8' },
+    { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={18} />, accent: '#C4553A', bg: 'bg-[#C4553A]/8' },
+    { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={18} />, accent: '#6B5B95', bg: 'bg-[#6B5B95]/8' },
+    { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} hechos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={18} />, accent: '#D4A853', bg: 'bg-[#D4A853]/10' },
+    { label: 'Cuentas eliminadas', sub: 'reportes anonimizados', value: stats.deletedAccounts, icon: <Trash2 size={18} />, accent: '#A8A29E', bg: 'bg-stone-100' },
+  ];
+
+  // Tiempo relativo para últimos accesos
+  function relTime(iso: string | null): string {
+    if (!iso) return 'Sin datos';
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 2) return 'Ahora mismo';
+    if (min < 60) return `Hace ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `Hace ${h} h`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `Hace ${d} día${d > 1 ? 's' : ''}`;
+    return fmtDate(iso, false);
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex justify-end">
-        <button onClick={onRefresh} className={btnGhost}><RefreshCw size={13} /> Actualizar</button>
+        <button onClick={onRefresh} className={`${btnGhost} gap-1.5`}><RefreshCw size={13} /> Actualizar</button>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Investigadores registrados', sub: 'usuarios de la plataforma', value: stats.users, icon: <Users size={20} /> },
-          { label: 'Simulaciones guardadas', sub: 'reportes de usuarios', value: stats.reports, icon: <FileText size={20} /> },
-          { label: 'Eventos sísmicos', sub: `${stats.eventsByType.tectonic} tect. · ${stats.eventsByType.volcanic} volc.`, value: stats.events, icon: <Database size={20} /> },
-          { label: 'Contenido educativo', sub: `${stats.questions} quiz · ${stats.facts} datos · ${stats.timeline} hitos`, value: stats.questions + stats.facts + stats.timeline, icon: <BookOpen size={20} /> },
-          { label: 'Cuentas eliminadas', sub: 'con simulaciones anonimizadas', value: stats.deletedAccounts, icon: <Trash2 size={20} /> },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-stone-200/60 p-5 card-hover">
-            <span className="text-stone-400">{s.icon}</span>
-            <div className="text-3xl font-black text-[#1A1A2E] mt-2">{s.value}</div>
-            <div className="text-xs font-semibold text-stone-500 mt-1">{s.label}</div>
-            <div className="text-[11px] text-stone-400">{s.sub}</div>
+
+      {/* ── Tarjetas de indicadores ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {cards.map(s => (
+          <div key={s.label} className={`bg-white rounded-2xl border border-stone-200/60 p-4 card-hover relative overflow-hidden`}>
+            {/* Acento superior de color */}
+            <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ backgroundColor: s.accent }} />
+            <div className={`w-8 h-8 rounded-xl ${s.bg} flex items-center justify-center mb-3`} style={{ color: s.accent }}>
+              {s.icon}
+            </div>
+            <div className="text-3xl font-black text-[#1A1A2E] leading-none">{s.value}</div>
+            <div className="text-xs font-bold text-stone-600 mt-1.5 leading-tight">{s.label}</div>
+            <div className="text-[10px] text-stone-400 mt-0.5 leading-tight">{s.sub}</div>
           </div>
         ))}
-        {/* Mensajes nuevos: tarjeta que lleva a la pestaña Mensajes. */}
-        <button onClick={onGoMessages} className="text-left bg-white rounded-2xl border border-stone-200/60 p-5 card-hover">
-          <span className={newMessages > 0 ? 'text-[#C4553A]' : 'text-stone-400'}><MessageSquare size={20} /></span>
-          <div className="text-3xl font-black text-[#1A1A2E] mt-2">{newMessages}</div>
-          <div className="text-xs font-semibold text-stone-500 mt-1">Mensajes nuevos</div>
-          <div className="text-[11px] text-stone-400">del formulario Escríbenos</div>
+        {/* Tarjeta mensajes nuevos — lleva a la pestaña */}
+        <button onClick={onGoMessages}
+          className={`text-left bg-white rounded-2xl border border-stone-200/60 p-4 card-hover relative overflow-hidden ${newMessages > 0 ? 'ring-1 ring-[#D4A853]/40' : ''}`}>
+          <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ backgroundColor: newMessages > 0 ? '#D4A853' : '#E7E5E4' }} />
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${newMessages > 0 ? 'bg-[#D4A853]/10 text-[#D4A853]' : 'bg-stone-100 text-stone-400'}`}>
+            <MessageSquare size={18} />
+          </div>
+          <div className="text-3xl font-black text-[#1A1A2E] leading-none">{newMessages}</div>
+          <div className="text-xs font-bold text-stone-600 mt-1.5 leading-tight">Mensajes nuevos</div>
+          <div className="text-[10px] text-stone-400 mt-0.5">formulario Escríbenos</div>
         </button>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        {/* Simulaciones por mes */}
-        <div className="bg-white rounded-2xl border border-stone-200/60 p-5 lg:col-span-1">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-4 flex items-center gap-1.5"><BarChart3 size={14} className="text-stone-400" /> Simulaciones de los últimos 6 meses</h3>
-          <svg viewBox="0 0 300 140" className="w-full h-36" role="img" aria-label="Simulaciones por mes">
-            {stats.reportsPerMonth.map((m, i) => {
-              const bw = 300 / stats.reportsPerMonth.length;
-              const h = (m.count / maxMonth) * 100;
-              const x = i * bw + bw * 0.2;
-              return (
-                <g key={m.label + i}>
-                  <rect x={x} y={110 - h} width={bw * 0.6} height={h} rx={4} fill="#C4553A" />
-                  <text x={x + bw * 0.3} y={104 - h} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1A1A2E">{m.count}</text>
-                  <text x={x + bw * 0.3} y={128} textAnchor="middle" fontSize="10" fill="#78716C">{m.label}</text>
-                </g>
-              );
-            })}
-            <line x1="0" y1="110" x2="300" y2="110" stroke="#E7E5E4" />
-          </svg>
+      {/* ── Fila central: gráfica + roles + accesos ── */}
+      <div className="grid lg:grid-cols-5 gap-4">
+
+        {/* Gráfica de barras con tooltip */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200/60 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-[#1A1A2E] flex items-center gap-1.5">
+              <BarChart3 size={14} className="text-[#C4553A]" /> Simulaciones · últimos 6 meses
+            </h3>
+            <span className="text-xs text-stone-400 font-semibold">
+              {stats.reportsPerMonth.reduce((a, m) => a + m.count, 0)} total
+            </span>
+          </div>
+          <div className="relative">
+            <svg viewBox="0 0 300 150" className="w-full h-40" role="img" aria-label="Simulaciones por mes">
+              {/* Líneas guía */}
+              {[0, 25, 50, 75, 100].map(pct => (
+                <line key={pct} x1="0" y1={115 - pct} x2="300" y2={115 - pct}
+                  stroke="#F5F5F4" strokeWidth="1" />
+              ))}
+              {stats.reportsPerMonth.map((m, i) => {
+                const bw = 300 / stats.reportsPerMonth.length;
+                const barH = Math.max(4, (m.count / maxMonth) * 100);
+                const x = i * bw + bw * 0.15;
+                const bWidth = bw * 0.7;
+                const isHov = hoveredBar === i;
+                return (
+                  <g key={m.label + i}
+                    onMouseEnter={() => setHoveredBar(i)}
+                    onMouseLeave={() => setHoveredBar(null)}
+                    style={{ cursor: 'default' }}>
+                    {/* Barra de fondo (hover area) */}
+                    <rect x={x} y={15} width={bWidth} height={100} rx={6} fill={isHov ? '#FFF5F3' : 'transparent'} />
+                    {/* Barra real */}
+                    <rect x={x} y={115 - barH} width={bWidth} height={barH} rx={6}
+                      fill={isHov ? '#A8392A' : '#C4553A'}
+                      style={{ transition: 'fill 0.15s' }} />
+                    {/* Tooltip sobre la barra */}
+                    {isHov && (
+                      <g>
+                        <rect x={x + bWidth / 2 - 18} y={115 - barH - 22} width={36} height={18} rx={4} fill="#1A1A2E" />
+                        <text x={x + bWidth / 2} y={115 - barH - 9} textAnchor="middle" fontSize="10" fontWeight="800" fill="white">{m.count}</text>
+                      </g>
+                    )}
+                    {/* Etiqueta mes */}
+                    <text x={x + bWidth / 2} y={133} textAnchor="middle" fontSize="9" fill="#A8A29E" fontWeight="600">{m.label}</text>
+                  </g>
+                );
+              })}
+              <line x1="0" y1="115" x2="300" y2="115" stroke="#E7E5E4" strokeWidth="1.5" />
+            </svg>
+          </div>
         </div>
 
-        {/* Distribución de roles */}
-        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-4 flex items-center gap-1.5"><Shield size={14} className="text-stone-400" /> Distribución de roles</h3>
-          <div className="flex items-center gap-5">
-            <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E7E5E4" strokeWidth="4" />
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#C4553A" strokeWidth="4" strokeDasharray={`${adminPct} ${100 - adminPct}`} strokeLinecap="round" />
-            </svg>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#C4553A]" /> Administradores: <b>{stats.roles.admin}</b> ({adminPct}%)</div>
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-stone-300" /> Investigadores: <b>{stats.roles.user}</b> ({100 - adminPct}%)</div>
+        {/* Donut de roles */}
+        <div className="lg:col-span-1 bg-white rounded-2xl border border-stone-200/60 p-5 flex flex-col">
+          <h3 className="text-sm font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-4">
+            <Shield size={14} className="text-[#6B5B95]" /> Roles
+          </h3>
+          <div className="flex-1 flex flex-col items-center justify-center gap-4">
+            {/* Donut más grande */}
+            <div className="relative w-28 h-28">
+              <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#F5F5F4" strokeWidth="5" />
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#C4553A" strokeWidth="5"
+                  strokeDasharray={`${adminPct * 0.879} ${(100 - adminPct) * 0.879}`}
+                  strokeLinecap="round" strokeDashoffset="0" />
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#2D6A4F" strokeWidth="5"
+                  strokeDasharray={`${(100 - adminPct) * 0.879} ${adminPct * 0.879}`}
+                  strokeLinecap="round"
+                  strokeDashoffset={`${-(adminPct * 0.879)}`} />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-black text-[#1A1A2E]">{total}</span>
+                <span className="text-[10px] text-stone-400 font-semibold">usuarios</span>
+              </div>
+            </div>
+            <div className="w-full space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#C4553A]" /> Admins</span>
+                <span className="font-black text-[#1A1A2E]">{stats.roles.admin} <span className="font-normal text-stone-400">({adminPct}%)</span></span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#2D6A4F]" /> Investig.</span>
+                <span className="font-black text-[#1A1A2E]">{stats.roles.user} <span className="font-normal text-stone-400">({100 - adminPct}%)</span></span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Últimos accesos */}
-        <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
-          <h3 className="text-sm font-bold text-[#1A1A2E] mb-3 flex items-center gap-1.5"><Clock size={14} className="text-stone-400" /> Últimos accesos</h3>
+        {/* Últimos accesos con avatar de iniciales */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200/60 p-5">
+          <h3 className="text-sm font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-3">
+            <Clock size={14} className="text-[#D4A853]" /> Actividad reciente
+          </h3>
           {stats.lastLogins.length === 0 ? (
-            <p className="text-xs text-stone-400">Aún no hay accesos registrados. Se registran al iniciar sesión.</p>
+            <p className="text-xs text-stone-400 mt-2">Aún no hay accesos registrados. Se registran al iniciar sesión.</p>
           ) : (
-            <ul className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin pr-1">
-              {stats.lastLogins.map((l, i) => (
-                <li key={i} className="flex items-center justify-between text-xs">
-                  <span className="truncate text-[#1A1A2E] font-medium">{l.full_name || l.email}</span>
-                  <span className="text-stone-400 flex-shrink-0 ml-2">{fmtDate(l.last_login, true)}</span>
-                </li>
-              ))}
+            <ul className="space-y-2.5 max-h-52 overflow-y-auto scrollbar-thin pr-1">
+              {stats.lastLogins.map((l, i) => {
+                const name = l.full_name || l.email;
+                const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((p: string) => p[0]).join('').toUpperCase() || '?';
+                // Color de avatar basado en el índice para variedad
+                const avatarColors = ['#C4553A', '#2D6A4F', '#6B5B95', '#D4A853', '#1A1A2E'];
+                const bg = avatarColors[i % avatarColors.length];
+                return (
+                  <li key={i} className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
+                      style={{ backgroundColor: bg }}>
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-[#1A1A2E] truncate">{name}</div>
+                      <div className="text-[10px] text-stone-400">{relTime(l.last_login)}</div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
       </div>
 
-      {/* Caracterización de usuarios */}
+      {/* ── Caracterización de usuarios ── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-[#1A1A2E]">Caracterización de usuarios</h2>
+          <h2 className="text-sm font-bold text-[#1A1A2E] flex items-center gap-1.5">
+            <Users size={14} className="text-stone-400" /> Caracterización de investigadores
+          </h2>
           <div ref={exportRef} className="relative">
             <button onClick={() => setExportOpen(o => !o)} className={`${btnGhost} text-[#2D6A4F] border-[#2D6A4F]/30`}><Download size={13} /> Exportar</button>
             {exportOpen && (
@@ -1407,34 +1508,63 @@ export function AdminDashboard() {
     );
   }
 
+  // Saludo según la hora del día.
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const todayLong = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
-      <div className="bg-white border-b border-stone-200/60 px-6 py-4">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-[#1A1A2E] font-bold text-xl flex items-center gap-2">
-            <Settings size={20} className="text-[#C4553A]" />
-            Panel de Administración
-          </h1>
-          <p className="text-stone-400 text-xs mt-0.5">Gestiona usuarios, eventos sísmicos, contenido educativo y reportes</p>
+      {/* ── Cabecera: saludo + fecha + mini-stats ── */}
+      <div className="bg-white border-b border-stone-200/60">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-[#C4553A] uppercase tracking-wide">{greeting}</p>
+            <h1 className="text-[#1A1A2E] font-black text-2xl mt-0.5">
+              {user?.full_name?.split(' ')[0] ?? 'Admin'} <span className="text-stone-300">·</span> Panel de administración
+            </h1>
+            <p className="text-stone-400 text-xs mt-0.5 capitalize">{todayLong}</p>
+          </div>
+          {stats && (
+            <div className="flex gap-4 shrink-0">
+              {[
+                { v: stats.users, l: 'investigadores', color: '#2D6A4F' },
+                { v: stats.reports, l: 'simulaciones', color: '#C4553A' },
+                { v: newMessages, l: 'mensajes nuevos', color: newMessages > 0 ? '#D4A853' : '#A8A29E' },
+              ].map(s => (
+                <div key={s.l} className="text-center min-w-[56px]">
+                  <div className="text-2xl font-black" style={{ color: s.color }}>{s.v}</div>
+                  <div className="text-[10px] font-semibold text-stone-400 leading-tight">{s.l}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Tabs con indicador de línea inferior ── */}
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`relative flex items-center gap-1.5 px-4 py-3 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${
+                  tab === t.id
+                    ? 'text-[#C4553A] border-[#C4553A]'
+                    : 'text-stone-400 border-transparent hover:text-stone-600'
+                }`}>
+                {t.icon}
+                {t.label}
+                {t.badge ? (
+                  <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black flex items-center justify-center bg-[#C4553A] text-white">
+                    {t.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex flex-wrap gap-2 mb-6">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-                tab === t.id ? 'bg-[#C4553A] text-white' : 'bg-white text-stone-500 border border-stone-200'}`}>
-              {t.icon} {t.label}
-              {t.badge ? (
-                <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                  tab === t.id ? 'bg-white text-[#C4553A]' : 'bg-[#C4553A] text-white'}`}>
-                  {t.badge}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
 
         {tab === 'overview' && <Overview stats={stats} users={users} newMessages={newMessages} onRefresh={reloadStats} onGoMessages={() => setTab('messages')} />}
         {tab === 'users' && <UsersTab users={users} meId={user?.id} onChange={() => { reloadUsers(); reloadStats(); }} notify={notify} />}
