@@ -1406,7 +1406,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
             {/* Filtros (misma lógica que el Explorador) */}
             <div className="px-4 py-2.5 border-b border-white/10 space-y-2">
               <input
-                type="text" placeholder="Buscar por fecha, región o id…" value={evFilters.search ?? ''}
+                type="text" placeholder="Buscar por fecha o región…" value={evFilters.search ?? ''}
                 onChange={e => setEvFilters(f => ({ ...f, search: e.target.value }))}
                 className="w-full text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
               />
@@ -1417,9 +1417,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   onChange={e => setEvFilters(f => ({ ...f, region: e.target.value }))}
                   className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
                 >
-                  <option value="all">Región: todas</option>
-                  <option value="Colombia">Colombia</option>
-                  <option value="Ecuador">Ecuador</option>
+                  <option value="all" className="text-black bg-white">Región: todas</option>
+                  <option value="Colombia" className="text-black bg-white">Colombia</option>
+                  <option value="Ecuador" className="text-black bg-white">Ecuador</option>
                 </select>
                 {/* Tipo */}
                 <select
@@ -1427,9 +1427,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   onChange={e => setEvFilters(f => ({ ...f, type: e.target.value as EventFilters['type'] }))}
                   className="text-[11px] px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-stone-200"
                 >
-                  <option value="all">Tipo: todos</option>
-                  <option value="tectonic">Tectónico</option>
-                  <option value="volcanic">Volcánico</option>
+                  <option value="all" className="text-black bg-white">Tipo: todos</option>
+                  <option value="tectonic" className="text-black bg-white">Tectónico</option>
+                  <option value="volcanic" className="text-black bg-white">Volcánico</option>
                 </select>
                 {/* Magnitud mín / máx */}
                 <input
@@ -1450,7 +1450,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                   title="La profundidad usa el valor asumido por la escena (el catálogo no trae profundidad real)"
                 >
                   {DEPTH_RANGES.map(d => (
-                    <option key={d.id} value={d.id}>{d.id === 'all' ? 'Profundidad: todas' : d.label}</option>
+                    <option key={d.id} value={d.id} className="text-black bg-white">{d.id === 'all' ? 'Profundidad: todas' : d.label}</option>
                   ))}
                 </select>
                 {/* Nº mínimo de estaciones */}
