@@ -235,10 +235,11 @@ export function MyReports({ onNavigate }: Props) {
 
   const inputCls = 'w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-[#C4553A] bg-white';
 
-  // Saludo según la hora del día (toque personal).
+  // Saludo según la hora del día (toque personal) + fecha de hoy.
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
   const firstName = (user?.full_name || user?.email || '').split(/\s+/)[0];
+  const todayLong = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] pt-16">
@@ -250,6 +251,7 @@ export function MyReports({ onNavigate }: Props) {
             <FileText size={22} className="text-[#C4553A]" />
             Mis reportes
           </h1>
+          <p className="text-stone-400 text-xs mt-0.5 capitalize">{todayLong}</p>
           <p className="text-stone-400 text-xs mt-0.5">
             Simulaciones guardadas por <span className="break-all">{user?.full_name || user?.email}</span>
           </p>
