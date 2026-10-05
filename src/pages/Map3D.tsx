@@ -421,7 +421,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   // valores desactualizados (p. ej. al cargar un evento volcánico que cambia
   // setVp/setVs en el mismo batch que setEpicenter).
   const vpVsModelRef = useRef({ vp, vs, model });
-  useEffect(() => { vpVsModelRef.current = { vp, vs, model }; }, [vp, vs, model]);
+  // Actualizar el ref ANTES de cada render (no en useEffect, que corre después).
+  vpVsModelRef.current = { vp, vs, model };
 
   const recomputeTravelTimes = useCallback(async (epi: { lat: number; lon: number; depthKm: number }, regenerate = true) => {
     // Solo el flujo que regenera trazas levanta `loadingTT` (y con él el overlay
