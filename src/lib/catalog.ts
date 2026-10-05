@@ -48,6 +48,12 @@ export interface CatalogRow {
    * en CM, cráter en Galeras).
    */
   location_source: string | null;
+  /** true si el evento tiene datos reales MiniSEED procesados disponibles. */
+  mseed_available?: boolean;
+  /** Origen de los datos MiniSEED ('galeras' | 'cm'). */
+  mseed_data_source?: string | null;
+  /** Estación principal con datos MiniSEED disponibles. */
+  mseed_station?: string | null;
 }
 
 /**
@@ -64,7 +70,7 @@ export async function loadCatalog(): Promise<CatalogRow[]> {
       const { data, error } = await withTimeout(
         supabase
           .from('seismic_events')
-          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source, location_source')
+          .select('event_id, event_date, event_time, magnitude, depth_km, latitude, longitude, location_name, event_type, volcanic_subtype, region, station_count, source, location_source, mseed_available, mseed_data_source, mseed_station')
           .order('event_date', { ascending: false }),
         6000,
       );
@@ -95,14 +101,19 @@ async function loadCatalogFromJson(): Promise<CatalogRow[]> {
     const sts = e.stations ?? [];
     const lat = sts.length ? sts.reduce((s: number, x: { latitude: number }) => s + x.latitude, 0) / sts.length : 1.5;
     const lon = sts.length ? sts.reduce((s: number, x: { longitude: number }) => s + x.longitude, 0) / sts.length : -78.1;
+    // Estación preferida: BBAC si está disponible, si no la primera
+    const firstStation = sts[0]?.station ?? sts[0]?.code ?? 'BBAC';
     rows.push({
       event_id: e.id, event_date: e.date, event_time: e.time,
       magnitude: e.magnitude ?? null, depth_km: null,
       latitude: Number(lat.toFixed(6)), longitude: Number(lon.toFixed(6)),
       location_name: `Red CM, ${e.folder}`, event_type: 'tectonic',
       volcanic_subtype: null, region: e.folder, station_count: sts.length, source: 'SGC-RSNC',
-      // El respaldo JSON usa el centroide (nunca el epicentro real).
       location_source: 'centroide de estaciones',
+      // Los datos CM existen como JSON en public/data/cm
+      mseed_available: true,
+      mseed_data_source: 'cm',
+      mseed_station: firstStation,
     });
   }
 
@@ -115,8 +126,11 @@ async function loadCatalogFromJson(): Promise<CatalogRow[]> {
       location_name: e.location_name ?? 'Volcán Galeras', event_type: 'volcanic',
       volcanic_subtype: e.volcanic_subtype || null, region: 'Nariño (Galeras)',
       station_count: 1, source: 'SGC-OVSP',
-      // Los eventos del Galeras usan la coordenada del cráter (no epicentro).
       location_source: 'cráter del Galeras',
+      // Los datos Galeras existen como JSON en public/data/galeras
+      mseed_available: true,
+      mseed_data_source: 'galeras',
+      mseed_station: 'CUFP',
     });
   }
 

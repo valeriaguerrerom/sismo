@@ -64,6 +64,12 @@ interface CatalogEvent {
    * los eventos CM usan el centroide de estaciones y los del Galeras el cráter.
    */
   coordIsZone: boolean;
+  /** Origen de datos reales MiniSEED si están disponibles ('galeras' | 'cm'). */
+  mseedSource: 'galeras' | 'cm' | null;
+  /** Estación principal con datos reales disponibles. */
+  mseedStation: string | null;
+  /** ID del evento tal como aparece en el nombre de archivo (puede diferir del UUID). */
+  mseedEventId: string | null;
 }
 
 /** Etiqueta legible por código de subtipo volcánico. */
@@ -401,6 +407,12 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           nStations: r.station_count,
           // Coordenada por zona SOLO si no tiene epicentro real del SGC/USGS.
           coordIsZone: r.location_source !== 'SGC/USGS',
+          // Metadatos de datos reales MiniSEED (del catálogo Supabase)
+          mseedSource: (r.mseed_data_source as 'galeras' | 'cm') ?? null,
+          mseedStation: r.mseed_station ?? null,
+          // Para Galeras el event_id del archivo es el campo event_id (ej: '0602081159GVA')
+          // Para CM también es el event_id (ej: 'CM_M2.5_2023-01-09T00-24-00')
+          mseedEventId: r.mseed_available ? r.event_id : null,
         };
       });
       setEvents(out);
@@ -508,8 +520,15 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const loadSynthetics = useCallback(async (tts: StationTravelTime[]) => {
     const runId = ++runIdRef.current;
     setLoadingTraces(new Set(tts.map(t => t.code)));
-    setTraces({}); // limpiar previos para evitar trazas viejas
-    rawTracesRef.current = {}; // y los crudos asociados
+    
+    // CRÍTICO: NO borrar las trazas sintéticas aquí porque perderíamos
+    // los datos reales cargados en applyEvent. En su lugar, solo borrar
+    // las trazas sintéticas (las que se van a regenerar).
+    console.log('[Map3D] loadSynthetics: Regenerando sintéticos SIN borrar datos reales');
+    
+    // NO hacer setTraces({}) aquí - mantener las trazas reales
+    // Solo limpiar rawTracesRef (sintéticos crudos)
+    rawTracesRef.current = {};
     // Lanzar todas en paralelo, pero aplicar cada resultado en cuanto llega.
     await Promise.all(tts.map(async (tt) => {
       let syn: SyntheticResult | null = null;
@@ -567,11 +586,15 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         // sin tocar `elapsed` ni `playing` (la reproducción no se corta). Así la
         // onda P de cada traza vuelve a arrancar exactamente en el tP del modelo.
         setRealigning(true);
-        setTraces(() => {
-          const next: Record<string, SyntheticResult | null> = {};
+        setTraces(prev => {
+          // CRÍTICO: Preservar datos reales existentes (no sintéticos)
+          const next: Record<string, SyntheticResult | null> = { ...prev };
           for (const tt of travelTimes) {
             const raw = rawTracesRef.current[tt.code] ?? null;
-            next[tt.code] = raw ? alignSyntheticToModel(raw, tt.tP, tt.tS) : null;
+            // Solo actualizar sintéticos, no tocar datos reales
+            if (raw) {
+              next[tt.code] = alignSyntheticToModel(raw, tt.tP, tt.tS);
+            }
           }
           return next;
         });
@@ -659,6 +682,8 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   };
 
   const applyEvent = async (ev: CatalogEvent) => {
+    console.log('[Map3D] >>> applyEvent INICIADO para evento:', ev.id, ev.label);
+    
     setSourceType(ev.sourceType);
     setMagnitude(ev.magnitude);
     setDepthKm(ev.depthKm);
@@ -670,7 +695,10 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setEpicenter({ lat: ev.lat, lon: ev.lon, depthKm: ev.depthKm });
     setCurrentEventId(ev.id);
     setPlacingEpicenter(false);
-    resetRealState();
+    
+    // NO resetear el estado real aquí - lo hacemos después de verificar
+    // si hay datos reales disponibles
+    
     setElapsed(0);
     setPlaying(false);
     setShowEventList(false);
@@ -678,34 +706,54 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     setView('fit'); // transición de cámara suave al encuadre
     
     // Intentar cargar datos reales MiniSEED si están disponibles
-    try {
-      const realData = await fetchEventWaveforms(ev.id);
-      if (realData) {
-        // Datos reales encontrados: cargar en el estado
-        const stationCode = realData.station;
-        setRealWave(prev => ({
-          ...prev,
-          [stationCode]: {
+    console.log('[Map3D] >>> mseedSource:', ev.mseedSource, '| mseedStation:', ev.mseedStation, '| mseedEventId:', ev.mseedEventId);
+    let hasRealData = false;
+    
+    if (ev.mseedSource && ev.mseedStation && ev.mseedEventId) {
+      try {
+        const realData = await fetchEventWaveforms(ev.mseedEventId, ev.mseedSource, ev.mseedStation);
+        console.log('[Map3D] >>> fetchEventWaveforms retornó:', realData ? `OK (${realData.station})` : 'null');
+        
+        if (realData) {
+          hasRealData = true;
+          const stationCode = realData.station;
+          console.log('[Map3D] >>> DATOS REALES ENCONTRADOS para estación:', stationCode);
+          
+          // Convertir al formato WaveformResult que usa el panel TriaxialTraces
+          const wf: WaveformResult = {
+            event_id: ev.mseedEventId!,
+            station: stationCode,
             t: realData.waveData.time,
-            north: realData.waveData.north,
-            east: realData.waveData.east,
-            vertical: realData.waveData.vertical,
-            tP_detectado: null, // Se detectará al procesar
-            tS_detectado: null,
-          },
-        }));
-        setShowReal(prev => ({ ...prev, [stationCode]: true }));
-        
-        // CRÍTICO: Automáticamente seleccionar la estación que tiene datos reales
-        // para que el usuario vea los datos reales en lugar de sintéticos
-        setSelectedStation(stationCode);
-        setShowTriaxial(true); // Abrir el panel triaxial automáticamente
-        
-        console.log(`[Map3D] Datos reales cargados para evento ${ev.id}: ${stationCode} - MOSTRANDO AUTOMÁTICAMENTE`);
+            canales: {
+              Z: realData.waveData.vertical,
+              N: realData.waveData.north,
+              E: realData.waveData.east,
+            },
+            fs: realData.sampling_rate ?? (realData.waveData.time.length > 1
+              ? 1 / (realData.waveData.time[1] - realData.waveData.time[0])
+              : 100),
+            starttime_utc: ev.date,
+            filtro: { freqmin: 1, freqmax: 10 },
+          };
+          
+          setRealWave(prev => ({ ...prev, [stationCode]: wf }));
+          setShowReal(prev => ({ ...prev, [stationCode]: true }));
+          setSelectedStation(stationCode);
+          setShowTriaxial(true);
+          
+          console.log(`[Map3D] ✅ DATOS REALES CARGADOS y panel abierto para ${stationCode}`);
+        }
+      } catch (error) {
+        console.error(`[Map3D] ❌ ERROR al cargar datos reales:`, error);
       }
-    } catch (error) {
-      console.warn(`[Map3D] No se pudieron cargar datos reales para evento ${ev.id}:`, error);
-      // No se bloquea la carga del evento si fallan los datos reales
+    } else {
+      console.log('[Map3D] >>> Evento sin datos reales (mseedSource null)');
+    }
+    
+    // SOLO resetear el estado real si NO se cargaron datos reales
+    if (!hasRealData) {
+      console.log('[Map3D] >>> NO hay datos reales, reseteando estado');
+      resetRealState();
     }
   };
 

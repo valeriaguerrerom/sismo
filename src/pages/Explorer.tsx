@@ -10,7 +10,6 @@ import { VolcanoLoader } from '../components/ui/VolcanoLoader';
 import { useAuth } from '../lib/authContext';
 import { loadCatalog } from '../lib/catalog';
 import { getStations, Station } from '../lib/api3d';
-import { fetchEventWaveforms } from '../lib/api';
 import { startTour } from '../tours/useTour';
 import { buildExploradorSteps } from '../tours/explorador';
 
@@ -524,25 +523,12 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
     setLoadingWave(true);
     setGalerasWave(null);
     try {
-      // Usar el nuevo endpoint unificado que consulta seismic_events + carga el JSON
-      const realData = await fetchEventWaveforms(ev.id);
-      if (realData) {
-        setGalerasWave(realData.waveData);
-      } else {
-        // Fallback: intenta cargar directo desde /data/galeras/{id}.json
-        // (por si el evento no está en el catálogo pero el JSON existe)
-        const res = await fetch(`/data/galeras/${ev.id}.json`);
-        const data = await res.json();
-        setGalerasWave(data.waveData);
-      }
+      // Cargar directo desde /data/galeras/{id}.json
+      const res = await fetch(`/data/galeras/${ev.id}.json`);
+      const data = await res.json();
+      setGalerasWave(data.waveData);
     } catch (error) {
       console.warn(`[Explorer] Error cargando waveform para evento ${ev.id}:`, error);
-      // Intento final: fetch directo (compatibilidad con eventos sin catálogo)
-      try {
-        const res = await fetch(`/data/galeras/${ev.id}.json`);
-        const data = await res.json();
-        setGalerasWave(data.waveData);
-      } catch { /* ignore */ }
     }
     setLoadingWave(false);
   }, [selectedId]);

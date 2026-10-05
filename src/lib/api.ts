@@ -194,40 +194,36 @@ export async function fetchSimulationFull(
  */
 export interface EventWaveformResponse {
   event_id: string;
-  event_label: string;
   station: string;
-  network: string | null;
   source: 'galeras' | 'cm' | 'user';
-  date: string;
-  time: string | null;
   sampling_rate: number | null;
   duration: number;
   num_samples: number;
-  magnitude: number | null;
-  depth_km: number | null;
-  latitude: number | null;
-  longitude: number | null;
-  event_type: 'tectonic' | 'volcanic' | null;
-  volcanic_subtype: string | null;
   waveData: import('./types').WaveData;
 }
 
 /**
  * Obtiene los datos reales MiniSEED de un evento del catálogo si existen.
- * 
- * @param eventId - UUID del evento en seismic_events.
- * @returns EventWaveformResponse con waveData triaxial y metadatos, o null si no hay datos.
- * @throws Error si el evento no existe o hay error de red.
+ * No requiere Supabase: source y station se pasan directamente desde el frontend.
+ *
+ * @param mseedId - ID del archivo (event_id del catálogo, ej: '0602081159GVA' o 'CM_M2.5_...')
+ * @param source - Origen de datos: 'galeras' | 'cm'
+ * @param station - Código de estación (ej: 'CUFP', 'BBAC')
+ * @returns EventWaveformResponse con waveData triaxial, o null si no hay datos.
  */
-export async function fetchEventWaveforms(eventId: string): Promise<EventWaveformResponse | null> {
+export async function fetchEventWaveforms(
+  mseedId: string,
+  source: 'galeras' | 'cm',
+  station: string,
+): Promise<EventWaveformResponse | null> {
   try {
-    return await fetchAPI<EventWaveformResponse>(`/api/events/${eventId}/waveforms`);
+    const params = new URLSearchParams({ source, station });
+    return await fetchAPI<EventWaveformResponse>(`/api/events/${encodeURIComponent(mseedId)}/waveforms?${params}`);
   } catch (error) {
-    // 404 significa que el evento no tiene datos reales → retornar null
-    if (error instanceof Error && error.message.includes('404')) {
+    // 404 significa que el evento no tiene datos reales → retornar null silenciosamente
+    if (error instanceof Error && (error.message.includes('404') || error.message.includes('503'))) {
       return null;
     }
-    // Otros errores se propagan (500, red caída, etc.)
     throw error;
   }
 }

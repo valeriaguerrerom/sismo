@@ -1,47 +1,32 @@
 """
 Obtención de waveforms reales asociados a eventos del catálogo.
 
-Endpoint:
-    GET /api/events/{event_id}/waveforms
+Endpoints:
+    GET /api/events/{event_id}/waveforms?source=galeras|cm&station=CUFP
 
 Busca datos reales MiniSEED procesados (JSON) para un evento específico del
 catálogo. Los datos pueden venir de:
-  - Galeras 2006: public/data/galeras/{id}.json
-  - Red CM: public/data/cm/{id}.json
-  - Usuario: archivos subidos y guardados (futuro)
+  - Galeras 2006: public/data/galeras/{event_id}.json
+  - Red CM: public/data/cm/{event_id}/{station}.json
 
-Si el evento tiene `mseed_available=true` y `mseed_file_path`, se sirve el JSON
-procesado. Si no, se retorna 404 indicando que no hay datos reales disponibles.
-
-Este endpoint UNIFICA el flujo de carga de datos reales entre Explorer y Map3D,
-eliminando la duplicación de código en el frontend.
+El endpoint NO requiere Supabase: la ruta se construye desde los parámetros
+enviados por el frontend (que sí tiene los metadatos del evento).
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-
-# Supabase client para consultar eventos (opcional, no rompe si no existe)
-try:
-    import os as _os
-    from supabase import create_client as _create_client
-    _url = _os.getenv("SUPABASE_URL", "")
-    _key = _os.getenv("SUPABASE_ANON_KEY", "")
-    supabase = _create_client(_url, _key) if (_url and _key) else None
-except Exception:
-    supabase = None
 
 router = APIRouter(tags=["Datos Sísmicos"])
 
-# Ruta base donde viven los archivos JSON procesados (relativa al backend)
+# Ruta base donde viven los archivos JSON procesados
 _PUBLIC_DIR = Path(__file__).resolve().parent.parent.parent / "public"
 
 
-class WaveData(BaseModel):
+class WaveDataModel(BaseModel):
     """Serie temporal triaxial de un registro sísmico real."""
     time: list[float] = Field(description="Tiempo en segundos desde el inicio")
     north: list[float] = Field(description="Componente Norte normalizada [-1, 1]")
@@ -51,53 +36,46 @@ class WaveData(BaseModel):
 
 class EventWaveformResponse(BaseModel):
     """Datos reales MiniSEED de un evento del catálogo."""
-    event_id: str = Field(description="UUID del evento en seismic_events")
-    event_label: str = Field(description="Etiqueta descriptiva del evento")
-    station: str = Field(description="Código de estación (ej: CUFP, BBAC, etc.)")
-    network: str | None = Field(default=None, description="Red sismológica (CM, CM2, etc.)")
-    source: str = Field(description="Origen: 'galeras', 'cm', 'user'")
-    
-    # Metadatos temporales
-    date: str = Field(description="Fecha del evento (YYYY-MM-DD)")
-    time: str | None = Field(default=None, description="Hora del evento (HH:MM:SS)")
-    
-    # Metadatos del procesamiento
-    sampling_rate: float | None = Field(default=None, description="Frecuencia de muestreo original (Hz)")
-    duration: float = Field(description="Duración del registro en segundos")
-    num_samples: int = Field(description="Número de puntos en el registro")
-    
-    # Información del evento (del catálogo)
-    magnitude: float | None = Field(default=None)
-    depth_km: float | None = Field(default=None)
-    latitude: float | None = Field(default=None)
-    longitude: float | None = Field(default=None)
-    event_type: str | None = Field(default=None, description="'tectonic' | 'volcanic'")
-    volcanic_subtype: str | None = Field(default=None, description="LP/TO/TR/VA/HB para volcánicos")
-    
-    # Series temporales
-    waveData: WaveData
+    event_id: str
+    station: str
+    source: str
+    duration: float
+    num_samples: int
+    sampling_rate: float | None = None
+    waveData: WaveDataModel
 
 
-def _load_json_waveform(file_path: Path) -> dict[str, Any]:
-    """Carga un JSON procesado de waveform desde disco.
-    
-    Raises:
-        FileNotFoundError: si el archivo no existe.
-        ValueError: si el JSON está corrupto o no tiene waveData.
-    """
-    if not file_path.exists():
-        raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
-    
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON corrupto: {e}") from e
-    
-    if "waveData" not in data:
-        raise ValueError("El archivo JSON no contiene 'waveData'")
-    
-    return data
+def _load_galeras(event_id: str) -> dict:
+    """Carga el JSON de un evento Galeras desde public/data/galeras/{event_id}.json"""
+    path = _PUBLIC_DIR / "data" / "galeras" / f"{event_id}.json"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archivo Galeras no encontrado: data/galeras/{event_id}.json",
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _load_cm(event_id: str, station: str) -> dict:
+    """Carga el JSON de una estación CM desde public/data/cm/{event_id}/{station}.json"""
+    path = _PUBLIC_DIR / "data" / "cm" / event_id / f"{station}.json"
+    if not path.exists():
+        # Intentar con la primera estación disponible en la carpeta
+        folder = _PUBLIC_DIR / "data" / "cm" / event_id
+        if folder.exists():
+            jsons = sorted(folder.glob("*.json"))
+            if jsons:
+                with open(jsons[0], "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data["_station_used"] = jsons[0].stem
+                return data
+        raise HTTPException(
+            status_code=404,
+            detail=f"Archivo CM no encontrado: data/cm/{event_id}/{station}.json",
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @router.get(
@@ -105,130 +83,66 @@ def _load_json_waveform(file_path: Path) -> dict[str, Any]:
     response_model=EventWaveformResponse,
     summary="Obtener waveforms reales de un evento del catálogo",
 )
-async def get_event_waveforms(event_id: str):
-    """Devuelve los datos reales MiniSEED de un evento si están disponibles.
-    
+async def get_event_waveforms(
+    event_id: str,
+    source: str = Query(..., description="Origen de datos: 'galeras' o 'cm'"),
+    station: str = Query(default="BBAC", description="Código de estación"),
+):
+    """Devuelve los datos reales MiniSEED de un evento sin requerir Supabase.
+
     Args:
-        event_id: UUID del evento en la tabla seismic_events.
-    
+        event_id: ID del evento (ej: '0602081159GVA' para Galeras,
+                  'CM_M2.5_2023-01-09T00-24-00' para CM).
+        source: Origen de los datos ('galeras' o 'cm').
+        station: Código de estación a cargar (solo aplica para CM).
+
     Returns:
         EventWaveformResponse con waveData triaxial y metadatos.
-    
+
     Raises:
-        HTTPException 404: El evento no existe, o no tiene datos reales.
-        HTTPException 500: Error leyendo el archivo (JSON corrupto, permisos, etc.).
-        HTTPException 503: Base de datos no disponible.
+        HTTPException 404: El archivo de datos no existe.
+        HTTPException 400: source inválido.
     """
-    # 1. Consultar el evento en seismic_events para obtener mseed_file_path
-    if not supabase:
-        raise HTTPException(
-            status_code=503,
-            detail="Base de datos no disponible. Los datos reales requieren conexión a Supabase.",
-        )
-    
-    try:
-        response = supabase.table("seismic_events").select("*").eq("event_id", event_id).execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error consultando evento: {e}") from e
-    
-    if not response.data or len(response.data) == 0:
-        raise HTTPException(status_code=404, detail=f"Evento {event_id} no encontrado en el catálogo.")
-    
-    event = response.data[0]
-    
-    # 2. Verificar que el evento tenga datos reales asociados
-    # Si las columnas nuevas no existen (migración pendiente), asumimos que no hay datos
-    mseed_available = event.get("mseed_available", False)
-    if not mseed_available:
-        raise HTTPException(
-            status_code=404,
-            detail=f"El evento {event_id} no tiene datos reales MiniSEED disponibles. "
-                   "Solo eventos del Galeras (2006) y de la red CM tienen datos procesados.",
-        )
-    
-    mseed_file_path = event.get("mseed_file_path")
-    if not mseed_file_path:
-        raise HTTPException(
-            status_code=404,
-            detail=f"El evento {event_id} tiene mseed_available=true pero no tiene mseed_file_path configurado.",
-        )
-    
-    # 3. Cargar el JSON procesado desde public/
-    file_full_path = _PUBLIC_DIR / mseed_file_path
-    
-    try:
-        data = _load_json_waveform(file_full_path)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Archivo de datos no encontrado: {mseed_file_path}. "
-                   "El archivo puede haber sido movido o eliminado.",
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo datos: {e}")
-    
-    # 4. Construir la respuesta con metadatos del evento + waveData del JSON
-    source = event.get("mseed_data_source", "unknown")
-    station = event.get("mseed_station") or data.get("station", "unknown")
-    network = data.get("network")
-    
-    # Metadatos temporales
-    event_date = str(event.get("event_date", ""))
-    event_time = str(event.get("event_time", "")) if event.get("event_time") else None
-    
-    # Label descriptivo
-    event_type = event.get("event_type", "tectonic")
-    if event_type == "volcanic":
-        subtype = event.get("volcanic_subtype", "")
-        subtype_labels = {
-            "lp": "Long Period (LP)",
-            "to": "Tornillo (TO)",
-            "tr": "Tremor (TR)",
-            "va": "Volcano-Tectónico (VA)",
-            "hb": "Hybrid (HB)",
-        }
-        subtype_text = subtype_labels.get(subtype.lower(), subtype.upper()) if subtype else ""
-        event_label = f"Galeras · {subtype_text} · {event_date}".replace("·  ·", "·").strip()
+    if source == "galeras":
+        data = _load_galeras(event_id)
+        station_code = data.get("station", "CUFP")
+    elif source == "cm":
+        data = _load_cm(event_id, station)
+        station_code = data.get("_station_used", station)
     else:
-        mag = event.get("magnitude")
-        region = event.get("region", "")
-        event_label = f"M{mag} · {event_date} · {region}".strip()
-    
-    # WaveData del JSON
-    wave_data_raw = data["waveData"]
-    wave_data = WaveData(
-        time=wave_data_raw["time"],
-        north=wave_data_raw["north"],
-        east=wave_data_raw["east"],
-        vertical=wave_data_raw["vertical"],
-    )
-    
-    # Duración y muestras
-    duration = wave_data.time[-1] if wave_data.time else 0.0
-    num_samples = len(wave_data.time)
-    
-    # Sampling rate (si está en el JSON, si no se estima de time)
-    sampling_rate = data.get("samplingRate")
+        raise HTTPException(status_code=400, detail=f"source inválido: '{source}'. Use 'galeras' o 'cm'.")
+
+    # Extraer waveData del JSON
+    wave_raw = data.get("waveData")
+    if not wave_raw:
+        raise HTTPException(status_code=500, detail="El archivo JSON no contiene 'waveData'.")
+
+    time_arr = wave_raw.get("time", [])
+    north_arr = wave_raw.get("north", [])
+    east_arr = wave_raw.get("east", [])
+    vertical_arr = wave_raw.get("vertical", [])
+
+    if not time_arr:
+        raise HTTPException(status_code=500, detail="El campo 'time' está vacío en waveData.")
+
+    duration = float(time_arr[-1]) if time_arr else 0.0
+    num_samples = len(time_arr)
+    sampling_rate = data.get("samplingRate") or data.get("sampling_rate")
     if not sampling_rate and num_samples > 1:
-        dt = wave_data.time[1] - wave_data.time[0] if wave_data.time[1] > wave_data.time[0] else 0.01
-        sampling_rate = 1.0 / dt if dt > 0 else None
-    
+        dt = time_arr[1] - time_arr[0]
+        sampling_rate = round(1.0 / dt, 2) if dt > 0 else None
+
     return EventWaveformResponse(
         event_id=event_id,
-        event_label=event_label,
-        station=station,
-        network=network,
+        station=station_code,
         source=source,
-        date=event_date,
-        time=event_time,
-        sampling_rate=sampling_rate,
         duration=round(duration, 3),
         num_samples=num_samples,
-        magnitude=event.get("magnitude"),
-        depth_km=event.get("depth_km"),
-        latitude=event.get("latitude"),
-        longitude=event.get("longitude"),
-        event_type=event_type,
-        volcanic_subtype=event.get("volcanic_subtype"),
-        waveData=wave_data,
+        sampling_rate=sampling_rate,
+        waveData=WaveDataModel(
+            time=time_arr,
+            north=north_arr,
+            east=east_arr,
+            vertical=vertical_arr,
+        ),
     )
