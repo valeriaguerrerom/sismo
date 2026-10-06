@@ -91,6 +91,12 @@ function SliderRow({
         className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[#2D6A4F]"
         style={{ background: `linear-gradient(to right, #2D6A4F ${((value - min) / (max - min)) * 100}%, rgba(255,255,255,0.06) ${((value - min) / (max - min)) * 100}%)` }}
       />
+      {/* Rango del slider: valor mínimo (inicio) y máximo (fin) para que se
+          entienda hasta dónde llega la barra. */}
+      <div className="flex justify-between text-[9px] text-stone-400 leading-none px-0.5">
+        <span>{min}{unit ? ` ${unit}` : ''}</span>
+        <span>{max}{unit ? ` ${unit}` : ''}</span>
+      </div>
     </div>
   );
 }

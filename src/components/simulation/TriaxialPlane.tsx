@@ -178,6 +178,7 @@ export function TriaxialPlane({
         <button onClick={() => { onTimeChange(0); onPlayingChange(false); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><SkipBack size={12} /></button>
         <button onClick={() => { if (currentTime >= lastTime) onTimeChange(0); onPlayingChange(!playing); }} className="p-2 rounded-lg bg-[#C4553A] text-white shadow-sm">{playing ? <Pause size={13} /> : <Play size={13} />}</button>
         <button onClick={() => { onTimeChange(0); onPlayingChange(true); }} className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-500"><RotateCcw size={12} /></button>
+        <span className="text-[9px] font-mono text-stone-400">0s</span>
         <input type="range" min={0} max={lastTime || 0.01} step={(lastTime / 200) || 0.01} value={Math.min(currentTime, lastTime)} onChange={e => { onTimeChange(Number(e.target.value)); onPlayingChange(false); }} className="flex-1 min-w-[140px]" />
         <span className="text-[9px] font-mono text-stone-400 w-16 text-right">{currentTime.toFixed(1)}/{lastTime.toFixed(0)}s</span>
         <div className="flex gap-0.5">

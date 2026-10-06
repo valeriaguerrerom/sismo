@@ -414,7 +414,9 @@ function WaveRace() {
         <span className="text-xs font-bold text-[#1A1A2E]">Modo carrera: la P siempre gana</span>
         <label className="flex items-center gap-2 text-[11px] text-stone-500">
           Distancia
+          <span className="text-[9px] text-stone-400">20</span>
           <input type="range" min={20} max={160} step={5} value={distKm} onChange={e => { setDistKm(Number(e.target.value)); setT(0); setRunning(false); setChecked(false); }} />
+          <span className="text-[9px] text-stone-400">160</span>
           <span className="font-mono text-stone-600">{distKm} km</span>
         </label>
       </div>

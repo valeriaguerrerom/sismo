@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
-  Play, Pause, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, Save, Check, HelpCircle,
+  Play, Pause, MapPin, Radio, Loader, AlertCircle, List, X, FileDown, HelpCircle,
 } from '../lib/icons';
 import { Tooltip } from '../components/ui/Tooltip';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
@@ -935,32 +935,16 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
     };
   }, [epicenter, events, currentEventId, selectedStation, traces, user, magnitude, sourceType, model, vp, vs, density, travelTimes, captureScene, reportTitle]);
 
-  /** Descarga el reporte en el formato elegido (PDF o CSV). */
+  /**
+   * Descarga el reporte en el formato elegido y, como PROCESO INTERNO, lo
+   * guarda en "Mis Reportes" (si hay sesión). El usuario no tiene que pulsar
+   * "Guardar" aparte: con un solo clic en Descargar queda guardado y bajado.
+   */
   const handleDownloadReport = async () => {
     // Para PDF con la sección "Vista 3D" activa, se capturan las tres vistas
     // (Norte/Corte/Superior) moviendo la cámara mientras corre el sismo. El CSV
-    // y JSON no llevan imágenes, así que no se captura nada.
-    let views: { label: string; image: string }[] | undefined;
-    if (reportFormat === 'pdf' && reportOpts.vista3d) {
-      setCapturingViews(true);
-      try { views = await captureAllViews(); }
-      finally { setCapturingViews(false); }
-    }
-    const data = buildReportData(views);
-    if (!data) return;
-    if (reportFormat === 'pdf') downloadMap3dPdf(data, reportOpts);
-    else if (reportFormat === 'json') downloadMap3dJson(data, reportOpts);
-    else downloadMap3dCsv(data, reportOpts);
-  };
-
-  /** Guarda el reporte en "Mis Reportes" (Supabase) para regenerarlo luego. */
-  const handleSaveReport = async () => {
-    if (!supabase || !user) return;
-    setSavingReport(true);
-    setReportMsg(null);
-
-    // Si el PDF incluye la vista 3D, capturar las 3 vistas (Norte/Corte/Superior)
-    // para que el reporte regenerado desde "Mis Reportes" las incluya.
+    // y JSON no llevan imágenes, así que no se captura nada. Se captura UNA sola
+    // vez y sirve tanto para el guardado como para la descarga.
     let views: { label: string; image: string }[] | undefined;
     if (reportFormat === 'pdf' && reportOpts.vista3d) {
       setCapturingViews(true);
@@ -968,27 +952,33 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
       catch (e) { console.warn('[Map3D] No se pudieron capturar las vistas:', e); }
       finally { setCapturingViews(false); }
     }
-
     const data = buildReportData(views);
-    if (!data) { setSavingReport(false); return; }
+    if (!data) return;
 
-    // Se guarda con report_type='map3d' + los datos completos (con las vistas
-    // capturadas si se pidió vista3d). Al regenerar desde "Mis Reportes", el
-    // PDF ya tendrá las 3 vistas sin necesidad de volver a capturarlas.
-    const { error } = await supabase.from('simulation_reports').insert({
-      user_id: user.id,
-      title: data.title,
-      params: { sourceType, magnitude, depth: epicenter?.depthKm, model, vp, vs, density },
-      results: { report_type: 'map3d', map3d: data, options: reportOpts },
-    });
-    if (error) {
-      setReportMsg('No se pudo guardar. Inténtalo de nuevo.');
-      console.error('Guardar reporte Mapa 3D:', error.message);
-    } else {
-      setReportMsg('¡Guardado! Ya puedes descargar en el formato elegido, y verlo en "Mis Reportes".');
-      setReportSaved(true); // habilita la descarga
+    // Guardado INTERNO en "Mis Reportes" (solo si hay sesión y no se guardó ya).
+    if (supabase && user && !reportSaved) {
+      setSavingReport(true);
+      setReportMsg(null);
+      const { error } = await supabase.from('simulation_reports').insert({
+        user_id: user.id,
+        title: data.title,
+        params: { sourceType, magnitude, depth: epicenter?.depthKm, model, vp, vs, density },
+        results: { report_type: 'map3d', map3d: data, options: reportOpts },
+      });
+      setSavingReport(false);
+      if (error) {
+        setReportMsg('No se pudo guardar en «Mis Reportes» (la descarga continúa).');
+        console.error('Guardar reporte Mapa 3D:', error.message);
+      } else {
+        setReportMsg('Guardado en «Mis Reportes».');
+        setReportSaved(true);
+      }
     }
-    setSavingReport(false);
+
+    // Descarga en el formato elegido.
+    if (reportFormat === 'pdf') downloadMap3dPdf(data, reportOpts);
+    else if (reportFormat === 'json') downloadMap3dJson(data, reportOpts);
+    else downloadMap3dCsv(data, reportOpts);
   };
 
   // Nº de estaciones con señal (sintético o real) para el título.
@@ -1850,47 +1840,27 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
                 </div>
               )}
 
-              {/* Acciones: PRIMERO guardar; la descarga (CSV/PDF) se habilita
-                  solo DESPUÉS de guardar. Si no hay sesión no se puede guardar,
-                  así que se permite descargar directo (con un aviso). */}
-              {user ? (
-                <div className="space-y-2 pt-1">
-                  <button
-                    onClick={handleSaveReport}
-                    disabled={savingReport || reportSaved || capturingViews}
-                    className="w-full flex items-center justify-center gap-1.5 bg-[#2D6A4F] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
-                  >
-                    {reportSaved ? <Check size={14} /> : <Save size={14} />}
-                    {capturingViews ? 'Capturando vistas…' : savingReport ? 'Guardando…' : reportSaved ? 'Guardado' : '1. Guardar en Mis Reportes'}
-                  </button>
-                  <button
-                    onClick={handleDownloadReport}
-                    disabled={!reportSaved || capturingViews}
-                    title={!reportSaved ? 'Primero guarda el reporte' : undefined}
-                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {capturingViews
-                      ? <><Loader size={13} className="animate-spin" /> Capturando vistas…</>
-                      : <><FileDown size={13} /> 2. Descargar {reportFormat.toUpperCase()}</>}
-                  </button>
-                  {!reportSaved && (
-                    <p className="text-[10px] text-stone-500 text-center">Guarda el reporte para habilitar la descarga.</p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2 pt-1">
-                  <button
-                    onClick={handleDownloadReport}
-                    disabled={capturingViews}
-                    className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
-                  >
-                    {capturingViews
-                      ? <><Loader size={13} className="animate-spin" /> Capturando vistas…</>
+              {/* Acción única: Descargar. El guardado en "Mis Reportes" es un
+                  proceso INTERNO (ocurre solo al descargar, si hay sesión); el
+                  usuario no pulsa "Guardar" aparte. */}
+              <div className="space-y-2 pt-1">
+                <button
+                  onClick={handleDownloadReport}
+                  disabled={capturingViews || savingReport}
+                  className="w-full flex items-center justify-center gap-1.5 bg-[#C4553A] text-white text-[12px] font-bold py-2.5 rounded-lg disabled:opacity-60"
+                >
+                  {capturingViews
+                    ? <><Loader size={13} className="animate-spin" /> Capturando vistas…</>
+                    : savingReport
+                      ? <><Loader size={13} className="animate-spin" /> Guardando…</>
                       : <><FileDown size={13} /> Descargar {reportFormat.toUpperCase()}</>}
-                  </button>
-                  <p className="text-[10px] text-stone-500 text-center">Inicia sesión para guardar el reporte en "Mis Reportes".</p>
-                </div>
-              )}
+                </button>
+                <p className="text-[10px] text-stone-500 text-center">
+                  {user
+                    ? 'Al descargar, el reporte se guarda en «Mis Reportes».'
+                    : 'Inicia sesión para guardar también el reporte en «Mis Reportes».'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -1988,6 +1958,11 @@ function ParamSlider({ label, value, min, max, step, unit, onChange, disabled = 
       </div>
       <input type="range" min={min} max={max} step={step} value={value} disabled={disabled}
         onChange={e => onChange(Number(e.target.value))} className="w-full disabled:cursor-not-allowed" />
+      {/* Rango: valor mínimo (inicio) y máximo (fin) de la barra. */}
+      <div className="flex justify-between text-[8px] text-stone-500 leading-none px-0.5">
+        <span>{min} {unit}</span>
+        <span>{max} {unit}</span>
+      </div>
     </div>
   );
 }

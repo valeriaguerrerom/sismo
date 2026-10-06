@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { SimulationResult, WaveData, GridInfo, SimulationParams } from '../../lib/types';
-import { Download, FileText, Grid3X3, FileDown, Save, Check, Info, ChevronRight } from '../../lib/icons';
+import { Download, FileText, Grid3X3, FileDown, Check, Info, ChevronRight } from '../../lib/icons';
 import { interpretSimulation, sourceFreqAdjustedNote } from '../../lib/interpretation';
 import { computeRealRecordMetrics } from '../../lib/realRecordMetrics';
-import { computeEventWindow } from '../../lib/waveWindow';
 import { epicentralDistanceKm, epicentralDistanceLabel, formatBigInt } from '../../lib/format';
 import { downloadReportPdf, downsampleWave, PdfSections, CrossSectionData } from '../../lib/reportPdf';
 import { renderCrossSectionPng, computeGlobalPeak, fontScaleForPdf } from '../../lib/crossSectionRender';
@@ -260,8 +259,9 @@ function RealRecordResultsPanel({
 
   const defaultTitle = `Registro real ${realRecord.label}`;
 
-  const handleSave = async () => {
-    if (!supabase || !user) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (!supabase || !user) return true; // sin sesión no se guarda, pero sí se descarga
+    if (hasSaved) return true;           // ya guardado para este registro
     setSaving(true);
     setSaveMsg(null);
     const { error } = await supabase.from('simulation_reports').insert({
@@ -283,14 +283,15 @@ function RealRecordResultsPanel({
         ampScale,
       },
     });
-    if (error) {
-      setSaveMsg({ type: 'error', text: 'No se pudo guardar el reporte. Inténtalo de nuevo.' });
-      console.error('Error guardando reporte:', error.message);
-    } else {
-      setSaveMsg({ type: 'ok', text: '¡Guardado! Ya puedes descargar y verlo en "Mis Reportes".' });
-      setHasSaved(true);
-    }
     setSaving(false);
+    if (error) {
+      setSaveMsg({ type: 'error', text: 'No se pudo guardar en "Mis Reportes" (la descarga continúa).' });
+      console.error('Error guardando reporte:', error.message);
+      return false;
+    }
+    setSaveMsg({ type: 'ok', text: 'Guardado en "Mis Reportes".' });
+    setHasSaved(true);
+    return true;
   };
 
   const exportCsvReal = () => {
@@ -413,43 +414,35 @@ function RealRecordResultsPanel({
       <div className="shrink-0 space-y-2 pt-1">
         {user ? (
           <>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={reportTitle}
-                onChange={e => setReportTitle(e.target.value)}
-                placeholder={defaultTitle}
-                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
-              />
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center justify-center gap-2 bg-[#2D6A4F] text-white px-3 py-2 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 shrink-0"
-              >
-                {saving ? 'Guardando…' : hasSaved ? <><Check size={14} /> Guardado</> : <><Save size={14} /> Guardar</>}
-              </button>
-            </div>
+            {/* Título opcional del reporte (se usa al guardar internamente). */}
+            <input
+              type="text"
+              value={reportTitle}
+              onChange={e => setReportTitle(e.target.value)}
+              placeholder={`Título (opcional): ${defaultTitle}`}
+              className="w-full min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
+            />
             {saveMsg && (
               <p className={`text-xs rounded-lg p-2 border flex items-center gap-1.5 ${
-                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-500 bg-red-50 border-red-100'
+                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-amber-600 bg-amber-50 border-amber-100'
               }`}>
                 {saveMsg.type === 'ok' && <Check size={13} />}
                 {saveMsg.text}
               </p>
             )}
-            {!hasSaved && (
+            {user && (
               <p className="text-[10px] text-stone-400 flex items-center gap-1">
-                <Info size={12} /> Guarda el reporte para habilitar las descargas.
+                <Info size={12} /> Al descargar, el reporte se guarda en «Mis Reportes».
               </p>
             )}
             <div className="flex gap-2">
-              <button onClick={exportCsvReal} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSave(); exportCsvReal(); }} disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <Download size={14} /> CSV
               </button>
-              <button onClick={exportJsonReal} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSave(); exportJsonReal(); }} disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileText size={14} /> JSON
               </button>
-              <button onClick={exportPdfReal} disabled={!hasSaved || pdfBusy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSave(); exportPdfReal(); }} disabled={saving || pdfBusy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileDown size={14} /> {pdfBusy ? '…' : 'PDF'}
               </button>
             </div>
@@ -525,8 +518,11 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
     setReportTitle('');
   }, [result]);
 
-  const handleSaveReport = async () => {
-    if (!supabase || !user || !result) return;
+  const handleSaveReport = async (): Promise<boolean> => {
+    // Guarda el reporte en "Mis Reportes". Devuelve true si quedó guardado (o si
+    // ya estaba guardado / no hay sesión, casos en que la descarga igual procede).
+    if (!supabase || !user || !result) return true; // sin sesión no se guarda, pero sí se descarga
+    if (hasSaved) return true; // ya guardado para esta simulación
     setSaving(true);
     setSaveMsg(null);
     const title = reportTitle.trim() || (realRecord
@@ -564,14 +560,15 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         ampScale,
       },
     });
-    if (error) {
-      setSaveMsg({ type: 'error', text: 'No se pudo guardar el reporte. Inténtalo de nuevo.' });
-      console.error('Error guardando reporte:', error.message);
-    } else {
-      setSaveMsg({ type: 'ok', text: '¡Guardado! Ya puedes descargar y verlo en "Mis Reportes".' });
-      setHasSaved(true);
-    }
     setSaving(false);
+    if (error) {
+      setSaveMsg({ type: 'error', text: 'No se pudo guardar en "Mis Reportes" (la descarga continúa).' });
+      console.error('Error guardando reporte:', error.message);
+      return false;
+    }
+    setSaveMsg({ type: 'ok', text: 'Guardado en "Mis Reportes".' });
+    setHasSaved(true);
+    return true;
   };
 
   // Con registro real no hay corte del subsuelo propio de esa señal.
@@ -647,25 +644,6 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         {(!pArrivalDetected || !sArrivalDetected) && (
           <p className="text-[10px] text-stone-500 mt-1.5 italic">* Tiempo teórico (distancia ÷ velocidad); ver detalle en el ícono de la métrica.</p>
         )}
-        {(() => {
-          // Rebote más temprano (menor entre P y S): con roca rápida la P
-          // rebota antes en los bordes. Es el tiempo tras el cual pueden
-          // aparecer reflexiones artificiales.
-          const bs = [gridInfo.firstBounceP, gridInfo.firstBounceS].filter(
-            (b): b is number => typeof b === 'number' && b > 0,
-          );
-          const bounce = bs.length ? Math.min(...bs) : null;
-          if (bounce === null || duration <= bounce + 0.05) return null;
-          // Si el rebote queda fuera de la ventana del evento (la que se muestra
-          // por defecto), se aclara así en vez de sugerir que se ve la marca.
-          const win = computeEventWindow(result.waveData, { pArrival, sArrival });
-          const outside = bounce > win.end;
-          return (
-            <p className="text-[10px] text-[#C4553A] mt-1.5 bg-[#C4553A]/5 rounded-lg p-2 border border-[#C4553A]/10">
-              Después de {bounce.toFixed(1)} s aparecen reflexiones artificiales en los bordes del modelo{outside ? ' (fuera de la ventana mostrada)' : ''}; no las interpretes como señal real.
-            </p>
-          );
-        })()}
         {/* Nota si la frecuencia de la fuente se bajó por dispersión (dos capas). */}
         {sourceFreqAdjustedNote(params, dominantFrequency) && (
           <p className="text-[10px] text-[#2D6A4F] mt-1.5 bg-[#2D6A4F]/5 rounded-lg p-2 border border-[#2D6A4F]/10">
@@ -709,44 +687,38 @@ export function ResultsPanel({ result, realRecord, forceSection, ampScale = 'com
         {user ? (
           <>
             {/* Paso 1: guardar como reporte (título opcional + botón). */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={reportTitle}
-                onChange={e => setReportTitle(e.target.value)}
-                placeholder={`Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`}
-                className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
-              />
-              <button
-                onClick={handleSaveReport}
-                disabled={saving}
-                className="flex items-center justify-center gap-2 bg-[#2D6A4F] text-white px-3 py-2 rounded-xl font-bold text-sm shadow-lg shadow-[#2D6A4F]/20 disabled:opacity-50 shrink-0"
-              >
-                {saving ? 'Guardando…' : hasSaved ? <><Check size={14} /> Guardado</> : <><Save size={14} /> Guardar</>}
-              </button>
-            </div>
+            {/* Título opcional del reporte (se usa al guardar internamente). */}
+            <input
+              type="text"
+              value={reportTitle}
+              onChange={e => setReportTitle(e.target.value)}
+              placeholder={`Título (opcional): Simulación ${result.params.sourceType === 'volcanic' ? 'volcánica' : 'tectónica'} Mw ${result.params.magnitude}`}
+              className="w-full min-w-0 px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#2D6A4F] bg-stone-50"
+            />
             {saveMsg && (
               <p className={`text-xs rounded-lg p-2 border flex items-center gap-1.5 ${
-                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-500 bg-red-50 border-red-100'
+                saveMsg.type === 'ok' ? 'text-green-600 bg-green-50 border-green-100' : 'text-amber-600 bg-amber-50 border-amber-100'
               }`}>
                 {saveMsg.type === 'ok' && <Check size={13} />}
                 {saveMsg.text}
               </p>
             )}
-            {/* Paso 2: descargas. Deshabilitadas hasta guardar el reporte. */}
-            {!hasSaved && (
+            {/* Descargar: al pulsar, el reporte se guarda SOLO en "Mis Reportes"
+                (proceso interno, si hay sesión) y luego se descarga. El usuario
+                no tiene que pulsar "Guardar" aparte. */}
+            {user && (
               <p className="text-[10px] text-stone-400 flex items-center gap-1">
-                <Info size={12} /> Guarda el reporte para habilitar las descargas.
+                <Info size={12} /> Al descargar, el reporte se guarda en «Mis Reportes».
               </p>
             )}
             <div className="flex gap-2">
-              <button onClick={() => exportCSV(result)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSaveReport(); exportCSV(result); }} disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <Download size={14} /> CSV
               </button>
-              <button onClick={() => exportJSON(result)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSaveReport(); exportJSON(result); }} disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileText size={14} /> JSON
               </button>
-              <button onClick={() => setPdfDialog(true)} disabled={!hasSaved} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={async () => { await handleSaveReport(); setPdfDialog(true); }} disabled={saving} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-stone-200 text-[#1A1A2E] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <FileDown size={14} /> PDF
               </button>
             </div>

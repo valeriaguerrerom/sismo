@@ -647,34 +647,84 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # señal debe decaer a la calma tras la P/S/superficial. La coda física real
     # vendrá del modelo de capas (trabajo futuro), no de reflexiones de borde.
     abs_thick = 44
-    # Con dos capas el semiespacio de roca suele ser rápido (Vp alto) y el
-    # rebote de borde de la P llega antes; se AMPLÍA el dominio horizontal para
-    # que ese primer rebote quede fuera de la ventana útil (el cómputo sigue
-    # < 15 s gracias al kernel Numba). En medio homogéneo se mantiene el dominio
-    # canónico para no alterar los presets existentes.
-    NX_MAX = 1200 if two_layer else 1100
+    # El dominio horizontal se dimensiona para que el PRIMER rebote de borde
+    # llegue DESPUÉS de la onda S registrada en el receptor, para que la señal
+    # útil se vea limpia (sin reflexiones artificiales) hasta pasada la S.
+    #
+    # Geometría: fuente y receptor están separados `D` (distancia epicentral) y
+    # centrados en el dominio. El rebote lateral más temprano recorre, ida y
+    # vuelta, aprox. 2·(mitad_libre − D/2) extra respecto al trayecto directo,
+    # donde mitad_libre = (ancho_útil)/2. Para que el rebote (a Vp) llegue
+    # después de la S directa (a Vs), el ancho útil debe crecer con D y con la
+    # razón Vp/Vs. Se calcula el ancho objetivo y se traduce a nodos; el máximo
+    # se eleva lo necesario (acotado) en vez de quedar fijo en 1100.
     NZ_MAX = 700
-    domain_span_m = 48000 if two_layer else 44000
 
-    nx = min(NX_MAX, max(80, int(domain_span_m / dx)))
+    # Distancia epicentral pedida (m) y margen por la cola del pulso.
+    _dist_m = max(0.0, params.epicentralDistanceKm * 1000.0)
+    # Tiempo que tarda la S directa en llegar al receptor. Se usa la distancia
+    # HIPOCENTRAL (incluye la profundidad focal), no solo la horizontal, porque
+    # con fuentes profundas el trayecto real es mayor y la S llega más tarde; si
+    # se ignora la profundidad, el dominio queda corto y el rebote de P entra
+    # antes que la S (el caso volcánico profundo). Peor caso: Vs mínima.
+    _depth_m = depth * 1000.0
+    _hypo_dist_m = math.hypot(_dist_m, _depth_m)
+    _t_s_direct = _hypo_dist_m / max(1e-6, vs_min)
+    # Ancho útil del dominio para que el PRIMER rebote de borde (el de la P, que
+    # es la onda más rápida y por tanto rebota antes) llegue DESPUÉS de la S
+    # directa en el receptor. El rebote de P viaja fuente→borde→receptor; con la
+    # fuente y el receptor centrados, el borde lateral más cercano está a
+    # media_anchura_libre del centro, y el camino del rebote ≈ 2·media_anchura.
+    # Para que ese rebote (a vp_max) llegue tras la S directa (a vs_min) con un
+    # margen MODERADO, se exige: 2·semiancho / vp_max ≥ t_s_direct · 1.15. El
+    # factor es pequeño a propósito: agrandar más dispara el nº de nodos (cómputo
+    # ∝ nx·nz·pasos) y la simulación se vuelve lenta. 1.15 deja el rebote justo
+    # después de la S con holgura suficiente para que no salga la alerta.
+    _half_free_m = 0.5 * (_t_s_direct * 1.15) * vp_max
+    # Ancho total objetivo = separación fuente-receptor + 2·semiancho libre +
+    # las dos zonas absorbentes. Se respeta un piso de 44 km (presets cortos).
+    _target_span_m = max(44000.0, _dist_m + 2.0 * _half_free_m + 2.0 * abs_thick * dx)
+    domain_span_m = (48000 if two_layer else _target_span_m)
 
-    # La fuente se ubica al ~70% de nz; el resto es propagación + sponge inferior.
+    nx_needed = int(math.ceil(domain_span_m / dx))
+    # Tope duro de nodos para acotar el cómputo (el kernel Numba escala con
+    # nx·nz·pasos). 1200 en X mantiene la simulación rápida (~<8 s) en el
+    # servidor; si el dominio ideal fuera mayor, la garantía de señal de más
+    # abajo asegura igual que la onda se vea (aunque entre algo de rebote tardío).
+    NX_MAX = 1200
+    nx = min(NX_MAX, max(80, nx_needed))
+
+    # La fuente se ubica a la profundidad focal; debajo debe quedar suficiente
+    # espacio libre para que el rebote del BORDE INFERIOR también llegue después
+    # de la S (misma holgura que los laterales). La profundidad de malla objetivo
+    # = profundidad focal + semiancho libre (bajo la fuente) + sponge inferior.
     depth_nodes = int((depth * 1000) / dx)
-    nz_required = max(40, math.ceil(depth_nodes / 0.70) + abs_thick + 20)
+    free_below_nodes = int(math.ceil(_half_free_m / dx))
+    nz_needed = depth_nodes + free_below_nodes + abs_thick + 20
+    # Tope duro de nz para acotar el cómputo (el kernel Numba escala con nx·nz).
+    # 650 mantiene el cómputo rápido; la garantía de señal cubre el resto.
+    NZ_MAX = 650
+    nz_required = max(40, nz_needed)
     dx_adjusted = False
 
-    # nz al máximo representable para alejar el borde inferior (rebote inferior
-    # tardío), sin bajar de lo que exige la profundidad focal.
+    # nz dimensionado para alejar el borde inferior (rebote inferior tardío), sin
+    # bajar de lo que exige la profundidad focal ni superar el tope de cómputo.
     if nz_required <= NZ_MAX:
-        nz = NZ_MAX
+        nz = nz_required
     else:
-        # Depth exceeds representable range: increase dx
-        max_depth_nodes = int((NZ_MAX - abs_thick - 20) * 0.70)
-        dx = math.ceil((depth * 1000) / max_depth_nodes)
+        # El objetivo (focal + espacio libre + sponge) excede el tope de nz: se
+        # sube dx para que todo quepa en NZ_MAX nodos, conservando la proporción
+        # (la fuente a su profundidad focal y espacio libre debajo). Se reparte el
+        # presupuesto de nodos: ~la mitad para la profundidad focal, el resto para
+        # el espacio libre bajo la fuente y el sponge.
+        usable_nodes = NZ_MAX - abs_thick - 20
+        # dx tal que (focal + semiancho_libre) quepa en usable_nodes.
+        needed_m = depth * 1000 + _half_free_m
+        dx = math.ceil(needed_m / max(1, usable_nodes))
         dx_adjusted = True
         nz = NZ_MAX
-        # Recompute nx with new dx
-        nx = min(NX_MAX, max(80, int(34000 / dx)))
+        # Recompute nx with new dx, manteniendo el ancho objetivo del dominio.
+        nx = min(NX_MAX, max(80, int(math.ceil(domain_span_m / dx))))
 
     # Verificación de estabilidad CFL (re-check after possible dx change). Con
     # dos capas, la Vp MÁXIMA es la que restringe dt.
@@ -753,14 +803,46 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     )
     # Rebote más temprano: usa la velocidad MÁXIMA de la P en el dominio (roca).
     first_bounce_min = _bounce_pre / vp_max + t0
+
+    # ── GARANTÍA DE SEÑAL (prioridad sobre la supresión de rebotes) ──
+    # Antes de recortar por rebote, se calcula el instante en que la onda llega
+    # al RECEPTOR: la P con la Vp y la S con la Vs, sobre la distancia real
+    # fuente↔receptor en la malla. La ventana debe cubrir SIEMPRE al menos la
+    # llegada de la S más unos ciclos del pulso, para que el sismograma, el mapa
+    # de calor y el movimiento de partícula nunca salgan planos (amplitud 0).
+    # Si el rebote de borde ocurriera antes que esa llegada (dominio estrecho por
+    # dx pequeño), NO se recorta por debajo de la llegada: se prioriza que la
+    # física se vea, aunque entre algo de reflexión al final.
+    _rec_dist_m = math.hypot((rec_x - src_x) * dx, (rec_z - src_z) * dx)
+    _p_arrival = _rec_dist_m / vp_max + t0           # P (velocidad máxima)
+    _s_arrival = _rec_dist_m / max(1e-6, vs_min) + t0  # S (velocidad mínima)
+    # Ventana mínima para VER la señal: llegada S + ~3 ciclos del pulso de cola.
+    min_signal_window = _s_arrival + 3.0 / f0
+
     # Duración pedida y su tope por rebote (con un pequeño margen de seguridad).
     duration_capped_by_bounce = False
     if first_bounce_min > t0 and duration > first_bounce_min:
-        duration = max(t0 + 1.0 / f0, first_bounce_min)  # nunca por debajo de 1 pulso
-        duration_capped_by_bounce = True
+        # Recorte normal por rebote, PERO nunca por debajo de la ventana que
+        # garantiza ver la onda (llegada S + cola). La garantía de señal gana.
+        capped = max(t0 + 1.0 / f0, first_bounce_min)
+        duration = max(capped, min_signal_window)
+        # Solo se marca como "capado por rebote" si el rebote fue el límite real
+        # (no cuando la garantía de señal lo extendió más allá del rebote).
+        duration_capped_by_bounce = duration <= first_bounce_min + 1e-9
+    elif duration < min_signal_window:
+        # La duración pedida ni siquiera cubría la llegada de la onda: ampliar
+        # para garantizar que el receptor registre señal.
+        duration = min_signal_window
 
     # Pasos temporales (tras acotar la duración). eff_duration = total_steps·dt.
-    total_steps = min(MAX_STEPS, int(duration / dt))
+    # GARANTÍA DE SEÑAL: si con MAX_STEPS la ventana no alcanzara a cubrir la
+    # llegada de la S (dt muy pequeño por dx fino), se eleva el tope lo justo
+    # para que la onda llegue y se registre, acotado a un máximo duro para no
+    # colgar el servidor. Así nunca se devuelve una traza plana por falta de pasos.
+    steps_for_signal = int(math.ceil(min_signal_window / dt))
+    HARD_MAX_STEPS = 20000  # tope absoluto de seguridad
+    effective_max_steps = min(HARD_MAX_STEPS, max(MAX_STEPS, steps_for_signal))
+    total_steps = min(effective_max_steps, int(duration / dt))
     eff_duration = total_steps * dt
     # ~100 fotogramas del campo para animar el corte del subsuelo con fluidez.
     SNAP_TARGET_FRAMES = 100

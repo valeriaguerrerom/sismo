@@ -120,7 +120,9 @@ function StepMesh() {
       <div className="bg-stone-50 border border-stone-200/60 rounded-lg p-3 my-3">
         <label className="flex items-center gap-3 text-xs text-stone-500 mb-3">
           Tamaño de celda dx
+          <span className="text-[9px] text-stone-400">10</span>
           <input type="range" min={10} max={120} step={2} value={dx} onChange={e => setDx(Number(e.target.value))} className="flex-1" />
+          <span className="text-[9px] text-stone-400">120</span>
           <span className="font-mono text-stone-700 w-14 text-right">{dx} m</span>
         </label>
         {/* Visual: una longitud de onda cubierta por nodos */}
