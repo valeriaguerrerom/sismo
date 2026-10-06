@@ -40,7 +40,7 @@ FROM nginx:1.27-alpine
 #   CSP_HEADER_NAME  Content-Security-Policy-Report-Only (primer despliegue) o
 #                    Content-Security-Policy (bloqueo). Por defecto: Report-Only.
 ENV BACKEND_ORIGIN="" \
-    CSP_HEADER_NAME="Content-Security-Policy-Report-Only"
+    CSP_HEADER_NAME="Content-Security-Policy"
 
 COPY nginx.conf.template /etc/nginx/templates-src/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html

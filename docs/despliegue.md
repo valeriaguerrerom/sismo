@@ -24,7 +24,7 @@ arrancar para generar la config con `envsubst`):
 | Variable | Ejemplo | Notas |
 |----------|---------|-------|
 | `BACKEND_ORIGIN` | `https://api.midominio.com` | URL del backend que se añade a `connect-src` de la CSP. Permite usar dominio propio sin editar la plantilla. Vacío = solo Supabase. |
-| `CSP_HEADER_NAME` | `Content-Security-Policy-Report-Only` | Primer despliegue en Report-Only (reporta sin romper). Tras verificar, cambiar a `Content-Security-Policy`. |
+| `CSP_HEADER_NAME` | `Content-Security-Policy` | Modo BLOQUEO activo (default del Dockerfile). La CSP ya se verificó sin violaciones. Si en Railway esta variable está puesta a `Content-Security-Policy-Report-Only`, **cámbiala a `Content-Security-Policy` o elimínala** para que use el default y se aplique el bloqueo. |
 
 Se inyectan en el **build** (son `import.meta.env.*`). En Railway van como
 *build args / variables* del servicio del frontend.
