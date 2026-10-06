@@ -4,7 +4,7 @@ import { defaultParams } from '../lib/simulation';
 import { defaultScenario } from '../lib/scenarios';
 import { commonMaxAmplitude } from '../lib/format';
 import { computeEventWindow } from '../lib/waveWindow';
-import { fetchSimulationFull } from '../lib/api';
+import { fetchSimulationFull, apiErrorMessage } from '../lib/api';
 import { ParametersPanel } from '../components/simulation/ParametersPanel';
 import { ResultsPanel } from '../components/simulation/ResultsPanel';
 import { WaveChart } from '../components/simulation/WaveChart';
@@ -235,13 +235,12 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
       .catch((err) => {
         stopProg();
         console.error('Error en la simulación:', err);
-        // En cualquier fallo (conexión, reinicio del servidor, tiempo de espera
-        // agotado o error del backend) mostramos un mensaje claro y devolvemos
-        // el control: setLoading(false) rehabilita el botón "Generar" y quita la
-        // pantalla de carga, nunca se queda congelada.
+        // Mensaje ESPECÍFICO según el tipo de fallo (429, timeout, red, 5xx),
+        // no uno genérico. setLoading(false) rehabilita el botón "Generar" y
+        // quita la pantalla de carga: nunca se queda congelada.
         setLoading(false);
         setProgress(null);
-        setSimError('No pudimos completar la simulación. Revisa tu conexión e inténtalo de nuevo.');
+        setSimError(apiErrorMessage(err, 'No pudimos completar la simulación'));
       });
   }, [params]);
 

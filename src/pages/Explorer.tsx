@@ -293,6 +293,7 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
   const [galeras, setGaleras] = useState<GalerasEvent[]>([]);
   const [cm, setCm] = useState<CMEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Estaciones (coordenadas oficiales) desde el backend, única fuente de verdad.
   const [stations, setStations] = useState<Station[]>([]);
 
@@ -320,6 +321,8 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setLoadError(null);
+      try {
       const catalog = await loadCatalog();
 
       // Detalle de estaciones por evento CM (desde el índice JSON, por id).
@@ -383,7 +386,12 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
 
       setGaleras(gal);
       setCm(cmEvents);
-      setLoading(false);
+      } catch (e) {
+        console.error('[Explorer] Error cargando el catálogo:', e);
+        setLoadError('No se pudo cargar el catálogo de eventos. Revisa tu conexión e inténtalo de nuevo.');
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -753,6 +761,12 @@ export function Explorer({ onLoadRealData, onLoadMseedToMap3d }: Props) {
           <div data-tour="exp-lista" className="bg-white rounded-xl border border-stone-200/60 p-3 order-1">
             {loading ? (
               <div className="py-16"><VolcanoLoader size={44} label="Cargando registros…" /></div>
+            ) : loadError ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Radio size={36} className="text-[#C4553A] mb-3" />
+                <p className="text-sm font-semibold text-[#C4553A]">{loadError}</p>
+                <button onClick={() => window.location.reload()} className="mt-3 text-xs font-bold text-white bg-[#C4553A] px-4 py-2 rounded-lg">Reintentar</button>
+              </div>
             ) : activeList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 {source === 'volcanic' ? <Flame size={36} className="text-stone-300 mb-3" /> : <Radio size={36} className="text-stone-300 mb-3" />}

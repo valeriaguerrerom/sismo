@@ -526,13 +526,23 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
   const loadSynthetics = useCallback(async (tts: StationTravelTime[]) => {
     const runId = ++runIdRef.current;
     setLoadingTraces(new Set(tts.map(t => t.code)));
-    
-    // CRÍTICO: NO borrar las trazas sintéticas aquí porque perderíamos
-    // los datos reales cargados en applyEvent. En su lugar, solo borrar
-    // las trazas sintéticas (las que se van a regenerar).
-    // NO hacer setTraces({}) aquí - mantener las trazas reales
-    // Solo limpiar rawTracesRef (sintéticos crudos)
+
+    // Limpiar las trazas SINTÉTICAS viejas (no las reales) para que la barra de
+    // progreso parta de cero y se vea el recálculo. Sin esto, al pulsar
+    // "Recalcular" las trazas previas seguían en `traces` → la barra saltaba al
+    // 100% al instante y parecía que no pasaba nada. Se preservan las estaciones
+    // con datos reales MiniSEED (realWave) para no perderlas.
+    setTraces(prev => {
+      const next: Record<string, SyntheticResult | null> = {};
+      for (const code of Object.keys(prev)) {
+        if (realWave[code]) next[code] = prev[code]; // conservar reales
+      }
+      return next;
+    });
     rawTracesRef.current = {};
+    // Errores capturados durante la generación (para avisar al usuario). Se
+    // guarda el primero (p. ej. 429 o red caída) para mostrar un mensaje claro.
+    let firstError: unknown = null;
     // Lanzar todas en paralelo, pero aplicar cada resultado en cuanto llega.
     await Promise.all(tts.map(async (tt) => {
       let syn: SyntheticResult | null = null;
@@ -542,8 +552,9 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
           source_type: sourceType, distance_km: tt.distancia_hipocentral_km,
           nx: 160, nz: 120, dt_max_s: 0.02,
         });
-      } catch {
+      } catch (e) {
         syn = null;
+        if (!firstError) firstError = e;
       }
       // Descartar si ya empezó otra generación (la última gana).
       if (runId !== runIdRef.current) return;
@@ -558,9 +569,21 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         return next;
       });
     }));
-    
+
+    // Descartar si otra generación ya empezó.
+    if (runId !== runIdRef.current) return;
+
+    // Si hubo error y NINGUNA estación produjo señal, avisar al usuario con un
+    // mensaje claro (429, red caída, etc.) en vez de dejar la barra "colgada".
+    const generadas = tts.filter(tt => rawTracesRef.current[tt.code]).length;
+    if (firstError && generadas === 0) {
+      setLoadingTraces(new Set()); // detener la barra de progreso
+      setMessage(friendlyError(firstError, 'No se pudieron generar los sismogramas'));
+      return;
+    }
+
     // Cuando termine de generar todos los sintéticos, abrir el panel triaxial.
-    if (runId === runIdRef.current && tts.length > 0) {
+    if (tts.length > 0) {
       setTimeout(() => {
         // Dejar una estación seleccionada (define el corte y el panel), pero NO
         // abrir el panel triaxial automáticamente: solo se muestra cuando el
@@ -576,7 +599,7 @@ export function Map3D({ mseedLoad, onMseedLoadUsed }: Map3DProps = {}) {
         }
       }, 200);
     }
-  }, [vp, vs, density, magnitude, depthKm, sourceType]);
+  }, [vp, vs, density, magnitude, depthKm, sourceType, realWave]);
 
   useEffect(() => {
     if (travelTimes.length > 0) {

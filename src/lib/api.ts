@@ -11,6 +11,41 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
+ * Error de API con el código de estado y una categoría, para que la UI muestre
+ * un mensaje específico (429 = demasiadas solicitudes, timeout, red caída, etc.).
+ *   - status: código HTTP (0 si no hubo respuesta: red/timeout).
+ *   - kind: 'timeout' | 'network' | 'http'.
+ */
+export class ApiError extends Error {
+  status: number;
+  kind: 'timeout' | 'network' | 'http';
+  detail?: string;
+  constructor(message: string, status: number, kind: 'timeout' | 'network' | 'http', detail?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.kind = kind;
+    this.detail = detail;
+  }
+}
+
+/**
+ * Traduce un error de API a un mensaje claro en español según su tipo.
+ * Reutilizable por todas las pantallas (Simulador, Explorador, etc.).
+ */
+export function apiErrorMessage(e: unknown, contexto = 'La operación'): string {
+  if (e instanceof ApiError) {
+    if (e.kind === 'timeout') return `${contexto} tardó demasiado y se canceló. Inténtalo de nuevo.`;
+    if (e.kind === 'network') return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
+    if (e.status === 429) return 'Demasiadas solicitudes seguidas. Espera unos segundos e inténtalo de nuevo.';
+    if (e.status === 422) return `${contexto}: algún valor no es válido. Revisa los parámetros.`;
+    if (e.status >= 500) return `${contexto}: el servidor tuvo un problema. Vuelve a intentarlo en un momento.`;
+    if (e.detail) return `${contexto}: ${e.detail}`;
+  }
+  return `${contexto}. Revisa tu conexión e inténtalo de nuevo.`;
+}
+
+/**
  * Realiza una petición HTTP al backend FastAPI.
  * @template T - Tipo esperado de la respuesta JSON.
  * @param path - Ruta del endpoint (ej: '/api/events').
@@ -34,14 +69,25 @@ async function fetchAPI<T>(path: string, options?: RequestInit & { timeoutMs?: n
   } catch (e) {
     // AbortError (timeout) o fallo de red (backend caído, sin conexión).
     if ((e as Error).name === 'AbortError') {
-      throw new Error('La simulación tardó demasiado y se canceló.');
+      throw new ApiError('La solicitud tardó demasiado y se canceló.', 0, 'timeout');
     }
-    throw new Error('No se pudo conectar con el servidor.');
+    throw new ApiError('No se pudo conectar con el servidor.', 0, 'network');
   } finally {
     if (timer) clearTimeout(timer);
   }
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${res.statusText}`);
+    // Intentar leer el 'detail' del backend (FastAPI) para un mensaje claro.
+    let detail: string | undefined;
+    try {
+      const body = await res.json();
+      detail = typeof body?.detail === 'string' ? body.detail : undefined;
+    } catch { /* respuesta sin JSON */ }
+    throw new ApiError(
+      `API error ${res.status}: ${res.statusText}`,
+      res.status,
+      'http',
+      detail,
+    );
   }
   return res.json();
 }
