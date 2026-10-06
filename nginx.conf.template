@@ -35,7 +35,14 @@ server {
     # Google Analytics 4 (GA4): el tag se carga desde googletagmanager.com
     # (script-src), los eventos/beacons van a google-analytics.com y
     # analytics.google.com (connect-src), y el pixel de respaldo a
-    # google-analytics.com (img-src). Son los dominios oficiales de GA4.
+    # google-analytics.com (img-src). El comodín *.google-analytics.com cubre
+    # los endpoints regionales (region1/region2.google-analytics.com).
+    #
+    # NO se incluyen www.google.com ni stats.g.doubleclick.net a propósito:
+    # esos solo los usa Google Signals / medición de publicidad, y en este sitio
+    # ad_storage/ad_user_data/ad_personalization están DENEGADOS de forma
+    # permanente (ver public/analytics.js), así que GA4 nunca hace esos pings.
+    # Mínimo privilegio: solo se permite lo que la configuración realmente usa.
     set $csp "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://www.google-analytics.com https://*.google-analytics.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com ${BACKEND_ORIGIN}; frame-src https://accounts.google.com https://*.supabase.co; worker-src 'self' blob:; upgrade-insecure-requests";
     add_header ${CSP_HEADER_NAME} $csp always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;

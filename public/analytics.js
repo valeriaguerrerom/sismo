@@ -40,8 +40,13 @@
   document.head.appendChild(s);
 
   // 3) API para que la app actualice el consentimiento desde el banner.
-  //    window.snSetConsent(true)  -> el usuario ACEPTÓ (concede analytics).
-  //    window.snSetConsent(false) -> el usuario RECHAZÓ (mantiene denegado).
+  //    window.snSetConsent(true)  -> el usuario ACEPTÓ (concede SOLO analytics).
+  //    window.snSetConsent(false) -> el usuario RECHAZÓ (mantiene todo denegado).
+  //
+  // Los permisos de PUBLICIDAD (ad_storage, ad_user_data, ad_personalization)
+  // se mantienen DENEGADOS SIEMPRE, incluso al aceptar: este sitio solo mide uso
+  // (analytics), no hace remarketing ni Google Signals. Por eso GA4 nunca envía
+  // pings a www.google.com ni a stats.g.doubleclick.net, y la CSP no los permite.
   window.snSetConsent = function (granted) {
     gtag('consent', 'update', {
       analytics_storage: granted ? 'granted' : 'denied',
