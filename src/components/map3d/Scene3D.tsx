@@ -614,27 +614,15 @@ export function Scene3D({
     const arrivalState = new Map<string, { pShown: boolean; sShown: boolean; flashUntil: number; tag: string }>();
     arrivalResetRef.current = () => arrivalState.clear();
 
-    // ── Loop de render con monitor de FPS ──
+    // ── Loop de render ──
+    // THREE.Timer (reemplaza al THREE.Clock, deprecado): se actualiza una vez
+    // por frame y provee el delta de tiempo si alguna animación lo necesita.
     let raf = 0;
-    const clock = new THREE.Clock();
-    let fpsAccum = 0, fpsFrames = 0, fpsCheckDone = false;
+    const timer = new THREE.Timer();
     const animate = () => {
       raf = requestAnimationFrame(animate);
+      timer.update();
       const d = dataRef.current;
-
-      // Monitor de FPS (solo informativo). NO reconstruye el terreno: hacerlo
-      // en caliente dejaba un segundo bloque + un segundo eje de profundidad
-      // superpuestos (etiquetas duplicadas "0 km / 0 km"). La segmentación
-      // inicial ya es adecuada.
-      const dt = clock.getDelta();
-      if (!fpsCheckDone && dt > 0) {
-        fpsAccum += dt; fpsFrames++;
-        if (fpsAccum >= 2.0) {
-          const fps = fpsFrames / fpsAccum;
-          if (fps < 45) console.info(`[Map3D] FPS ${fps.toFixed(0)}.`);
-          fpsCheckDone = true;
-        }
-      }
 
       // Actualizar frentes de onda según elapsed. El frente nace en el
       // hipocentro: los anillos de superficie son su intersección con el
