@@ -23,11 +23,21 @@ arrancar para generar la config con `envsubst`):
 
 | Variable | Ejemplo | Notas |
 |----------|---------|-------|
-| `BACKEND_ORIGIN` | `https://api.midominio.com` | URL del backend que se añade a `connect-src` de la CSP. Permite usar dominio propio sin editar la plantilla. Vacío = solo Supabase. |
+| `BACKEND_ORIGIN` | `https://sismonarino-api-production.up.railway.app` | **OBLIGATORIA.** URL pública del backend que se añade a `connect-src` de la CSP. **Sin ella, en modo bloqueo el navegador bloquea todas las llamadas a la API** (el Simulador muestra "No se pudo conectar con el servidor"). El contenedor del frontend **NO arranca** si falta: el entrypoint falla con un mensaje claro en los logs. Es una variable del **contenedor** (runtime de Nginx), no un build-arg. |
 | `CSP_HEADER_NAME` | `Content-Security-Policy` | Modo BLOQUEO activo (default del Dockerfile). La CSP ya se verificó sin violaciones. Si en Railway esta variable está puesta a `Content-Security-Policy-Report-Only`, **cámbiala a `Content-Security-Policy` o elimínala** para que use el default y se aplique el bloqueo. |
 
-Se inyectan en el **build** (son `import.meta.env.*`). En Railway van como
-*build args / variables* del servicio del frontend.
+> **Importante sobre `BACKEND_ORIGIN`:** es una variable del **contenedor** (la lee
+> el entrypoint de Nginx al arrancar para la CSP), distinta de `VITE_API_URL`
+> que se inyecta en el **build** para que el frontend sepa a qué URL llamar.
+> Normalmente ambas valen lo mismo (la URL del backend). Al arrancar, el
+> contenedor imprime en los logs la **CSP final generada**; revísala en Railway
+> si algo del sitio no conecta. Si `BACKEND_ORIGIN` falta, el log muestra el
+> error y el contenedor no sirve tráfico (fallo rápido y visible).
+
+Se inyectan en el **build** (son `import.meta.env.*`): `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`. En Railway van como *build args /
+variables* del servicio del frontend. `BACKEND_ORIGIN` y `CSP_HEADER_NAME` van
+como **variables del servicio** (runtime del contenedor).
 
 ### Backend (FastAPI)
 

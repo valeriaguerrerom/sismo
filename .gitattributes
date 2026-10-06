@@ -1,0 +1,5 @@
+# Forzar LF en scripts de shell: el contenedor (Alpine, /bin/sh) falla con
+# "bad interpreter" si llegan con CRLF de Windows. El entrypoint del frontend
+# DEBE tener finales de línea LF.
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf

@@ -33,19 +33,24 @@ RUN pnpm run build
 # ── Etapa 2: servir con Nginx ──
 FROM nginx:1.27-alpine
 
-# La config se genera al arrancar a partir de nginx.conf.template con envsubst,
-# sustituyendo SOLO ${BACKEND_ORIGIN} y ${CSP_HEADER_NAME} (las variables de
-# nginx como $uri/$csp se dejan intactas al pasar la lista explícita a envsubst).
-#   BACKEND_ORIGIN   URL del backend para connect-src de la CSP (vacío = solo Supabase).
-#   CSP_HEADER_NAME  Content-Security-Policy-Report-Only (primer despliegue) o
-#                    Content-Security-Policy (bloqueo). Por defecto: Report-Only.
+# El entrypoint genera /etc/nginx/conf.d/default.conf a partir de la plantilla
+# con envsubst, sustituyendo ${BACKEND_ORIGIN} y ${CSP_HEADER_NAME}.
+#   BACKEND_ORIGIN   OBLIGATORIA. URL pública del backend para connect-src de la
+#                    CSP (p. ej. https://sismonarino-api-production.up.railway.app).
+#                    Si falta, el entrypoint FALLA con un mensaje claro: en modo
+#                    bloqueo una CSP sin este origen rompe la conexión a la API.
+#   CSP_HEADER_NAME  Content-Security-Policy (bloqueo, por defecto) o
+#                    Content-Security-Policy-Report-Only (solo reporta).
 ENV BACKEND_ORIGIN="" \
     CSP_HEADER_NAME="Content-Security-Policy"
 
 COPY nginx.conf.template /etc/nginx/templates-src/default.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint-sn.sh
+RUN chmod +x /docker-entrypoint-sn.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 
-# envsubst genera el config final y luego arranca nginx en primer plano.
-CMD ["/bin/sh", "-c", "envsubst '${BACKEND_ORIGIN} ${CSP_HEADER_NAME}' < /etc/nginx/templates-src/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+# El entrypoint valida BACKEND_ORIGIN, genera la config, imprime la CSP final
+# en los logs, valida la sintaxis de Nginx y arranca en primer plano.
+CMD ["/docker-entrypoint-sn.sh"]
