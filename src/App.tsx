@@ -6,6 +6,7 @@ import { useAuth } from './lib/authContext';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { VolcanoLoader } from './components/ui/VolcanoLoader';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Home } from './pages/Home';
 import { Simulation } from './pages/Simulation';
 import { Explorer } from './pages/Explorer';
@@ -281,7 +282,9 @@ function AppContent() {
         className={`flex-1 flex flex-col transition-opacity duration-300 ease-in-out ${transitioning ? 'opacity-0' : 'opacity-100'}`}
         style={{ minHeight: wideZoom !== 1 ? `calc(100vh / ${wideZoom})` : '100vh' }}
       >
-        {renderPage()}
+        <ErrorBoundary pageName={page === 'simulation' ? 'Simulador' : page === 'explorer' ? 'Explorador' : page === 'map3d' ? 'Mapa 3D' : page === 'education' ? 'Educación' : page === 'reports' ? 'Mis Reportes' : page === 'admin' ? 'Panel Admin' : undefined} key={page}>
+          {renderPage()}
+        </ErrorBoundary>
       </main>
       <Footer onNavigate={navigate} dark={page === 'map3d'} />
     </div>

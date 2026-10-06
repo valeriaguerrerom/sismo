@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import 'leaflet/dist/leaflet.css';
 import './index.css';
 
@@ -22,8 +23,24 @@ window.addEventListener('vite:preloadError', () => {
   }
 });
 
+// Captura errores de import() dinámico que NO pasan por vite:preloadError
+// (p. ej. import() dentro de onClick, no en el módulo). Si el error es un
+// chunk desactualizado, recarga una vez.
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = String(event.reason?.message || event.reason || '');
+  if (/dynamically imported module|loading chunk|failed to fetch/i.test(msg)) {
+    const KEY = 'sn-chunk-reload';
+    if (!sessionStorage.getItem(KEY)) {
+      sessionStorage.setItem(KEY, '1');
+      window.location.reload();
+    }
+  }
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );
