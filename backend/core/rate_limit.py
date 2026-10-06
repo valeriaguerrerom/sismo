@@ -26,7 +26,17 @@ from fastapi import HTTPException, Request
 
 
 def client_ip(request: Request) -> str:
-    """IP del cliente, respetando X-Forwarded-For si hay proxy (Railway/Nginx).
+    """IP real del cliente, respetando el proxy (Railway/Nginx).
+
+    Detrás de un proxy inverso (Railway) la IP de la conexión TCP
+    (``request.client.host``) es la del proxy, igual para TODOS los clientes.
+    Para distinguir usuarios se usa ``X-Forwarded-For``, cuyo PRIMER valor es la
+    IP del cliente original (el proxy añade su propia IP al final):
+        X-Forwarded-For: <ip-cliente>, <ip-proxy-1>, <ip-proxy-2>
+    Se toma el primer valor. Si el encabezado no viene, se cae a la IP de la
+    conexión. Como respaldo adicional (p. ej. clientes móviles tras CGNAT que
+    comparten IP), se combina con el User-Agent para no agrupar a usuarios muy
+    distintos bajo una misma IP aparente.
 
     Args:
         request: La petición entrante.
@@ -36,7 +46,13 @@ def client_ip(request: Request) -> str:
     """
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        return fwd.split(",")[0].strip()
+        ip = fwd.split(",")[0].strip()
+        if ip:
+            return ip
+    # Algunos proxies usan X-Real-IP en vez de X-Forwarded-For.
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
     return request.client.host if request.client else "unknown"
 
 

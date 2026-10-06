@@ -32,15 +32,21 @@ from fastapi import APIRouter, Body, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
+from core.rate_limit import client_ip
+
 router = APIRouter(tags=["Contacto"])
 
 VALID_TYPES = {"sugerencia", "error", "datos", "otro"}
 MAX_MESSAGE_LENGTH = 1000
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
-# Límites de envío por IP.
-PER_MINUTE = 3
-PER_DAY = 20
+# Límites de envío por IP. Generosos a propósito: detrás del proxy de Railway
+# varias personas pueden compartir una misma IP aparente (si X-Forwarded-For no
+# distingue bien), así que un límite bajo bloqueaba a evaluadores que recién
+# empezaban. El feedback es texto corto (barato); el honeypot y el consent ya
+# frenan el spam automatizado. Estos valores permiten varias personas a la vez.
+PER_MINUTE = 15
+PER_DAY = 300
 
 # Historial de envíos por IP (timestamps). En memoria del proceso.
 _ip_hits: dict[str, deque[float]] = defaultdict(deque)
@@ -63,14 +69,6 @@ def _env() -> tuple[str, str, str]:
     anon = os.getenv("SUPABASE_ANON_KEY", "")
     service = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") or os.getenv("SUPABASE_SERVICE_KEY", "")
     return url, anon, service
-
-
-def _client_ip(request: Request) -> str:
-    """IP del cliente, respetando X-Forwarded-For si hay proxy (Railway/Nginx)."""
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _check_rate_limit(ip: str) -> None:
@@ -163,7 +161,7 @@ def create_feedback(
             )
 
     # Límite por IP.
-    _check_rate_limit(_client_ip(request))
+    _check_rate_limit(client_ip(request))
 
     url, anon_key, service_key = _env()
     if not (url and service_key):
