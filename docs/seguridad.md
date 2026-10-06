@@ -257,16 +257,41 @@ revisado, el estado y la corrección aplicada.
 ## Límite de peticiones (rate limiting)
 
 - `backend/core/rate_limit.py` → `RateLimiter` por IP (ventanas de minuto y
-  hora), respetando `X-Forwarded-For` tras el proxy de Railway/Nginx.
+  hora). La IP se obtiene con `client_ip()` de forma anti-spoofing (ver abajo).
 - **Simulación FDM** (`/api/simulate`, `/api/simulate/full`): 20/min y 200/hora.
 - **Subida de MiniSEED** (`/api/upload/mseed`): 10/min y 60/hora.
-- **Formulario de contacto** (`/api/feedback`): 3/min y 20/día (lógica propia en
-  `feedback.py`).
+- **Formulario de contacto** (`/api/feedback`): 15/min y 300/día (`feedback.py`),
+  valores holgados para varias personas evaluando a la vez (el texto es barato;
+  el honeypot y el consentimiento frenan el spam automatizado).
 - **Login/registro/recuperación:** los gestiona Supabase Auth con su propio rate
   limiting.
 - **Limitación conocida:** el estado del limitador vive en memoria del proceso,
   válido para un worker único (caso Railway). Con varias réplicas haría falta un
   backend compartido (Redis).
+
+### IP del cliente a prueba de falsificación (`client_ip`)
+
+El rate limit se aplica por IP, así que obtener la IP **real** y **no
+falsificable** es crítico: si un cliente pudiera cambiar su IP aparente en cada
+petición, evadiría el límite.
+
+- **Amenaza:** `X-Forwarded-For` (XFF) es una cadena `ip1, ip2, …` que el cliente
+  puede rellenar. El edge proxy de Railway **no elimina** lo que mande el
+  cliente: **añade la IP real del cliente al FINAL** de la cadena. Por eso el
+  **primer** valor es controlable por un atacante y **no** debe usarse.
+- **Decisión:** `client_ip()` toma el valor **más a la derecha** de XFF según el
+  número de proxies de confianza (`TRUSTED_PROXY_HOPS`, por defecto `1` = el edge
+  de Railway). Con 1 hop, es el **último** elemento: la IP que insertó Railway.
+  Un XFF falso que el cliente anteponga queda a la izquierda y se ignora.
+- **Respaldo:** si no viene XFF, se usa `X-Real-IP` (que Railway también
+  sobrescribe con la IP real) y, en último lugar, la IP de la conexión TCP
+  (caso local sin proxy).
+- **Configurable:** `TRUSTED_PROXY_HOPS` permite ajustar cuántos proxies de
+  confianza hay delante (p. ej. si se añade un CDN), para seguir contando desde
+  la derecha el número correcto de saltos.
+- **Pruebas:** `backend/tests/test_proxy_ip.py` incluye casos donde el cliente
+  envía un XFF falsificado y se verifica que (a) la IP real resuelta no cambia y
+  (b) el `RateLimiter` le sigue aplicando el 429 a su IP real.
 
 ## Subida de archivos (`/api/upload/mseed`)
 

@@ -18,41 +18,60 @@ Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict, deque
 from threading import Lock
 
 from fastapi import HTTPException, Request
 
+# Número de proxies de CONFIANZA delante del backend. En Railway es 1 (su edge
+# proxy). Este valor determina cuántas entradas del final de X-Forwarded-For
+# fueron puestas por infraestructura que controlamos (no por el cliente).
+# Configurable por si cambia la topología (p. ej. un CDN extra delante).
+_TRUSTED_PROXY_HOPS = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+
 
 def client_ip(request: Request) -> str:
-    """IP real del cliente, respetando el proxy (Railway/Nginx).
+    """IP real del cliente a prueba de falsificación (anti-spoofing).
 
-    Detrás de un proxy inverso (Railway) la IP de la conexión TCP
-    (``request.client.host``) es la del proxy, igual para TODOS los clientes.
-    Para distinguir usuarios se usa ``X-Forwarded-For``, cuyo PRIMER valor es la
-    IP del cliente original (el proxy añade su propia IP al final):
-        X-Forwarded-For: <ip-cliente>, <ip-proxy-1>, <ip-proxy-2>
-    Se toma el primer valor. Si el encabezado no viene, se cae a la IP de la
-    conexión. Como respaldo adicional (p. ej. clientes móviles tras CGNAT que
-    comparten IP), se combina con el User-Agent para no agrupar a usuarios muy
-    distintos bajo una misma IP aparente.
+    PROBLEMA: el cliente puede enviar un ``X-Forwarded-For`` falso para saltarse
+    el rate limit. El proxy de Railway NO borra lo que mande el cliente: AÑADE
+    la IP real del cliente al FINAL de la cadena. Por eso el PRIMER valor es
+    controlable por el atacante y el valor confiable es el que agrega el proxy,
+    contando desde la derecha.
 
-    Args:
-        request: La petición entrante.
+        Cliente envía:   X-Forwarded-For: 9.9.9.9 (falso)
+        Railway reescribe: X-Forwarded-For: 9.9.9.9, <IP-real-del-cliente>
+                                            ^falso     ^confiable (edge Railway)
 
-    Returns:
-        La IP del cliente como texto, o "unknown" si no se puede determinar.
+    Con ``_TRUSTED_PROXY_HOPS = 1`` (Railway) se toma el ÚLTIMO valor de la
+    lista: la IP que insertó el edge de Railway. Nunca el primero (spoofeable).
+    Si hubiera N proxies de confianza, se tomaría el N-ésimo desde el final.
+
+    Respaldo: ``X-Real-IP`` (que Railway también sobrescribe con la IP real) y,
+    por último, la IP de la conexión TCP. Devuelve "unknown" si nada aplica.
+
+    Referencias:
+        - Railway añade la IP real al final de XFF, sin strippear lo del cliente.
+        - Guía de seguridad de XFF: usar el valor rightmost tras N hops de confianza.
     """
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        ip = fwd.split(",")[0].strip()
-        if ip:
-            return ip
-    # Algunos proxies usan X-Real-IP en vez de X-Forwarded-For.
+        parts = [p.strip() for p in fwd.split(",") if p.strip()]
+        if parts:
+            # Índice desde la derecha según los hops de confianza. Con 1 hop
+            # (Railway) es el último elemento. Se acota para no salir del rango
+            # si el cliente mandó MENOS entradas de las esperadas.
+            idx = len(parts) - _TRUSTED_PROXY_HOPS
+            if idx < 0:
+                idx = 0
+            return parts[idx]
+    # Respaldo: X-Real-IP (Railway lo sobrescribe con la IP real del cliente).
     real = request.headers.get("x-real-ip")
-    if real:
+    if real and real.strip():
         return real.strip()
+    # Último recurso: IP de la conexión TCP (en local, sin proxy).
     return request.client.host if request.client else "unknown"
 
 
