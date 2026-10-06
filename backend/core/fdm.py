@@ -660,30 +660,22 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # se eleva lo necesario (acotado) en vez de quedar fijo en 1100.
     NZ_MAX = 700
 
-    # Distancia epicentral pedida (m) y margen por la cola del pulso.
+    # Distancia epicentral pedida (m) y profundidad.
     _dist_m = max(0.0, params.epicentralDistanceKm * 1000.0)
-    # Tiempo que tarda la S directa en llegar al receptor. Se usa la distancia
-    # HIPOCENTRAL (incluye la profundidad focal), no solo la horizontal, porque
-    # con fuentes profundas el trayecto real es mayor y la S llega más tarde; si
-    # se ignora la profundidad, el dominio queda corto y el rebote de P entra
-    # antes que la S (el caso volcánico profundo). Peor caso: Vs mínima.
     _depth_m = depth * 1000.0
     _hypo_dist_m = math.hypot(_dist_m, _depth_m)
+
+    # Tiempo que tarda la S directa en llegar al receptor (por la hipocentral).
     _t_s_direct = _hypo_dist_m / max(1e-6, vs_min)
-    # Ancho útil del dominio para que el PRIMER rebote de borde (el de la P, que
-    # es la onda más rápida y por tanto rebota antes) llegue DESPUÉS de la S
-    # directa en el receptor. El rebote de P viaja fuente→borde→receptor; con la
-    # fuente y el receptor centrados, el borde lateral más cercano está a
-    # media_anchura_libre del centro, y el camino del rebote ≈ 2·media_anchura.
-    # Para que ese rebote (a vp_max) llegue tras la S directa (a vs_min) con un
-    # margen MODERADO, se exige: 2·semiancho / vp_max ≥ t_s_direct · 1.15. El
-    # factor es pequeño a propósito: agrandar más dispara el nº de nodos (cómputo
-    # ∝ nx·nz·pasos) y la simulación se vuelve lenta. 1.15 deja el rebote justo
-    # después de la S con holgura suficiente para que no salga la alerta.
-    _half_free_m = 0.5 * (_t_s_direct * 1.15) * vp_max
-    # Ancho total objetivo = separación fuente-receptor + 2·semiancho libre +
-    # las dos zonas absorbentes. Se respeta un piso de 44 km (presets cortos).
-    _target_span_m = max(44000.0, _dist_m + 2.0 * _half_free_m + 2.0 * abs_thick * dx)
+
+    # El dominio HORIZONTAL se dimensiona por la distancia EPICENTRAL (no la
+    # hipocentral): el rebote lateral solo depende de qué tan lejos están la
+    # fuente y el receptor en el eje X, no de la profundidad. Usar la
+    # hipocentral inflaba el ancho absurdamente para fuentes profundas a
+    # distancias cortas (p.ej. depth=70 dist=3 → dominio de 300+ km).
+    _t_s_horiz = _dist_m / max(1e-6, vs_min)
+    _half_free_horiz_m = 0.5 * (max(_t_s_horiz, 3.0) * 1.15) * vp_max
+    _target_span_m = max(44000.0, _dist_m + 2.0 * _half_free_horiz_m + 2.0 * abs_thick * dx)
     domain_span_m = (48000 if two_layer else _target_span_m)
 
     nx_needed = int(math.ceil(domain_span_m / dx))
@@ -698,12 +690,17 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # espacio libre para que el rebote del BORDE INFERIOR también llegue después
     # de la S (misma holgura que los laterales). La profundidad de malla objetivo
     # = profundidad focal + semiancho libre (bajo la fuente) + sponge inferior.
+    # La profundidad de malla se dimensiona para que el rebote del borde
+    # inferior llegue después de la S. El espacio libre BAJO la fuente debe
+    # cubrir el tiempo de la S vertical (depth/vs + margen). Se acota para
+    # que el cómputo no se dispare con fuentes muy profundas.
+    _free_below_est = min(_half_free_horiz_m, _depth_m * 0.5)
     depth_nodes = int((depth * 1000) / dx)
-    free_below_nodes = int(math.ceil(_half_free_m / dx))
+    free_below_nodes = int(math.ceil(_free_below_est / dx))
     nz_needed = depth_nodes + free_below_nodes + abs_thick + 20
     # Tope duro de nz para acotar el cómputo (el kernel Numba escala con nx·nz).
-    # 650 mantiene el cómputo rápido; la garantía de señal cubre el resto.
-    NZ_MAX = 650
+    # 400 mantiene el cómputo rápido; la garantía de señal cubre el resto.
+    NZ_MAX = 300
     nz_required = max(40, nz_needed)
     dx_adjusted = False
 
@@ -719,7 +716,7 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         # el espacio libre bajo la fuente y el sponge.
         usable_nodes = NZ_MAX - abs_thick - 20
         # dx tal que (focal + semiancho_libre) quepa en usable_nodes.
-        needed_m = depth * 1000 + _half_free_m
+        needed_m = depth * 1000 + _free_below_est
         dx = math.ceil(needed_m / max(1, usable_nodes))
         dx_adjusted = True
         nz = NZ_MAX
@@ -734,13 +731,8 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
         dt = cfl_limit * 0.9
         dt_adjusted = True
 
-    # Tope de pasos por rendimiento. La duración EFECTIVA (la que se grafica y se
-    # reporta) es total_steps · dt, que puede ser menor que la pedida si se
-    # alcanza el tope. Todo el resultado usa eff_duration para ser coherente.
-    # NOTA: total_steps/eff_duration/snapshot_interval se calculan MÁS ABAJO,
-    # después de acotar `duration` por el primer rebote de borde (que necesita la
-    # geometría fuente/receptor y t0, definidos más adelante).
-    MAX_STEPS = 8000
+    # (total_steps y eff_duration se calculan más abajo, DESPUÉS de definir la
+    # geometría fuente/receptor, f0/t0 y el autoajuste de dx por presupuesto.)
 
     # Geometría simétrica respecto al centro del dominio: la fuente en X a −d/2
     # y el receptor a +d/2 (d = distancia epicentral pedida). Así ninguno queda
@@ -779,17 +771,67 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     def source_at(tt: float) -> float:
         return gabor(tt, f0, t0, cycles) if use_gabor else ricker(tt, f0, t0)
 
-    # ── Tope de duración por el primer rebote de borde (garantía del backend) ──
-    # El primer rebote de borde (imagen especular en los bordes izq/der/inferior)
-    # marca el instante tras el cual la señal contiene reflexiones ARTIFICIALES
-    # de los límites de la malla. Se calcula ANTES del bucle con la geometría ya
-    # definida y se ACOTA la duración efectiva a ese tiempo, VENGAN DE DONDE
-    # VENGAN los parámetros (escenario, reporte guardado, edición manual o
-    # cliente externo). Así ninguna simulación incluye reflexiones de borde,
-    # aunque el control del panel no lo haya limitado. Se usa el MENOR entre el
-    # rebote de la P y el de la S (con roca rápida la P rebota antes).
-    # Imagen especular de la FUENTE en cada borde (izq/der/inferior) y distancia
-    # a la estación (misma fórmula verificada que el bloque de post-proceso).
+    # ── AUTOAJUSTE DE dx CUANDO EL CÓMPUTO ES INVIABLE ──
+    # Con Vs muy baja + profundidad grande + dx fino, la S tarda mucho en llegar
+    # (min_signal_window grande) y el dt CFL es minúsculo (dx fino / Vp alta) →
+    # se necesitarían demasiados pasos, que exceden el presupuesto. En vez de
+    # devolver una traza plana, se SUBE dx lo justo para que la simulación quepa
+    # en el tope de pasos con señal visible. Es un compromiso de resolución
+    # espacial a cambio de factibilidad, que se le reporta al usuario (dxAdjusted).
+    MAX_STEPS = 8000
+    HARD_MAX_STEPS = 8000
+    _max_budget_steps = HARD_MAX_STEPS
+    # Estimación TEMPRANA de la ventana de señal (antes de definir f0/t0 exactos)
+    # para decidir si dx necesita subir. Usa la hipocentral y f0 por defecto.
+    _f0_est = 2.0 if source_type == "volcanic" else 3.5
+    _t0_est = 1.5 / _f0_est
+    _s_arrival_est = _hypo_dist_m / max(1e-6, vs_min) + _t0_est
+    _min_signal_est = _s_arrival_est + 3.0 / _f0_est
+    _cfl_dt = dx / (vp_max * math.sqrt(2)) * 0.9
+    _steps_needed = int(math.ceil(_min_signal_est / _cfl_dt))
+    if _steps_needed > _max_budget_steps:
+        # El dx actual no da: subimos dx para que dt suba y los pasos bajen.
+        # dt_needed = min_signal_window / max_budget_steps
+        # dx_needed = dt_needed * vp_max * sqrt(2) / 0.9
+        dt_needed = _min_signal_est / _max_budget_steps
+        dx_new = math.ceil(dt_needed * vp_max * math.sqrt(2) / 0.9)
+        dx_new = max(dx_new, 20)  # piso de seguridad
+        if dx_new > dx:
+            dx = float(dx_new)
+            dx_adjusted = True
+            # Recalcular la malla con el nuevo dx.
+            nx = min(NX_MAX, max(80, int(math.ceil(domain_span_m / dx))))
+            depth_nodes = int((depth * 1000) / dx)
+            free_below_nodes = int(math.ceil(_half_free_m / dx))
+            nz_needed = depth_nodes + free_below_nodes + abs_thick + 20
+            if nz_needed <= NZ_MAX:
+                nz = nz_needed
+            else:
+                usable_nodes = NZ_MAX - abs_thick - 20
+                needed_m = depth * 1000 + _free_below_est
+                dx = float(math.ceil(needed_m / max(1, usable_nodes)))
+                dx_adjusted = True
+                nz = NZ_MAX
+                nx = min(NX_MAX, max(80, int(math.ceil(domain_span_m / dx))))
+            # Recalcular geometría fuente/receptor con el nuevo dx.
+            epic_target_nodes = int(params.epicentralDistanceKm * 1000 / dx)
+            epic_nodes = min(epic_target_nodes, (nx - 2 * abs_thick - 60) // 2)
+            src_x = nx // 2 - epic_nodes // 2
+            rec_x = nx // 2 + epic_nodes // 2
+            src_z = min(int(nz * 0.70), max(5, int((depth * 1000) / dx)))
+            rec_z = 2
+            # Recalcular CFL y llegadas con el nuevo dx.
+            cfl_limit = dx / (vp_max * math.sqrt(2))
+            if dt > cfl_limit:
+                dt = cfl_limit * 0.9
+                dt_adjusted = True
+            _rec_dist_m = math.hypot((rec_x - src_x) * dx, (rec_z - src_z) * dx)
+            _p_arrival = _rec_dist_m / vp_max + t0
+            _s_arrival = _rec_dist_m / max(1e-6, vs_min) + t0
+            min_signal_window = _s_arrival + 3.0 / f0
+
+    # ── Tope de duración por rebote y garantía de señal ──
+    # Recalcular rebote con la geometría (posiblemente) nueva.
     _right_edge = nx - 1 - abs_thick
     _left_edge = abs_thick
     _bottom_edge = nz - 1 - abs_thick
@@ -801,7 +843,6 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     _bounce_pre = min(
         math.hypot((ix - rec_x) * dx, (iz - rec_z) * dx) for ix, iz in _bounce_imgs
     )
-    # Rebote más temprano: usa la velocidad MÁXIMA de la P en el dominio (roca).
     first_bounce_min = _bounce_pre / vp_max + t0
 
     # ── GARANTÍA DE SEÑAL (prioridad sobre la supresión de rebotes) ──
@@ -840,7 +881,6 @@ def run_fdm(params: SimulationParams, on_progress=None, snapshot_sink: dict | No
     # para que la onda llegue y se registre, acotado a un máximo duro para no
     # colgar el servidor. Así nunca se devuelve una traza plana por falta de pasos.
     steps_for_signal = int(math.ceil(min_signal_window / dt))
-    HARD_MAX_STEPS = 20000  # tope absoluto de seguridad
     effective_max_steps = min(HARD_MAX_STEPS, max(MAX_STEPS, steps_for_signal))
     total_steps = min(effective_max_steps, int(duration / dt))
     eff_duration = total_steps * dt
