@@ -30,6 +30,9 @@ export function ConsentCheckbox({ checked, onChange }: Props) {
       </label>
       <p className="text-[11px] text-stone-400 leading-relaxed mt-2">
         Tus datos se usan únicamente para caracterizar a los usuarios de la plataforma.
+        Además, con tu consentimiento, usamos <strong>Google Analytics</strong> para medir de
+        forma anónima el uso del sitio (páginas visitadas, tipo de dispositivo) y mejorarlo;
+        puedes aceptar o rechazar estas cookies en el aviso que aparece al entrar.
       </p>
     </div>
   );

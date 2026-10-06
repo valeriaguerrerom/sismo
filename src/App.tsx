@@ -7,6 +7,7 @@ import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { VolcanoLoader } from './components/ui/VolcanoLoader';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { CookieConsent } from './components/ui/CookieConsent';
 import { Home } from './pages/Home';
 import { Simulation } from './pages/Simulation';
 import { Explorer } from './pages/Explorer';
@@ -287,6 +288,7 @@ function AppContent() {
         </ErrorBoundary>
       </main>
       <Footer onNavigate={navigate} dark={page === 'map3d'} />
+      <CookieConsent />
     </div>
   );
 }
