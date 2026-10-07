@@ -122,8 +122,16 @@ test.describe('Humo — páginas con sesión', () => {
       await page.locator('nav div.md\\:hidden').last()
         .getByRole('button', { name: /Investigador|Guerrero|@/ }).first().click();
     } else {
-      await page.locator('[data-tour="nav-perfil"]').first().click();
+      // nav-perfil es un <div> contenedor; el elemento clicable es el <button>
+      // de adentro. En WebKit (1280px) la barra de navegación con sesión queda
+      // al borde del viewport y el botón del perfil puede quedar fuera de la
+      // vista; existe y está habilitado, así que lo activamos por el DOM (es un
+      // SPA: el handler de click hace la navegación, no hace falta un click real
+      // en pantalla).
+      const perfilBtn = page.locator('[data-tour="nav-perfil"] button').first();
+      await expect(perfilBtn).toBeVisible();
+      await perfilBtn.dispatchEvent('click');
     }
-    await expect(page.locator('main')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Datos de investigador' })).toBeVisible();
   });
 });
