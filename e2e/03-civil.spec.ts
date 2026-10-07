@@ -1,4 +1,4 @@
-import { test, expect } from './support/fixtures';
+import { test, expect, skipIfHeadlessFirefoxWebGL } from './support/fixtures';
 
 /**
  * LOS OCHO ESCENARIOS DEL INSTRUMENTO DE CIVIL. Enfocados en el valor
@@ -49,7 +49,8 @@ test.describe('Civil — Simulador (geotecnia y ondas)', () => {
     await expect(page.getByText(/Mw\s?\d/).first()).toBeVisible();
   });
 
-  test('C4 — movimiento de partícula se dibuja', async ({ app, page }) => {
+  test('C4 — movimiento de partícula se dibuja', async ({ app, page }, testInfo) => {
+    skipIfHeadlessFirefoxWebGL(testInfo);
     await app.selectScenario(/didáctico \(homogéneo\)/i);
     await app.runSimulation();
     await app.showVizTab('tab-particle');
@@ -83,7 +84,8 @@ test.describe('Civil — Mapa 3D (modelo terrestre)', () => {
     await app.login();
   });
 
-  test('C6 — IASP91: cambiar al modelo terrestre y recalcular', async ({ app, page }) => {
+  test('C6 — IASP91: cambiar al modelo terrestre y recalcular', async ({ app, page }, testInfo) => {
+    skipIfHeadlessFirefoxWebGL(testInfo);
     test.setTimeout(200_000); // la generación 3D (varias estaciones) tarda
     await app.navbarGo('map3d');
     await expect(page.getByRole('heading', { name: 'Mapa 3D de propagación de ondas en Nariño' })).toBeVisible();

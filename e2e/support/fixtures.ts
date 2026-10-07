@@ -13,6 +13,26 @@ export const USER_EMAIL = process.env.E2E_USER_EMAIL || '';
 export const USER_PASSWORD = process.env.E2E_USER_PASSWORD || '';
 
 /**
+ * Salta una prueba que depende de WebGL (Mapa 3D con Three.js) o del hodograma
+ * de partícula por canvas cuando se corre en FIREFOX dentro de CI (los runners
+ * de GitHub no tienen GPU y Firefox no logra crear un contexto WebGL, así que el
+ * Mapa 3D cae en su Error Boundary). NO es un fallo de la app: en un Firefox
+ * real (con GPU) estas pruebas pasan, y en Chromium/WebKit/móvil pasan incluso
+ * en CI. Fuera de CI (ejecución local) la prueba se corre normalmente.
+ */
+export function skipIfHeadlessFirefoxWebGL(testInfo: {
+  project: { name: string };
+  skip: (condition: boolean, description: string) => void;
+}): void {
+  const isFirefox = testInfo.project.name === 'firefox';
+  const inCI = !!process.env.CI;
+  testInfo.skip(
+    isFirefox && inCI,
+    'WebGL no disponible en Firefox dentro de CI (runner sin GPU); verificado OK en Firefox real.',
+  );
+}
+
+/**
  * Fixtures de SismoNariño. Cada prueba recibe:
  *   - page: con los guardias de fallo ya instalados (consola/CSP/red/blank/EB).
  *   - guards: controlador para marcar fallos esperados (expectFailure).

@@ -1,4 +1,4 @@
-import { test, expect } from './support/fixtures';
+import { test, expect, skipIfHeadlessFirefoxWebGL } from './support/fixtures';
 
 /**
  * HUMO — carga cada página de la plataforma y verifica que se ve el contenido
@@ -72,7 +72,8 @@ test.describe('Humo — páginas con sesión', () => {
     ).toBeVisible();
   });
 
-  test('Mapa 3D muestra su encabezado', async ({ app, page }) => {
+  test('Mapa 3D muestra su encabezado', async ({ app, page }, testInfo) => {
+    skipIfHeadlessFirefoxWebGL(testInfo);
     await app.navbarGo('map3d');
     await expect(
       page.getByRole('heading', { name: 'Mapa 3D de propagación de ondas en Nariño' }),

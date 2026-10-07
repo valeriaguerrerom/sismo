@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, expect, IS_PROD } from './support/fixtures';
+import { test, expect, IS_PROD, skipIfHeadlessFirefoxWebGL } from './support/fixtures';
 
 /**
  * LOS OCHO ESCENARIOS DEL INSTRUMENTO DE SOFTWARE, paso a paso.
@@ -211,7 +211,8 @@ test.describe('S6 — Mapa 3D', () => {
     await app.login();
   });
 
-  test('cargar evento, reproducir, cambiar a IASP91 y recalcular', async ({ app, page }) => {
+  test('cargar evento, reproducir, cambiar a IASP91 y recalcular', async ({ app, page }, testInfo) => {
+    skipIfHeadlessFirefoxWebGL(testInfo);
     test.setTimeout(200_000); // la generación 3D (varias estaciones) tarda
     await app.navbarGo('map3d');
     await expect(page.getByRole('heading', { name: 'Mapa 3D de propagación de ondas en Nariño' })).toBeVisible();
