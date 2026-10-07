@@ -263,9 +263,22 @@ export function drawCrossSection(opts: CrossSectionDrawOpts): void {
     ctx.restore();
     ctx.fillStyle = '#1A1A2E'; ctx.fillText(text, lx, ly);
   };
-  ctx.font = `bold ${fs(13)}px sans-serif`; ctx.textAlign = 'center';
-  labelChip('Fuente', sx, sz + 22 * scale);
-  labelChip('Estación', rx, rz + 20 * scale);
+  ctx.font = `bold ${fs(13)}px sans-serif`;
+  // Si la fuente y la estación quedan MUY cerca en X (dominio apaisado, poca
+  // separación relativa), sus rótulos centrados se encimaban. En ese caso se
+  // separan lateralmente: "Fuente" alineada a la derecha de su marcador y
+  // "Estación" a la izquierda del suyo, para que no colisionen.
+  const near = Math.abs(rx - sx) < fs(13) * 4;
+  if (near) {
+    ctx.textAlign = 'right';
+    labelChip('Fuente', sx - 11 * scale, sz + fs(13) * 0.35);
+    ctx.textAlign = 'left';
+    labelChip('Estación', rx + 11 * scale, rz + fs(13) * 0.35);
+  } else {
+    ctx.textAlign = 'center';
+    labelChip('Fuente', sx, sz + 22 * scale);
+    labelChip('Estación', rx, rz + 20 * scale);
+  }
   ctx.textAlign = 'start';
 
   // Ejes en km (texto ≥13px).
@@ -343,8 +356,19 @@ export function renderCrossSectionPng(opts: CrossSectionRenderOpts): string {
   const domainWkm = (fullGrid.nx * fullGrid.dx) / 1000;
   const domainHkm = (fullGrid.nz * fullGrid.dx) / 1000;
   const W = widthPx;
-  // Alto para que el plot mantenga proporción + espacio de ejes.
-  const H = Math.round(W * (domainHkm / domainWkm) * 0.82 + 90);
+  // Alto del lienzo. El plot mantiene la proporción REAL del dominio
+  // (drawCrossSection usa la misma escala km/px en X y Z), pero cuando el
+  // dominio es muy apaisado (p. ej. 176 km de ancho × 59 km de profundidad por
+  // un dx grande) el plot quedaba tan bajo que las etiquetas "Fuente",
+  // "Estación" y "Superficie libre" se encimaban y los ejes se solapaban.
+  // Para el PDF se ACOTA la relación alto/ancho del PLOT a un rango legible
+  // [0.42, 0.95]: así siempre hay alto suficiente para los rótulos sin deformar
+  // el mapa (drawCrossSection centra el plot con su proporción real dentro del
+  // área disponible; el acotado solo evita el aplastamiento extremo).
+  const rawRatio = domainHkm / Math.max(domainWkm, 1e-6);
+  const plotRatio = Math.min(0.95, Math.max(0.5, rawRatio));
+  // margen de ejes (mT+mB ≈ 98px lógicos) + plot proporcional.
+  const H = Math.round(W * plotRatio + 120);
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d')!;
