@@ -334,14 +334,36 @@ export class AppHelpers {
   }
 
   /**
+   * Muestra los paneles de control del Mapa 3D si están ocultos (en móvil
+   * arrancan colapsados). Idempotente.
+   */
+  async revealMap3dPanels(): Promise<void> {
+    const show = this.page.getByRole('button', { name: 'Mostrar paneles' });
+    if (await show.isVisible().catch(() => false)) {
+      await show.click();
+      await this.page.waitForTimeout(300);
+    }
+  }
+
+  /**
    * En el Mapa 3D: abre la lista de eventos y carga el primero. La escena se
    * genera y arranca sola; esperamos a que el botón de transporte quede
    * habilitado.
    */
   async map3dLoadFirstEvent(): Promise<void> {
-    // El botón "Cargar evento (N)" (panel) o "Cargar un evento" (panel vacío).
-    const open = this.page.getByRole('button', { name: /Cargar\s+(un\s+)?evento/i }).first();
+    // En móvil, el Mapa 3D arranca con los paneles de control OCULTOS (la escena
+    // ocupa todo el ancho). Hay que pulsar "Mostrar paneles" para ver los
+    // controles (Cargar evento, modelo, Recalcular).
+    await this.revealMap3dPanels();
+    // Preferir el botón del panel de controles "Cargar evento (N)" (siempre
+    // abre el modal); si no, el "Cargar un evento" del panel vacío. En móvil hay
+    // que desplazarlo a la vista antes de pulsarlo.
+    const withCount = this.page.getByRole('button', { name: /Cargar evento\s*\(\d+\)/i }).first();
+    const open = (await withCount.count())
+      ? withCount
+      : this.page.getByRole('button', { name: /Cargar\s+un\s+evento/i }).first();
     await expect(open).toBeVisible({ timeout: 30_000 });
+    await open.scrollIntoViewIfNeeded();
     await open.click();
     // Modal de eventos: título "Eventos (...)". Las FILAS de evento viven en la
     // lista con scroll (div.overflow-y-auto.divide-y); los otros botones del
