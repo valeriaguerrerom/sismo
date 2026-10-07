@@ -63,7 +63,22 @@ export default defineConfig({
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        // En CI (headless, sin GPU) Firefox desactiva WebGL por defecto y el
+        // Mapa 3D (Three.js) y el hodograma por canvas no se dibujan, aunque en
+        // un Firefox real sí funcionan. Forzamos WebGL por software para que el
+        // navegador en CI se comporte como el de un usuario real.
+        launchOptions: {
+          firefoxUserPrefs: {
+            'webgl.force-enabled': true,
+            'webgl.disabled': false,
+            'webgl.software-rendering': true,
+            'gfx.webrender.software': true,
+            'layers.acceleration.force-enabled': false,
+          },
+        },
+      },
     },
     {
       name: 'webkit',

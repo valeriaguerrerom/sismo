@@ -91,8 +91,25 @@ jobs:
           E2E_PROD_URL=https://sismonarino.com
           EOF
 
+      - name: Construir imágenes del stack
+        run: docker compose -f docker-compose.e2e.yml build
+
       - name: Levantar el stack docker (nginx + backend, CSP bloqueo)
-        run: docker compose -f docker-compose.e2e.yml up --build -d --wait
+        id: stackup
+        run: docker compose -f docker-compose.e2e.yml up -d --wait --wait-timeout 180
+
+      - name: Diagnóstico si el stack no quedó sano
+        if: failure() && steps.stackup.outcome == 'failure'
+        run: |
+          echo "::group::docker ps"
+          docker compose -f docker-compose.e2e.yml ps
+          echo "::endgroup::"
+          echo "::group::logs frontend"
+          docker compose -f docker-compose.e2e.yml logs frontend
+          echo "::endgroup::"
+          echo "::group::logs backend"
+          docker compose -f docker-compose.e2e.yml logs backend
+          echo "::endgroup::"
 
       - name: Pruebas E2E (local)
         run: pnpm exec cross-env E2E_ENV=local playwright test

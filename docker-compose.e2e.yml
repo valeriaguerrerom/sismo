@@ -52,9 +52,13 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # Healthcheck con --spider (solo comprueba que Nginx responde 2xx/3xx en
+    # 8080, sin descargar el HTML) y con start_period para dar tiempo al
+    # arranque del entrypoint (envsubst + nginx -t) en runners lentos de CI.
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/"]
       interval: 5s
-      timeout: 6s
-      retries: 20
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     restart: unless-stopped
