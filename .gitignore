@@ -57,3 +57,5 @@ test-results/
 e2e/.artifacts/
 blob-report/
 playwright/.cache/
+e2e-prod-results.json
+e2e-prod-run*.log
