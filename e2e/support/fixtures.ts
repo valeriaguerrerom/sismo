@@ -289,22 +289,42 @@ export class AppHelpers {
     await this.page.waitForTimeout(150);
   }
 
-  /** Lanza la simulación y espera a que REALMENTE haya resultados. */
+  /** Texto del aviso que muestra la app cuando falla la conexión con el backend. */
+  private connError() {
+    return this.page.getByText(/No se pudo conectar con el servidor|Demasiadas solicitudes|servidor tardó/i);
+  }
+
+  /**
+   * Lanza la simulación y espera a que REALMENTE haya resultados. Si el backend
+   * no responde (la app muestra "No se pudo conectar con el servidor" — pasa en
+   * esta red con DNS/conexión intermitente), reintenta pulsar "Generar" en vez
+   * de agotar el timeout. Así una caída transitoria del backend no tumba la
+   * prueba.
+   */
   async runSimulation(): Promise<void> {
     const run = this.page.getByRole('button', { name: 'Generar pseudo-sismograma' });
-    await run.scrollIntoViewIfNeeded();
-    await run.click();
-    // La pestaña "Sismogramas" existe incluso en el estado vacío, así que NO es
-    // señal de que terminó. Esperamos a que desaparezca el estado inicial
-    // ("Empieza tu simulación…" / "Aún no has generado…") y a que aparezca una
-    // señal real de resultado: el bloque de exportar (con sesión muestra el
-    // título/CSV) o la sección de métricas "Malla FDM".
-    await expect(
-      this.page.getByRole('heading', { name: /Empieza tu simulación|Aún no has generado un sismograma/ }),
-    ).toHaveCount(0, { timeout: 90_000 });
-    await expect(
-      this.page.getByRole('button', { name: 'CSV' }).or(this.page.getByRole('button', { name: /Malla FDM/ })).first(),
-    ).toBeVisible({ timeout: 90_000 });
+    // Señal de resultado real: desaparece el estado inicial y aparece CSV/Malla.
+    const emptyState = this.page.getByRole('heading', { name: /Empieza tu simulación|Aún no has generado un sismograma/ });
+    const resultSignal = this.page.getByRole('button', { name: 'CSV' })
+      .or(this.page.getByRole('button', { name: /Malla FDM/ })).first();
+
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await run.scrollIntoViewIfNeeded();
+      await run.click();
+      // Esperamos a que ocurra UNA de tres cosas: resultado, aviso de conexión,
+      // o que simplemente desaparezca el estado vacío.
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        if (await resultSignal.isVisible().catch(() => false)) return;
+        if (await this.connError().first().isVisible().catch(() => false)) break; // reintentar
+        if ((await emptyState.count()) === 0 && (await resultSignal.isVisible().catch(() => false))) return;
+        await this.page.waitForTimeout(1000);
+      }
+      // Si llegamos aquí por aviso de conexión, esperamos un poco y reintentamos.
+      await this.page.waitForTimeout(2000);
+    }
+    // Último intento con aserción dura para que el fallo sea claro si persiste.
+    await expect(resultSignal).toBeVisible({ timeout: 60_000 });
   }
 
   /** Cambia a una pestaña de visualización del Simulador. */
@@ -344,6 +364,29 @@ export class AppHelpers {
     await expect(
       this.page.getByRole('button', { name: /Reproducir|Pausar/ }).first(),
     ).toBeEnabled({ timeout: 120_000 });
+  }
+
+  /**
+   * Borra desde la UI el reporte con el título dado (limpieza). Tolerante: si no
+   * aparece, no falla (p. ej. si la descarga no llegó a guardar). Se usa en el
+   * finally de la prueba de descargas para no dejar datos basura.
+   */
+  async deleteReportByTitle(title: string): Promise<void> {
+    try {
+      await this.navbarGo('reports');
+      await expect(this.page.getByRole('heading', { name: 'Mis reportes' })).toBeVisible({ timeout: 15_000 });
+      const item = this.page.getByText(title).first();
+      if (!(await item.isVisible().catch(() => false))) return;
+      const row = this.page.locator('div', { hasText: title })
+        .filter({ has: this.page.getByRole('button', { name: 'Eliminar' }) }).first();
+      await row.getByRole('button', { name: 'Eliminar' }).first().click();
+      await expect(this.page.getByRole('heading', { name: 'Eliminar reporte' })).toBeVisible({ timeout: 10_000 });
+      await this.page.getByRole('button', { name: 'Eliminar definitivamente' }).click();
+      await expect(this.page.getByText(title)).toHaveCount(0, { timeout: 20_000 });
+    } catch {
+      // No romper el teardown por un fallo de limpieza; el script de limpieza
+      // por API (scripts) es la red de seguridad.
+    }
   }
 
   /** Dispara una descarga desde un botón y devuelve el nombre de archivo. */

@@ -102,36 +102,35 @@ test.describe('S3 — Guardar y descargar (CSV, JSON, PDF)', () => {
     const title = `E2E S3 ${stamp}`;
     await page.getByPlaceholder(/Título \(opcional\)/).fill(title);
 
-    // CSV
-    const csv = await app.download('CSV');
-    expect(csv).toMatch(/\.csv$/i);
-    await app.settle();
+    // Descargar siempre guarda el reporte; por eso, pase lo que pase después,
+    // lo borramos en el finally para NO dejar datos basura en producción.
+    try {
+      // CSV
+      const csv = await app.download('CSV');
+      expect(csv).toMatch(/\.csv$/i);
+      await app.settle();
 
-    // JSON
-    const json = await app.download('JSON');
-    expect(json).toMatch(/\.json$/i);
-    await app.settle();
+      // JSON
+      const json = await app.download('JSON');
+      expect(json).toMatch(/\.json$/i);
+      await app.settle();
 
-    // PDF: abre el diálogo de contenido y confirma "Generar PDF".
-    await page.getByRole('button', { name: 'PDF' }).click();
-    await expect(page.getByRole('heading', { name: 'Contenido del PDF' })).toBeVisible();
-    const [pdf] = await Promise.all([
-      page.waitForEvent('download', { timeout: 60_000 }),
-      page.getByRole('button', { name: 'Generar PDF' }).click(),
-    ]);
-    expect(pdf.suggestedFilename()).toMatch(/\.pdf$/i);
+      // PDF: abre el diálogo de contenido y confirma "Generar PDF".
+      await page.getByRole('button', { name: 'PDF' }).click();
+      await expect(page.getByRole('heading', { name: 'Contenido del PDF' })).toBeVisible();
+      const [pdf] = await Promise.all([
+        page.waitForEvent('download', { timeout: 60_000 }),
+        page.getByRole('button', { name: 'Generar PDF' }).click(),
+      ]);
+      expect(pdf.suggestedFilename()).toMatch(/\.pdf$/i);
 
-    // Quedó guardado en Mis Reportes (se guarda al descargar).
-    await app.navbarGo('reports');
-    await expect(page.getByRole('heading', { name: 'Mis reportes' })).toBeVisible();
-    await expect(page.getByText(title).first()).toBeVisible({ timeout: 20_000 });
-
-    // Limpieza: borrar el reporte creado (no dejar datos basura).
-    const row = page.locator('div', { hasText: title }).filter({ has: page.getByRole('button', { name: 'Eliminar' }) }).first();
-    await row.getByRole('button', { name: 'Eliminar' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Eliminar reporte' })).toBeVisible();
-    await page.getByRole('button', { name: 'Eliminar definitivamente' }).click();
-    await expect(page.getByText(title)).toHaveCount(0, { timeout: 20_000 });
+      // Quedó guardado en Mis Reportes (se guarda al descargar).
+      await app.navbarGo('reports');
+      await expect(page.getByRole('heading', { name: 'Mis reportes' })).toBeVisible();
+      await expect(page.getByText(title).first()).toBeVisible({ timeout: 20_000 });
+    } finally {
+      await app.deleteReportByTitle(title);
+    }
   });
 });
 
