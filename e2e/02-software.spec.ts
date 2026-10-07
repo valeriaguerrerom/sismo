@@ -206,37 +206,25 @@ test.describe('S6 — Mapa 3D', () => {
   });
 
   test('cargar evento, reproducir, cambiar a IASP91 y recalcular', async ({ app, page }) => {
+    test.setTimeout(200_000); // la generación 3D (varias estaciones) tarda
     await app.navbarGo('map3d');
     await expect(page.getByRole('heading', { name: 'Mapa 3D de propagación de ondas en Nariño' })).toBeVisible();
+    await app.map3dLoadFirstEvent();
 
-    // Cargar un evento.
-    await page.getByRole('button', { name: /Cargar (un )?evento/i }).first().click();
-    await app.settle(500);
-    // Si abre un modal con lista, elegir el primero.
-    const modalItem = page.locator('[role="dialog"] button, .modal button').filter({ hasText: /M\s?\d|20\d\d|Galeras|CM/ }).first();
-    if (await modalItem.count()) {
-      await modalItem.click();
-    }
-    await app.settle(800);
+    // Al cargar un evento, la escena se genera y arranca sola: el botón de
+    // transporte queda habilitado (Reproducir/Pausar). Lo pausamos si va.
+    const transport = page.getByRole('button', { name: /Reproducir|Pausar/ }).first();
+    await expect(transport).toBeEnabled({ timeout: 60_000 });
+    // Alternar una vez (pausa o reproduce, según su estado actual).
+    await transport.click();
+    await app.settle(600);
 
-    // Reproducir (y pausar).
-    const play = page.getByRole('button', { name: /Reproducir/ }).first();
-    await expect(play).toBeVisible({ timeout: 30_000 });
-    await play.click();
-    await app.settle(800);
-    const pause = page.getByRole('button', { name: /Pausar/ }).first();
-    if (await pause.count()) {
-      await pause.click();
-    }
-
-    // Cambiar de modelo a IASP91.
+    // Cambiar de modelo a IASP91 y recalcular.
     await page.getByRole('button', { name: 'IASP91' }).first().click();
     await app.settle(300);
-
-    // Recalcular con estos valores.
     await page.getByRole('button', { name: 'Recalcular con estos valores' }).click();
-    // Tras recalcular, el transporte vuelve a estar disponible (Reproducir).
-    await expect(page.getByRole('button', { name: /Reproducir|Pausar/ }).first()).toBeVisible({ timeout: 40_000 });
+    // Tras recalcular, el transporte vuelve a quedar disponible.
+    await expect(page.getByRole('button', { name: /Reproducir|Pausar/ }).first()).toBeEnabled({ timeout: 60_000 });
   });
 });
 

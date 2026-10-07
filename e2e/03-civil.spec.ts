@@ -35,13 +35,17 @@ test.describe('Civil — Simulador (geotecnia y ondas)', () => {
     await expect(page.getByText('Volcánica').first()).toBeVisible({ timeout: 20_000 });
   });
 
-  test('C3 — métricas: amplitud, frecuencia y llegadas P/S', async ({ app, page }) => {
+  test('C3 — métricas: malla FDM (dt, nodos/λ, magnitud, fuente)', async ({ app, page }) => {
     await app.selectScenario(/didáctico \(homogéneo\)/i);
     await app.runSimulation();
-    // Abrir el acordeón de malla/metricas y verificar que hay valores.
-    await expect(page.getByText(/Magnitud/).first()).toBeVisible();
+    // El detalle de métricas vive en el acordeón "Malla FDM" (plegado por
+    // defecto). Lo abrimos y comprobamos valores clave.
+    const malla = page.getByRole('button', { name: /Malla FDM/ }).first();
+    await malla.scrollIntoViewIfNeeded();
+    if ((await malla.getAttribute('aria-expanded')) !== 'true') await malla.click();
+    await app.settle(200);
     await expect(page.getByText(/Paso temporal \(dt\)/).first()).toBeVisible();
-    // Las llegadas P/S aparecen como métricas (texto "P" / "S" con tiempos).
+    await expect(page.getByText(/Nodos\/λ/).first()).toBeVisible();
     await expect(page.getByText(/Mw\s?\d/).first()).toBeVisible();
   });
 
@@ -80,21 +84,18 @@ test.describe('Civil — Mapa 3D (modelo terrestre)', () => {
   });
 
   test('C6 — IASP91: cambiar al modelo terrestre y recalcular', async ({ app, page }) => {
+    test.setTimeout(200_000); // la generación 3D (varias estaciones) tarda
     await app.navbarGo('map3d');
     await expect(page.getByRole('heading', { name: 'Mapa 3D de propagación de ondas en Nariño' })).toBeVisible();
 
     // Cargar un evento para tener algo que recalcular.
-    await page.getByRole('button', { name: /Cargar (un )?evento/i }).first().click();
-    await app.settle(500);
-    const modalItem = page.locator('[role="dialog"] button, .modal button').filter({ hasText: /M\s?\d|20\d\d|Galeras|CM/ }).first();
-    if (await modalItem.count()) await modalItem.click();
-    await app.settle(600);
+    await app.map3dLoadFirstEvent();
 
-    // Cambiar a IASP91 y recalcular.
+    // Cambiar a IASP91 y recalcular (el modelo terrestre no auto-recalcula).
     await page.getByRole('button', { name: 'IASP91' }).first().click();
     await app.settle(300);
     await page.getByRole('button', { name: 'Recalcular con estos valores' }).click();
-    await expect(page.getByRole('button', { name: /Reproducir|Pausar/ }).first()).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByRole('button', { name: /Reproducir|Pausar/ }).first()).toBeEnabled({ timeout: 60_000 });
   });
 });
 
@@ -106,48 +107,36 @@ test.describe('Civil — Educación', () => {
 
   test('C7 — quiz: responder preguntas y llegar al resultado', async ({ app, page }) => {
     await app.navbarGo('education');
-    await page.getByRole('button', { name: 'Quiz', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Quiz' }).first().click();
     await app.settle(400);
 
-    // Responder hasta terminar: en cada pregunta se hace click en una opción
-    // (revela el resultado) y luego "Siguiente pregunta" / "Ver resultado".
-    for (let i = 0; i < 15; i++) {
-      // El bloque de opciones son botones; elegimos la primera opción disponible
-      // que no sea de navegación.
-      const next = page.getByRole('button', { name: /Siguiente pregunta/ });
-      const seeResult = page.getByRole('button', { name: /Ver resultado/ });
-      const retry = page.getByRole('button', { name: /Intentar de nuevo/ });
+    // La tarjeta del quiz muestra "Quiz sísmico" y "N/M · P pts".
+    const card = page.locator('div.rounded-2xl').filter({ hasText: 'Quiz sísmico' }).first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
 
-      if (await retry.isVisible().catch(() => false)) break; // ya en resultados
+    // Responder hasta terminar. En cada pregunta: hay un bloque de opciones
+    // (botones) y, tras elegir una, aparece un botón de avance a ancho completo
+    // ("Siguiente pregunta" o "Ver resultado"). El quiz arma 8–10 preguntas.
+    const advance = page.getByRole('button', { name: /Siguiente pregunta|Ver resultado/ });
+    const retry = page.getByRole('button', { name: /Intentar de nuevo/ });
 
-      if (await next.isVisible().catch(() => false)) {
-        await next.click();
-        await app.settle(200);
-        continue;
-      }
-      if (await seeResult.isVisible().catch(() => false)) {
-        await seeResult.click();
-        await app.settle(300);
-        break;
-      }
-      // Aún no respondida: elegir una opción (botones de respuesta A/B/C...).
-      const options = page.locator('main button').filter({ hasNot: page.locator('svg[aria-hidden]') });
-      const count = await options.count();
-      let clicked = false;
-      for (let k = 0; k < count; k++) {
-        const b = options.nth(k);
-        const label = (await b.textContent())?.trim() || '';
-        if (/Siguiente|Ver resultado|Intentar|Ondas|Magnitud|Profundidad|Historia|Metodolog|Glosario|Referencias|Quiz/.test(label)) continue;
-        if (!(await b.isVisible().catch(() => false))) continue;
-        await b.click();
-        clicked = true;
-        break;
-      }
+    for (let i = 0; i < 12; i++) {
+      if (await retry.isVisible().catch(() => false)) break;
+
+      // Elegir la PRIMERA opción de respuesta. Las opciones son los botones del
+      // contenedor .space-y-2.mb-4 (antes del bloque de resultado/avance).
+      const optionsGroup = card.locator('div.space-y-2').first();
+      const firstOption = optionsGroup.getByRole('button').first();
+      await expect(firstOption).toBeVisible({ timeout: 10_000 });
+      await firstOption.click();
+
+      // Tras responder aparece el botón de avance; pulsarlo.
+      await expect(advance).toBeVisible({ timeout: 10_000 });
+      await advance.click();
       await app.settle(250);
-      if (!clicked) break;
     }
 
     // Al final debe verse el resultado (botón "Intentar de nuevo").
-    await expect(page.getByRole('button', { name: /Intentar de nuevo/ })).toBeVisible({ timeout: 20_000 });
+    await expect(retry).toBeVisible({ timeout: 20_000 });
   });
 });

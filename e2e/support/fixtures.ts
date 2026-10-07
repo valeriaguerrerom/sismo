@@ -140,17 +140,20 @@ export class AppHelpers {
   // Helpers del Simulador
   // ---------------------------------------------------------------------------
 
-  /** Abre una sección del acordeón de parámetros por su data-tour. */
+  /**
+   * Abre una sección del acordeón de parámetros por su data-tour. El acordeón es
+   * exclusivo y controlado: el encabezado lleva aria-expanded. Solo hacemos
+   * click si está cerrada (así no cerramos "Variables elásticas", abierta por
+   * defecto).
+   */
   async openParamSection(anchor: 'params-elasticas' | 'params-fuente' | 'params-config'): Promise<void> {
-    const section = this.page.locator(`[data-tour="${anchor}"]`).first();
-    // Si el contenido no está visible, hacer click en el encabezado para abrir.
     const header = this.page.locator(`[data-tour="${anchor}-h"]`).first();
-    if (await header.count()) {
-      await header.click();
-    } else {
-      await section.click();
+    const target = (await header.count()) ? header : this.page.locator(`[data-tour="${anchor}"] button`).first();
+    const expanded = await target.getAttribute('aria-expanded');
+    if (expanded !== 'true') {
+      await target.click();
+      await this.page.waitForTimeout(250);
     }
-    await this.page.waitForTimeout(200);
   }
 
   /** Selecciona un escenario predefinido por su nombre visible en el selector. */
@@ -210,6 +213,39 @@ export class AppHelpers {
   async showVizTab(tab: 'tab-2d' | 'tab-triaxial' | 'tab-particle'): Promise<void> {
     await this.page.locator(`[data-tour="${tab}"]`).first().click();
     await this.page.waitForTimeout(300);
+  }
+
+  /**
+   * En el Mapa 3D: abre la lista de eventos y carga el primero. La escena se
+   * genera y arranca sola; esperamos a que el botón de transporte quede
+   * habilitado.
+   */
+  async map3dLoadFirstEvent(): Promise<void> {
+    // El botón "Cargar evento (N)" (panel) o "Cargar un evento" (panel vacío).
+    const open = this.page.getByRole('button', { name: /Cargar\s+(un\s+)?evento/i }).first();
+    await expect(open).toBeVisible({ timeout: 30_000 });
+    await open.click();
+    // Modal de eventos: título "Eventos (...)". Las FILAS de evento viven en la
+    // lista con scroll (div.overflow-y-auto.divide-y); los otros botones del
+    // modal son filtros/paginación, no eventos.
+    const modal = this.page.locator('div.fixed').filter({ hasText: /Eventos\s*\(/ }).first();
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    const list = modal.locator('div.overflow-y-auto.divide-y').first();
+    await expect(list).toBeVisible({ timeout: 10_000 });
+    const firstRow = list.locator('> button:not([disabled])').first();
+    await expect(firstRow).toBeVisible({ timeout: 10_000 });
+    await firstRow.click();
+    // Al elegir un evento SIEMPRE aparece una confirmación ("Cargar el nuevo" /
+    // "Seguir con el actual"). Hay que confirmar para que arranque la generación.
+    const confirm = this.page.getByRole('button', { name: 'Cargar el nuevo' });
+    await expect(confirm).toBeVisible({ timeout: 10_000 });
+    await confirm.click();
+    // Empieza a generar (tiempos de viaje + un sintético por estación). Esperamos
+    // a que el transporte quede habilitado; la generación de varias estaciones
+    // puede tardar, por eso el margen amplio.
+    await expect(
+      this.page.getByRole('button', { name: /Reproducir|Pausar/ }).first(),
+    ).toBeEnabled({ timeout: 120_000 });
   }
 
   /** Dispara una descarga desde un botón y devuelve el nombre de archivo. */

@@ -85,23 +85,28 @@ test.describe('Humo — páginas con sesión', () => {
     await expect(
       page.getByRole('heading', { name: 'Centro de aprendizaje sísmico' }),
     ).toBeVisible();
-    // Capítulos y secciones de consulta visibles en la navegación lateral.
+    // Capítulos (los botones llevan un número delante: "1 Ondas", "2 Magnitud"…)
+    // y secciones de consulta, en la navegación lateral.
     for (const chap of ['Ondas', 'Magnitud', 'Profundidad', 'Historia', 'Metodología']) {
-      await expect(page.getByRole('button', { name: chap, exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: new RegExp(`\\b${chap}$`) }).first()).toBeVisible();
     }
     for (const sec of ['Glosario', 'Referencias', 'Quiz']) {
-      await expect(page.getByRole('button', { name: sec, exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: sec }).first()).toBeVisible();
     }
   });
 
   test('Educación — cada capítulo abre su contenido', async ({ app, page }) => {
     await app.navbarGo('education');
     await expect(page.getByRole('heading', { name: 'Centro de aprendizaje sísmico' })).toBeVisible();
-    for (const chap of ['Ondas', 'Magnitud', 'Profundidad', 'Historia', 'Metodología', 'Glosario', 'Referencias', 'Quiz']) {
-      await page.getByRole('button', { name: chap, exact: true }).first().click();
+    const chapters = ['Ondas', 'Magnitud', 'Profundidad', 'Historia', 'Metodología'];
+    for (const chap of chapters) {
+      await page.getByRole('button', { name: new RegExp(`\\b${chap}$`) }).first().click();
       await app.settle(150);
-      // El contenido del capítulo pinta algo (no queda en blanco); el guard de
-      // Error Boundary / pantalla en blanco cubre el resto.
+      await expect(page.locator('main')).toBeVisible();
+    }
+    for (const sec of ['Glosario', 'Referencias', 'Quiz']) {
+      await page.getByRole('button', { name: sec }).first().click();
+      await app.settle(150);
       await expect(page.locator('main')).toBeVisible();
     }
   });
