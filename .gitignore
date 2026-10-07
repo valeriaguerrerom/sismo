@@ -59,3 +59,6 @@ blob-report/
 playwright/.cache/
 e2e-prod-results.json
 e2e-prod-run*.log
+e2e-postdeploy.log
+# Reportes HTML guardados como evidencia para la tesis (no se versionan)
+evidencia-tesis/
