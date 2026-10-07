@@ -1,0 +1,155 @@
+name: E2E (Playwright)
+
+# - En CADA push y pull request: pruebas LOCALES contra el contenedor docker
+#   (nginx + CSP en modo bloqueo + variables de producción). Esto es lo que
+#   debe pasar antes de cada despliegue (Railway puede esperar a este check,
+#   ver docs/pruebas-e2e.md "Wait for CI").
+# - Una vez al día (cron): pruebas de PRODUCCIÓN contra https://sismonarino.com,
+#   solo con la cuenta de prueba.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 09:10 UTC ≈ 04:10 America/Bogota, tráfico bajo.
+    - cron: '10 9 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Entorno a probar
+        type: choice
+        options: [local, prod]
+        default: local
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────── LOCAL (docker, en cada push/PR) ────────────────
+  local:
+    # No corre en el cron diario (ese es solo prod); sí en push/PR y en dispatch
+    # cuando se elige 'local'.
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'local')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Instalar navegadores de Playwright
+        run: pnpm exec playwright install --with-deps
+
+      - name: Crear .env y backend/.env (claves de Supabase)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          cat > .env <<EOF
+          VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+          VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+          VITE_API_URL=http://localhost:8000
+          EOF
+          cat > backend/.env <<EOF
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          APP_ENV=development
+          ALLOWED_ORIGINS=http://localhost:8080
+          EOF
+
+      - name: Crear .env.e2e (credenciales de la cuenta de prueba)
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: |
+          cat > .env.e2e <<EOF
+          E2E_USER_EMAIL=${E2E_USER_EMAIL}
+          E2E_USER_PASSWORD=${E2E_USER_PASSWORD}
+          E2E_LOCAL_URL=http://localhost:8080
+          E2E_PROD_URL=https://sismonarino.com
+          EOF
+
+      - name: Levantar el stack docker (nginx + backend, CSP bloqueo)
+        run: docker compose -f docker-compose.e2e.yml up --build -d --wait
+
+      - name: Pruebas E2E (local)
+        run: pnpm exec cross-env E2E_ENV=local playwright test
+
+      - name: Apagar el stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+      - name: Subir reporte HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-local
+          path: playwright-report/local
+          retention-days: 14
+
+  # ───────────────────────── PROD (cron diario / dispatch) ──────────────────
+  prod:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'prod')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Instalar navegadores de Playwright
+        run: pnpm exec playwright install --with-deps
+
+      - name: Crear .env.e2e (credenciales de la cuenta de prueba)
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: |
+          cat > .env.e2e <<EOF
+          E2E_USER_EMAIL=${E2E_USER_EMAIL}
+          E2E_USER_PASSWORD=${E2E_USER_PASSWORD}
+          E2E_PROD_URL=https://sismonarino.com
+          EOF
+
+      - name: Pruebas E2E (producción)
+        run: pnpm exec cross-env E2E_ENV=prod playwright test
+
+      - name: Subir reporte HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-prod
+          path: playwright-report/prod
+          retention-days: 14

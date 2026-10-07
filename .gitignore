@@ -48,3 +48,12 @@ __pycache__/
 scripts/_fonts/
 scripts/_sample_report.pdf
 scripts/_pdf_chars.txt
+
+# Pruebas E2E (Playwright): credenciales, reportes y artefactos
+.env.e2e
+!.env.e2e.example
+playwright-report/
+test-results/
+e2e/.artifacts/
+blob-report/
+playwright/.cache/

@@ -1,0 +1,60 @@
+# SismoNariño — entorno LOCAL para pruebas E2E que IMITA producción.
+#
+# Diferencia con docker-compose.yml (que es para desarrollo cómodo):
+#   - CSP en modo BLOQUEO (Content-Security-Policy), igual que producción, para
+#     que las pruebas detecten cualquier violación de CSP antes de desplegar.
+#   - El frontend se construye apuntando VITE_API_URL a http://localhost:8000 y
+#     BACKEND_ORIGIN se añade a connect-src para que, en modo bloqueo, el
+#     navegador pueda llamar al backend.
+#
+# Uso:
+#   docker compose -f docker-compose.e2e.yml up --build -d --wait
+#   pnpm e2e:local
+#   docker compose -f docker-compose.e2e.yml down -v
+#
+# Variables de Supabase: se toman de .env (raíz) y backend/.env, igual que el
+# compose normal. Son las MISMAS claves de producción (mismo proyecto Supabase).
+services:
+  backend:
+    build: ./backend
+    container_name: sismonarino-backend-e2e
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data_raw:/app/data_raw:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status==200 else 1)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        # El navegador llama al backend por localhost:8000 (puerto publicado).
+        VITE_API_URL: "http://localhost:8000"
+    container_name: sismonarino-frontend-e2e
+    environment:
+      # connect-src de la CSP: hay que permitir el backend local explícitamente
+      # porque en modo bloqueo 'self' no cubre otro puerto.
+      BACKEND_ORIGIN: "http://localhost:8000"
+      # IGUAL QUE PRODUCCIÓN: modo bloqueo (no Report-Only). Así una violación de
+      # CSP rompe de verdad y la prueba la detecta.
+      CSP_HEADER_NAME: "Content-Security-Policy"
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+    restart: unless-stopped
