@@ -72,8 +72,30 @@ export class AppHelpers {
         /* storage no disponible: ignorar */
       }
     }, consent);
-    await this.page.goto('/', { waitUntil: 'domcontentloaded' });
+    await this.gotoWithRetry('/');
     await this.waitAppReady();
+  }
+
+  /**
+   * goto con reintentos ante fallos de DNS en frío. En esta red, la primera
+   * resolución de sismonarino.com a veces falla (ERR_NAME_NOT_RESOLVED / "Could
+   * not resolve hostname"), y WebKit en Windows no se recupera dentro del mismo
+   * intento. Reintentar el goto hace que el parpadeo de DNS se cure solo.
+   */
+  async gotoWithRetry(url: string, tries = 4): Promise<void> {
+    let lastErr: unknown;
+    for (let i = 0; i < tries; i++) {
+      try {
+        await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+        return;
+      } catch (err) {
+        lastErr = err;
+        const msg = (err as Error).message || '';
+        if (!/resolve|ERR_NAME_NOT_RESOLVED|NS_ERROR|network|timeout/i.test(msg)) throw err;
+        await this.page.waitForTimeout(1500);
+      }
+    }
+    throw lastErr;
   }
 
   /** Espera a que la app resuelva la sesión (desaparece el loader) y pinte la UI. */
@@ -85,17 +107,61 @@ export class AppHelpers {
     ).toBeVisible({ timeout: 30_000 });
   }
 
-  /** Navega a una página usando el Navbar (requiere sesión para las privadas). */
+  /** ¿Estamos en viewport móvil? (el Navbar colapsa el menú tras < md = 768px). */
+  isMobileViewport(): boolean {
+    const vp = this.page.viewportSize();
+    return !!vp && vp.width < 768;
+  }
+
+  /** Etiqueta visible de cada página en el menú (para el menú móvil, sin data-tour). */
+  private static NAV_LABEL: Record<string, string> = {
+    home: 'Inicio',
+    simulation: 'Simulador',
+    explorer: 'Explorador',
+    map3d: 'Mapa 3D',
+    education: 'Educación',
+    about: 'Acerca de',
+    reports: 'Reportes',
+  };
+
+  /**
+   * Navega a una página usando el Navbar. En escritorio usa el botón con
+   * data-tour; en móvil abre la hamburguesa y usa el ítem por su etiqueta
+   * (el menú móvil no lleva data-tour).
+   */
   async navbarGo(id: 'home' | 'simulation' | 'explorer' | 'map3d' | 'education' | 'about' | 'reports'): Promise<void> {
-    const btn = this.page.locator(`[data-tour="nav-${id}"]`).first();
-    await btn.click();
+    if (this.isMobileViewport()) {
+      await this.openMobileMenu();
+      const label = AppHelpers.NAV_LABEL[id];
+      // Dentro del menú desplegable móvil (md:hidden), el ítem por su texto.
+      const menu = this.page.locator('nav div.md\\:hidden').last();
+      await menu.getByRole('button', { name: new RegExp(`^\\s*${label}\\s*$`) }).first().click();
+      return;
+    }
+    await this.page.locator(`[data-tour="nav-${id}"]`).first().click();
+  }
+
+  /** Abre el menú hamburguesa en móvil (idempotente). */
+  async openMobileMenu(): Promise<void> {
+    const burger = this.page.getByRole('button', { name: 'Abrir menú' });
+    if (await burger.isVisible().catch(() => false)) {
+      await burger.click();
+      await this.page.waitForTimeout(200);
+    }
   }
 
   /** Abre la página de autenticación (login) desde Home estando sin sesión. */
   async gotoLogin(): Promise<void> {
-    // El botón de la barra de navegación (hay otro igual en el formulario, por
-    // eso tomamos el del navbar explícitamente).
-    await this.page.locator('nav').getByRole('button', { name: 'Iniciar sesión' }).first().click();
+    if (this.isMobileViewport()) {
+      // En móvil el botón del navbar está tras la hamburguesa. También está en
+      // el hero de Inicio; usamos el del menú para no depender del hero.
+      await this.openMobileMenu();
+      await this.page.locator('nav div.md\\:hidden').last()
+        .getByRole('button', { name: 'Iniciar sesión' }).first().click();
+    } else {
+      // El botón del navbar (hay otro igual en el formulario; tomamos el del nav).
+      await this.page.locator('nav').getByRole('button', { name: 'Iniciar sesión' }).first().click();
+    }
     await expect(this.page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
   }
 
@@ -120,14 +186,41 @@ export class AppHelpers {
     await this.page.getByPlaceholder('correo@ejemplo.com').fill(email);
     await this.page.getByPlaceholder('Tu contraseña').fill(password);
     await this.authSubmit('Iniciar sesión').click();
-    // Tras el login, el Navbar muestra el botón de cerrar sesión.
+    // Señal de éxito válida en escritorio y móvil: el formulario de login
+    // desaparece (ya no está el encabezado "Iniciar sesión" en <main>).
     await expect(
-      this.page.getByRole('button', { name: 'Cerrar sesión' }),
-    ).toBeVisible({ timeout: 30_000 });
+      this.page.getByRole('main').getByRole('heading', { name: 'Iniciar sesión' }),
+    ).toBeHidden({ timeout: 30_000 });
+    // Y el navbar ya refleja la sesión: en escritorio "Cerrar sesión" visible;
+    // en móvil, la hamburguesa (el menú de sesión vive detrás).
+    if (this.isMobileViewport()) {
+      await expect(this.page.getByRole('button', { name: /Abrir menú|Cerrar menú/ })).toBeVisible({ timeout: 15_000 });
+    } else {
+      await expect(this.page.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible({ timeout: 15_000 });
+    }
   }
 
-  /** ¿Hay una sesión iniciada? (presencia del botón de cerrar sesión). */
+  /**
+   * ¿Hay una sesión iniciada? Señal agnóstica al viewport:
+   *  - Escritorio: el botón "Cerrar sesión" del navbar está visible.
+   *  - Móvil: el menú está colapsado; "Cerrar sesión" no está en el DOM hasta
+   *    abrir la hamburguesa. En su lugar comprobamos que el navbar YA NO ofrece
+   *    "Iniciar sesión" (presente solo sin sesión), estando la hamburguesa.
+   */
   async isLoggedIn(): Promise<boolean> {
+    if (this.isMobileViewport()) {
+      const burger = this.page.getByRole('button', { name: /Abrir menú|Cerrar menú/ });
+      if (!(await burger.count())) return false;
+      // Sin sesión, el navbar móvil muestra "Iniciar sesión" en el hero/menú;
+      // comprobamos directamente dentro del menú.
+      await this.openMobileMenu();
+      const menu = this.page.locator('nav div.md\\:hidden').last();
+      const signedIn = (await menu.getByRole('button', { name: 'Cerrar sesión' }).count()) > 0;
+      // Cerrar el menú para no dejar la UI abierta.
+      const close = this.page.getByRole('button', { name: 'Cerrar menú' });
+      if (await close.isVisible().catch(() => false)) await close.click();
+      return signedIn;
+    }
     return this.page.getByRole('button', { name: 'Cerrar sesión' }).isVisible().catch(() => false);
   }
 
@@ -196,17 +289,22 @@ export class AppHelpers {
     await this.page.waitForTimeout(150);
   }
 
-  /** Lanza la simulación y espera a que aparezcan los resultados (pestañas). */
+  /** Lanza la simulación y espera a que REALMENTE haya resultados. */
   async runSimulation(): Promise<void> {
     const run = this.page.getByRole('button', { name: 'Generar pseudo-sismograma' });
     await run.scrollIntoViewIfNeeded();
     await run.click();
-    // Al terminar, aparecen las pestañas de visualización (Sismogramas, etc.).
-    await expect(this.page.locator('[data-tour="tab-2d"]')).toBeVisible({ timeout: 70_000 });
-    // Y desaparece el estado vacío.
+    // La pestaña "Sismogramas" existe incluso en el estado vacío, así que NO es
+    // señal de que terminó. Esperamos a que desaparezca el estado inicial
+    // ("Empieza tu simulación…" / "Aún no has generado…") y a que aparezca una
+    // señal real de resultado: el bloque de exportar (con sesión muestra el
+    // título/CSV) o la sección de métricas "Malla FDM".
     await expect(
-      this.page.getByRole('heading', { name: 'Aún no has generado un sismograma' }),
-    ).toHaveCount(0);
+      this.page.getByRole('heading', { name: /Empieza tu simulación|Aún no has generado un sismograma/ }),
+    ).toHaveCount(0, { timeout: 90_000 });
+    await expect(
+      this.page.getByRole('button', { name: 'CSV' }).or(this.page.getByRole('button', { name: /Malla FDM/ })).first(),
+    ).toBeVisible({ timeout: 90_000 });
   }
 
   /** Cambia a una pestaña de visualización del Simulador. */

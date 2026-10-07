@@ -29,9 +29,8 @@ test.describe('Humo — páginas públicas', () => {
 
   test('Login, registro y recuperar contraseña se muestran', async ({ app, page }) => {
     await app.open();
-    // Login (botón de la barra de navegación)
-    await page.locator('nav').getByRole('button', { name: 'Iniciar sesión' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
+    // Login (gotoLogin abre la hamburguesa en móvil automáticamente).
+    await app.gotoLogin();
     await expect(page.getByPlaceholder('correo@ejemplo.com')).toBeVisible();
     await expect(page.getByPlaceholder('Tu contraseña')).toBeVisible();
 
@@ -116,8 +115,15 @@ test.describe('Humo — páginas con sesión', () => {
     await expect(page.getByRole('heading', { name: 'Mis reportes' })).toBeVisible();
   });
 
-  test('Perfil del investigador se abre', async ({ page }) => {
-    await page.locator('[data-tour="nav-perfil"]').first().click();
+  test('Perfil del investigador se abre', async ({ app, page }) => {
+    if (app.isMobileViewport()) {
+      await app.openMobileMenu();
+      // En el menú móvil el perfil es el ítem con el nombre del usuario.
+      await page.locator('nav div.md\\:hidden').last()
+        .getByRole('button', { name: /Investigador|Guerrero|@/ }).first().click();
+    } else {
+      await page.locator('[data-tour="nav-perfil"]').first().click();
+    }
     await expect(page.locator('main')).toBeVisible();
   });
 });

@@ -30,7 +30,13 @@ test.describe('S1 — Registro e inicio de sesión', () => {
 
     // Parte A: el formulario de REGISTRO responde a la validación (sin crear
     // una cuenta real: no pulsamos el envío final). Esto evita datos basura.
-    await page.locator('nav').getByRole('button', { name: 'Registrarse' }).first().click();
+    if (app.isMobileViewport()) {
+      await app.openMobileMenu();
+      await page.locator('nav div.md\\:hidden').last()
+        .getByRole('button', { name: 'Registrarse' }).first().click();
+    } else {
+      await page.locator('nav').getByRole('button', { name: 'Registrarse' }).first().click();
+    }
     await expect(page.getByRole('heading', { name: 'Registrarse' })).toBeVisible();
     const submit = app.authSubmit('Registrarse');
     // Deshabilitado hasta completar nombre/correo/contraseña fuerte/consentimiento.
@@ -86,6 +92,7 @@ test.describe('S3 — Guardar y descargar (CSV, JSON, PDF)', () => {
   });
 
   test('descarga CSV, JSON y PDF (y queda guardado en Mis Reportes)', async ({ app, page }) => {
+    test.setTimeout(180_000); // WebKit en Windows renderiza los resultados lento
     await app.navbarGo('simulation');
     await app.selectScenario(/didáctico \(homogéneo\)/i);
     await app.runSimulation();
@@ -276,11 +283,10 @@ test.describe('S8 — Vista de celular', () => {
     await app.open();
     await app.login();
 
-    // En móvil el menú está tras la hamburguesa.
-    const burger = page.getByRole('button', { name: /Abrir menú/ });
+    // En móvil el menú está tras la hamburguesa; navbarGo lo abre solo.
+    const burger = page.getByRole('button', { name: 'Abrir menú' });
     await expect(burger).toBeVisible();
-    await burger.click();
-    await page.locator('[data-tour="nav-simulation"]').first().click();
+    await app.navbarGo('simulation');
     await expect(page.getByRole('heading', { name: 'Módulo de Simulación Triaxial' })).toBeVisible();
   });
 });

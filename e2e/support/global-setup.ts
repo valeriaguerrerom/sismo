@@ -9,14 +9,27 @@ import type { FullConfig } from '@playwright/test';
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL = config.projects[0]?.use?.baseURL as string | undefined;
   if (!baseURL) return;
-  let origin: string;
+
+  // Calentamos el DNS/handshake del FRONTEND y del BACKEND. En prod, el backend
+  // es otro host (Railway); si su DNS está en frío, las llamadas /api fallan
+  // (sobre todo en WebKit, que no se recupera). En local ambos son localhost.
+  const origins = new Set<string>();
   try {
-    origin = new URL(baseURL).origin;
+    origins.add(new URL(baseURL).origin);
   } catch {
-    return;
+    /* ignore */
+  }
+  if (/sismonarino\.com/.test(baseURL)) {
+    origins.add('https://sismonarino-api-production.up.railway.app');
   }
 
-  for (let attempt = 1; attempt <= 5; attempt++) {
+  for (const origin of origins) {
+    await warm(origin);
+  }
+}
+
+async function warm(origin: string): Promise<void> {
+  for (let attempt = 1; attempt <= 6; attempt++) {
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 15_000);
@@ -29,9 +42,8 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       }
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.log(`[e2e] calentando DNS intento ${attempt}/5: ${(err as Error).message}`);
+      console.log(`[e2e] calentando ${origin} intento ${attempt}/6: ${(err as Error).message}`);
       await new Promise((r) => setTimeout(r, 1500));
     }
   }
-  // No abortamos la suite: los reintentos por prueba cubren el resto.
 }
