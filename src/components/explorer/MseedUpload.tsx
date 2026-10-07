@@ -203,6 +203,25 @@ function OriginEstimate({ result }: { result: MseedUploadResult }) {
   );
 }
 
+/** Límite inferior razonable para el pasabanda (muy por debajo son derivas, no señal). */
+const FREQ_FLOOR = 0.05;
+/** Nyquist asumido cuando aún no se cargó un archivo (100 Hz es lo típico del Galeras/CM). */
+const FALLBACK_NYQUIST = 50;
+
+/** Mantiene el mínimo entre el piso y justo por debajo del máximo. */
+function clampFreqmin(fmin: number, fmax: number): number {
+  if (!Number.isFinite(fmin)) return FREQ_FLOOR;
+  const upper = Math.max(FREQ_FLOOR, fmax - 0.1);
+  return Math.min(Math.max(fmin, FREQ_FLOOR), upper);
+}
+
+/** Mantiene el máximo por encima del mínimo y por debajo de Nyquist. */
+function clampFreqmax(fmax: number, fmin: number, nyquist: number): number {
+  if (!Number.isFinite(fmax)) return nyquist;
+  const lower = Math.max(FREQ_FLOOR + 0.1, fmin + 0.1);
+  return Math.min(Math.max(fmax, lower), nyquist);
+}
+
 export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -254,6 +273,21 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
   };
 
   const fmtSize = (b: number) => b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(b / 1e3).toFixed(0)} KB`;
+
+  // Frecuencia de Nyquist = la mitad de la frecuencia de muestreo: es el máximo
+  // físico que un pasabanda puede pedir. Si aún no hay archivo cargado usamos un
+  // valor típico (100 Hz → 50 Hz) solo como referencia visual.
+  const nyquist = result ? result.sampling_rate / 2 : FALLBACK_NYQUIST;
+  // Aviso en vivo si los valores actuales se corregirán al reprocesar.
+  const freqMsg = !useFilter
+    ? null
+    : freqmin >= freqmax
+      ? 'El mínimo debe ser menor que el máximo; se ajustará automáticamente.'
+      : freqmax > nyquist
+        ? `El máximo no puede superar la frecuencia de Nyquist (${nyquist.toFixed(nyquist >= 10 ? 0 : 1)} Hz); se recortará a ese valor.`
+        : freqmin < FREQ_FLOOR
+          ? `El mínimo se elevará a ${FREQ_FLOOR} Hz.`
+          : null;
 
   return (
     <div className="space-y-4">
@@ -413,12 +447,30 @@ export function MseedUpload({ onLoadRealData, onLoadToMap3d }: Props) {
           </label>
           <div className={`grid grid-cols-2 gap-2 ${useFilter ? '' : 'opacity-40 pointer-events-none'}`}>
             <label className="text-[11px] text-stone-500">Mín. (Hz)
-              <input type="number" min={0.05} step={0.1} value={freqmin} onChange={e => setFreqmin(Number(e.target.value))}
+              <input
+                type="number" min={FREQ_FLOOR} max={freqmax} step={0.1} value={freqmin}
+                onChange={e => setFreqmin(Number(e.target.value))}
+                onBlur={() => setFreqmin(clampFreqmin(freqmin, freqmax))}
                 className="mt-1 w-full px-2 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-sm" /></label>
             <label className="text-[11px] text-stone-500">Máx. (Hz)
-              <input type="number" min={0.1} step={0.5} value={freqmax} onChange={e => setFreqmax(Number(e.target.value))}
+              <input
+                type="number" min={freqmin} max={nyquist} step={0.5} value={freqmax}
+                onChange={e => setFreqmax(Number(e.target.value))}
+                onBlur={() => setFreqmax(clampFreqmax(freqmax, freqmin, nyquist))}
                 className="mt-1 w-full px-2 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-sm" /></label>
           </div>
+          <p className="text-[10px] text-stone-400 leading-snug">
+            Rango válido: {FREQ_FLOOR}–{nyquist.toFixed(nyquist >= 10 ? 0 : 1)} Hz
+            {result
+              ? ` (el máximo es la frecuencia de Nyquist = ${result.sampling_rate} Hz ÷ 2 de esta estación).`
+              : ' (el máximo depende del archivo: es la mitad de su frecuencia de muestreo).'}
+            {' '}El mínimo debe ser menor que el máximo.
+          </p>
+          {freqMsg && (
+            <p className="text-[10px] text-[#C4553A] leading-snug flex gap-1">
+              <Info size={11} className="flex-shrink-0 mt-0.5" /> {freqMsg}
+            </p>
+          )}
         </div>
 
         <label className="block text-xs text-stone-500">
