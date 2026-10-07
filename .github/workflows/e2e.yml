@@ -4,8 +4,9 @@ name: E2E (Playwright)
 #   (nginx + CSP en modo bloqueo + variables de producción). Esto es lo que
 #   debe pasar antes de cada despliegue (Railway puede esperar a este check,
 #   ver docs/pruebas-e2e.md "Wait for CI").
-# - Una vez al día (cron): pruebas de PRODUCCIÓN contra https://sismonarino.com,
-#   solo con la cuenta de prueba.
+# - Una vez al día (cron): pruebas de PRODUCCIÓN contra https://sismonarino.com.
+# - Manual (workflow_dispatch): elegir entorno (local/prod) y, en prod, filtrar
+#   por navegador (p. ej. solo webkit) con el input "project".
 
 on:
   push:
@@ -22,32 +23,35 @@ on:
         type: choice
         options: [local, prod]
         default: local
+      project:
+        description: "Navegador (solo prod): all, chromium, firefox, webkit o mobile"
+        type: choice
+        options: [all, chromium, firefox, webkit, mobile]
+        default: all
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: e2e-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   # ───────────────────────── LOCAL (docker, en cada push/PR) ────────────────
   local:
-    # No corre en el cron diario (ese es solo prod); sí en push/PR y en dispatch
-    # cuando se elige 'local'.
     if: >-
       github.event_name == 'push' ||
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && inputs.target == 'local')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 11.20.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Instalar dependencias
@@ -60,8 +64,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           cat > .env <<EOF
@@ -70,8 +72,8 @@ jobs:
           VITE_API_URL=http://localhost:8000
           EOF
           cat > backend/.env <<EOF
-          SUPABASE_URL=${SUPABASE_URL}
-          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          SUPABASE_URL=${VITE_SUPABASE_URL}
+          SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
           SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
           APP_ENV=development
           ALLOWED_ORIGINS=http://localhost:8080
@@ -105,7 +107,7 @@ jobs:
         with:
           name: playwright-report-local
           path: playwright-report/local
-          retention-days: 14
+          retention-days: 30
 
   # ───────────────────────── PROD (cron diario / dispatch) ──────────────────
   prod:
@@ -113,17 +115,17 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.target == 'prod')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 11.20.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Instalar dependencias
@@ -143,13 +145,25 @@ jobs:
           E2E_PROD_URL=https://sismonarino.com
           EOF
 
+      - name: Calcular filtro de navegador
+        id: proj
+        run: |
+          P="${{ inputs.project }}"
+          if [ -z "$P" ] || [ "$P" = "all" ]; then
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "suffix=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=--project=$P" >> "$GITHUB_OUTPUT"
+            echo "suffix=$P" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Pruebas E2E (producción)
-        run: pnpm exec cross-env E2E_ENV=prod playwright test
+        run: pnpm exec cross-env E2E_ENV=prod playwright test ${{ steps.proj.outputs.flag }}
 
       - name: Subir reporte HTML
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-prod
+          name: playwright-report-prod-${{ steps.proj.outputs.suffix }}
           path: playwright-report/prod
-          retention-days: 14
+          retention-days: 30
