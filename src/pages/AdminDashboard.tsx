@@ -21,6 +21,7 @@ import {
   bulkInsertEvents, createEvent, deleteEvent, deleteFactRow, deleteQuizRow, deleteReport, deleteTimelineRow,
   loadDashboardStats, loadEvents, loadFactRows, loadQuizRows, loadReports, loadTimelineRows, loadUsers,
   saveFactRow, saveQuizRow, saveTimelineRow, deleteUser, setUserRole, deactivateUser, reactivateUser, updateEvent,
+  loadMseedUploadLogs, loadMseedUploadStats, loadTopMseedUploaders, loadMseedFailureReasons,
 } from '../lib/adminData';
 import { titleCase, characterize, characterizationCsv } from '../lib/adminChars';
 import { VolcanoLoader } from '../components/ui/VolcanoLoader';
@@ -29,7 +30,7 @@ import { Pagination } from '../components/ui/Pagination';
 /** Filas por página en las tablas/listas del panel admin. */
 const ADMIN_PAGE_SIZE = 10;
 import { importQuakeml, ImportResult } from '../lib/quakeml';
-import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf } from '../lib/adminExport';
+import { exportAdminExcel, exportAdminPdf, exportCharacterizationExcel, exportCharacterizationPdf, exportMseedLogsExcel, exportMseedLogsPdf } from '../lib/adminExport';
 import {
   listFeedback, updateFeedbackStatus, deleteFeedback, countNewFeedback,
   FEEDBACK_TYPE_LABELS, FEEDBACK_STATUS_LABELS,
@@ -1765,16 +1766,16 @@ function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void 
       if (filterSuccess === 'fail') filters.success = false;
       if (search.trim()) filters.search = search.trim();
 
-      const { logs: l, total } = await import('../lib/adminData').then(m => m.loadMseedUploadLogs(page, ADMIN_PAGE_SIZE, filters));
+      const { logs: l, total } = await loadMseedUploadLogs(page, ADMIN_PAGE_SIZE, filters);
       setLogs(l);
       setTotalLogs(total);
 
       // Cargar estadísticas adicionales solo en la primera página
       if (page === 1) {
         const [statsData, topData, failData] = await Promise.all([
-          import('../lib/adminData').then(m => m.loadMseedUploadStats(30)),
-          import('../lib/adminData').then(m => m.loadTopMseedUploaders(10)),
-          import('../lib/adminData').then(m => m.loadMseedFailureReasons(15)),
+          loadMseedUploadStats(30),
+          loadTopMseedUploaders(10),
+          loadMseedFailureReasons(15),
         ]);
         setStats(statsData);
         setTopUploaders(topData);
@@ -1797,7 +1798,7 @@ function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void 
       if (filterSuccess === 'fail') filters.success = false;
       if (search.trim()) filters.search = search.trim();
 
-      const { logs: allLogs } = await import('../lib/adminData').then(m => m.loadMseedUploadLogs(1, 10000, filters));
+      const { logs: allLogs } = await loadMseedUploadLogs(1, 10000, filters);
       
       const input: import('../lib/adminExport').MseedLogsExportInput = {
         logs: allLogs,
@@ -1808,11 +1809,9 @@ function MseedTab({ notify }: { notify: (m: string, t?: 'ok' | 'error') => void 
       };
 
       if (format === 'excel') {
-        const { exportMseedLogsExcel } = await import('../lib/adminExport');
         exportMseedLogsExcel(input);
         notify('Excel descargado');
       } else {
-        const { exportMseedLogsPdf } = await import('../lib/adminExport');
         exportMseedLogsPdf(input);
         notify('PDF descargado');
       }
