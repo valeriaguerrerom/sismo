@@ -271,8 +271,37 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     controls.addEventListener('start', () => { userInteracting = true; });
     controls.addEventListener('end', () => { userInteracting = false; });
 
+    // Ajusta el búfer al tamaño REAL del contenedor. Devuelve true si cambió.
+    // updateStyle=false: el CSS del lienzo lo gobierna el contenedor (100%);
+    // aquí solo redimensionamos el búfer de dibujo. Compara contra el tamaño en
+    // píxeles del lienzo (drawingBufferSize / pixelRatio) para detectar cambios.
+    const fitToContainer = (): boolean => {
+      const w = mount.clientWidth;
+      const h = mount.clientHeight || 360;
+      if (w === 0 || h === 0) return false;
+      const cur = renderer.domElement; // canvas
+      // Tamaño CSS actual que el navegador le dio al lienzo (sigue al contenedor).
+      const needW = Math.round(w);
+      const needH = Math.round(h);
+      // El búfer interno en píxeles CSS = width/pixelRatio.
+      const bufW = Math.round(cur.width / renderer.getPixelRatio());
+      const bufH = Math.round(cur.height / renderer.getPixelRatio());
+      if (bufW === needW && bufH === needH) return false;
+      camera.aspect = needW / needH;
+      camera.updateProjectionMatrix();
+      renderer.setSize(needW, needH, false);
+      labelRenderer.setSize(needW, needH);
+      lineMat.resolution.set(needW, needH);
+      return true;
+    };
+
     const animate = () => {
       raf = requestAnimationFrame(animate);
+      // Comprobar SIEMPRE el tamaño del contenedor en cada frame: así, al salir
+      // de pantalla completa (o cualquier cambio de tamaño), el lienzo se
+      // re-ajusta solo en el siguiente frame y queda centrado, sin depender de
+      // eventos de resize que pueden medir un tamaño intermedio.
+      fitToContainer();
       setDrawCount(dataRef.current.currentTime);
       // Giro automático lento SOLO en "pausa" (línea completa) y sin interacción,
       // respetando prefers-reduced-motion.
@@ -286,33 +315,8 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     };
     animate();
 
-    // ── Resize ──
-    // Re-mide el contenedor y re-asienta tamaño/aspecto/resolución de línea.
-    // El loop de animación (animate) hace el render en el siguiente frame, así
-    // que NO renderizamos aquí (hacerlo dentro del callback del ResizeObserver
-    // dejaba el lienzo en blanco al entrar a la pestaña).
-    const onResize = () => {
-      const w = mount.clientWidth, h = mount.clientHeight || 360;
-      if (w === 0 || h === 0) return;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      // updateStyle=false: el CSS del lienzo lo gobierna el contenedor (100%),
-      // solo ajustamos el búfer de dibujo. Evita que quede corrido al salir de
-      // pantalla completa.
-      renderer.setSize(w, h, false);
-      labelRenderer.setSize(w, h);
-      lineMat.resolution.set(w, h);
-    };
-    const resizeObserver = new ResizeObserver(onResize);
-    resizeObserver.observe(mount);
-    // También al redimensionar la ventana (p. ej. al ampliar la Visualización,
-    // que dispara un 'resize' para que el lienzo se re-mida).
-    window.addEventListener('resize', onResize);
-
     return () => {
       cancelAnimationFrame(raf);
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', onResize);
       controls.dispose();
       lineGeo.dispose();
       lineMat.dispose();
