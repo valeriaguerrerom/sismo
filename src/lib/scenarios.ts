@@ -70,7 +70,10 @@ export const SCENARIOS: Scenario[] = [
     params: build({
       vp: 3500, vs: 2000, density: 2600, sourceType: 'tectonic',
       magnitude: 5.0, depth: 3, epicenterLat: 1.2136, epicenterLon: -77.2811,
-      duration: 6.5, dx: 25, dt: 0.0045,
+      // dx 22 m (no 25): con Vs 2000 y fuente tectónica, el límite de 10 nodos
+      // por longitud de onda del validador de la app es ~22.9 m; con 25 m la UI
+      // lo corregía sola. dt 0.004 respeta CFL (dx/(Vp·√2) ≈ 0.0044).
+      duration: 6.5, dx: 22, dt: 0.004,
       strike: 30, dip: 45, rake: 60, stationAzimuth: 45, epicentralDistanceKm: 4,
       sourceCycles: 1,
       // Sedimentos moderadamente blandos sobre la roca (contraste moderado).
