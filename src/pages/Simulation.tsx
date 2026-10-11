@@ -156,9 +156,19 @@ export function Simulation({ initialParams, onParamsUsed, realLoad, onRealLoadUs
 
   // Al ampliar/reducir cambia el tamaño del contenedor de los lienzos 3D
   // (mapa de calor y partícula); forzamos que se re-midan tras el reflujo.
+  // Un solo 'resize' a los 60 ms no basta al SALIR de pantalla completa: el
+  // relayout del contenedor puede tardar más y el lienzo 3D se queda con el
+  // tamaño anterior (se ve encogido/desplazado). Disparamos varios 'resize'
+  // escalonados (tras los frames de pintado y en varios momentos) para que
+  // Three.js re-mida cuando el contenedor ya tiene su tamaño final.
   useEffect(() => {
-    const id = setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
-    return () => clearTimeout(id);
+    const fire = () => window.dispatchEvent(new Event('resize'));
+    const raf1 = requestAnimationFrame(() => requestAnimationFrame(fire));
+    const timers = [80, 200, 400, 700].map((ms) => setTimeout(fire, ms));
+    return () => {
+      cancelAnimationFrame(raf1);
+      timers.forEach(clearTimeout);
+    };
   }, [vizExpanded]);
 
   // ── Reproducción 2D (declarada antes del efecto de carga real, que la usa
