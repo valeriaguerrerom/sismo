@@ -279,15 +279,26 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     animate();
 
     // ── Resize ──
+    // Mide SIEMPRE el tamaño real del contenedor con getBoundingClientRect
+    // (más fiable que clientWidth cuando se vuelve de pantalla completa) y
+    // re-asienta tamaño, pixel-ratio, proyección y resolución de las líneas.
+    // Así, al reducir desde pantalla completa, la escena vuelve centrada y del
+    // tamaño correcto (antes quedaba corrida a un lado con el búfer anterior).
     const onResize = () => {
-      const w = mount.clientWidth, h = mount.clientHeight || 360;
+      const rect = mount.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height || 360);
       if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(w, h, true); // true = también fija el CSS del lienzo
       labelRenderer.setSize(w, h);
-      // Line2 necesita la resolución del lienzo para calcular el grosor en px.
       lineMat.resolution.set(w, h);
+      controls.update();
+      // Render inmediato para que no quede un fotograma con el tamaño viejo.
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
     };
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(mount);
