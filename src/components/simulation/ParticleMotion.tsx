@@ -77,8 +77,14 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     camera.position.set(2.4, 1.8, 2.4);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height, false); // false = NO tocar el CSS del lienzo
+    // El lienzo llena SIEMPRE su contenedor por CSS; así, al salir de pantalla
+    // completa, queda centrado y del tamaño correcto aunque la medición durante
+    // la transición sea intermedia (setSize solo ajusta el búfer de dibujo).
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
     mount.appendChild(renderer.domElement);
 
     // Etiquetas de ejes (CSS2D) superpuestas.
@@ -87,6 +93,8 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
     labelRenderer.domElement.style.position = 'absolute';
     labelRenderer.domElement.style.top = '0';
     labelRenderer.domElement.style.left = '0';
+    labelRenderer.domElement.style.width = '100%';
+    labelRenderer.domElement.style.height = '100%';
     labelRenderer.domElement.style.pointerEvents = 'none';
     // z-index bajo: las etiquetas de los ejes viven dentro de la tarjeta y no
     // deben flotar por encima de diálogos/modales (que usan z alto).
@@ -288,7 +296,10 @@ export function ParticleMotion({ waveData, pArrival, sArrival, currentTime }: Pr
       if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      // updateStyle=false: el CSS del lienzo lo gobierna el contenedor (100%),
+      // solo ajustamos el búfer de dibujo. Evita que quede corrido al salir de
+      // pantalla completa.
+      renderer.setSize(w, h, false);
       labelRenderer.setSize(w, h);
       lineMat.resolution.set(w, h);
     };
