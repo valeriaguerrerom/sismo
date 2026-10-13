@@ -75,6 +75,19 @@ ACCEPTED_LIST_TEXT = ", ".join(ACCEPTED_STATION_CODES[:-1]) + " y Galeras"
 
 
 class StationInfo(BaseModel):
+    """Resumen de una estación encontrada dentro del archivo MiniSEED.
+
+    Se usa para listar las estaciones disponibles y señalar cuál es apta
+    para una visualización triaxial (tres componentes ortogonales).
+
+    Attributes:
+        station: Código de la estación (p. ej. ``CUFP``).
+        network: Código de la red sísmica a la que pertenece la estación.
+        channels: Canales presentes para la estación (p. ej. ``HHE``, ``HHN``, ``HHZ``).
+        sampling_rate: Frecuencia de muestreo en hercios (Hz).
+        triaxial: ``True`` si la estación tiene las tres componentes necesarias.
+    """
+
     station: str
     network: str
     channels: list[str]
@@ -83,6 +96,18 @@ class StationInfo(BaseModel):
 
 
 class WaveData(BaseModel):
+    """Series temporales de las tres componentes de una forma de onda.
+
+    Todas las listas comparten la misma longitud y el mismo eje de tiempo;
+    las amplitudes vienen normalizadas al rango [-1, 1].
+
+    Attributes:
+        time: Instantes de muestreo en segundos.
+        north: Amplitud de la componente Norte (N) en cada instante.
+        east: Amplitud de la componente Este (E) en cada instante.
+        vertical: Amplitud de la componente vertical (Z) en cada instante.
+    """
+
     time: list[float]
     north: list[float]
     east: list[float]
@@ -90,6 +115,36 @@ class WaveData(BaseModel):
 
 
 class MseedUploadResponse(BaseModel):
+    """Resultado del procesamiento de un MiniSEED subido por un investigador.
+
+    Reúne los metadatos de la estación elegida, la forma de onda normalizada
+    lista para visualizar y, cuando es posible, una estimación de la distancia
+    al foco a partir de la diferencia de llegada S−P. Nada de esto se persiste.
+
+    Attributes:
+        filename: Nombre del archivo original cargado.
+        stations: Estaciones encontradas en el archivo.
+        station: Estación seleccionada para la visualización.
+        network: Red de la estación seleccionada.
+        channels: Canal usado por cada componente (claves ``N``/``E``/``Z``).
+        sensor_kind: Tipo de sensor usado (``velocimetro`` o ``acelerometro``).
+        sampling_rate: Frecuencia de muestreo en hercios (Hz).
+        starttime_utc: Instante inicial de la traza en formato ISO 8601 (UTC).
+        duration: Duración de la señal en segundos.
+        num_samples: Número de muestras por componente tras el procesamiento.
+        normalization_factor: Factor por el que se dividió la señal para
+            normalizarla al rango [-1, 1].
+        filtro: Parámetros del filtro pasabanda aplicado, o ``None`` si no se filtró.
+        waveData: Series temporales de las tres componentes.
+        orientation_confirmed: ``True`` si las horizontales están orientadas a
+            Norte/Este; ``False`` si vienen como 1/2 sin azimut (no se rotaron).
+        orientation_note: Aviso cuando la orientación no está confirmada.
+        horizontal_labels: Rótulos a mostrar para las dos horizontales.
+        sp_seconds: Diferencia de tiempo S−P en segundos (``None`` si no se detectó).
+        distance_km_est: Distancia aproximada al foco en km, estimada por S−P.
+        origin_class: Clasificación del origen de la señal.
+    """
+
     filename: str
     stations: list[StationInfo] = Field(description="Estaciones encontradas en el archivo")
     station: str = Field(description="Estación seleccionada")

@@ -23,6 +23,19 @@ function readStore(): Set<string> {
   }
 }
 
+/**
+ * Hook de React para leer y actualizar el progreso de los capítulos.
+ *
+ * Carga el progreso inicial desde localStorage y se mantiene sincronizado
+ * entre pestañas escuchando el evento `storage`. Todo el estado es local a la
+ * UI; no se envía nada al servidor.
+ *
+ * @returns Un objeto con:
+ *   - `done`: conjunto de ids de capítulos completados.
+ *   - `isDone(id)`: indica si un capítulo está completado.
+ *   - `markDone(id)`: marca un capítulo como completado y lo persiste.
+ *   - `persist(next)`: reemplaza el conjunto completo y lo persiste.
+ */
 export function useChapterProgress() {
   const [done, setDone] = useState<Set<string>>(() => readStore());
 
