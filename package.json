@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:all": "pnpm docs:build && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
@@ -20,8 +21,11 @@
     "e2e:report": "playwright show-report playwright-report/prod",
     "e2e:cleanup": "node scripts/e2e-cleanup.mjs",
     "e2e:cleanup:delete": "node scripts/e2e-cleanup.mjs --delete",
-    "docs:frontend": "typedoc --entryPointStrategy expand src --out docs/frontend --name \"SismoNariño Frontend\" --readme none",
+    "docs:frontend": "typedoc --options typedoc.config.json",
     "docs:backend": "cd backend && py -m pdoc main simulation --output-dir ../docs/backend --html --force",
+    "docs:backend:mkdocs": "py -m mkdocs build",
+    "docs:api": "node scripts/build-docs-api.mjs",
+    "docs:build": "pnpm docs:backend:mkdocs && pnpm docs:frontend && pnpm docs:api && node scripts/build-docs-index.mjs",
     "docs": "pnpm docs:frontend"
   },
   "dependencies": {

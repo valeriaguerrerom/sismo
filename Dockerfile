@@ -28,6 +28,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
 COPY . .
+# La documentación pública (/docs) se genera FUERA de esta etapa (necesita
+# Python y el backend, ambos excluidos del contexto del frontend). El pipeline
+# de despliegue debe ejecutar `pnpm docs:build` en el host/CI ANTES de construir
+# la imagen, de modo que public/docs/ ya exista en el contexto. Vite copia
+# public/ a dist/ tal cual, así que /docs queda servido por Nginx. Si public/docs
+# no existe, el sitio funciona igual pero /docs responde 404.
 RUN pnpm run build
 
 # ── Etapa 2: servir con Nginx ──

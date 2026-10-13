@@ -13,8 +13,6 @@ Uso:
     ...
     def endpoint(request: Request):
         limiter.check(client_ip(request))
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 from __future__ import annotations
 

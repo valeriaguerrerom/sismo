@@ -16,8 +16,6 @@ Notas por estación:
 
 El servicio FDSN del SGC (sismo.sgc.gov.co) no es accesible desde la red local
 y los MiniSEED no incluyen coordenadas; solo TUM está federada en EarthScope/IRIS.
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 from pydantic import BaseModel
 

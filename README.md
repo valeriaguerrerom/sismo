@@ -213,3 +213,37 @@ Genera HTML en `docs/backend/`. Abrir `docs/backend/main.html`.
 | Pruebas | Vitest, pytest |
 | Despliegue | Docker Compose, Vercel/Netlify, Render/Railway |
 | Documentación | Swagger/OpenAPI, TypeDoc, pdoc |
+
+## Documentación pública (/docs)
+
+El sitio sirve una documentación técnica pública y de solo lectura en `/docs`,
+con tres secciones generadas a partir del código:
+
+- `/docs/backend` — API y motor de simulación (MkDocs + Material + mkdocstrings).
+- `/docs/frontend` — componentes, hooks y tipos (TypeDoc).
+- `/docs/api` — referencia OpenAPI de solo lectura (Redoc, sin "Try it out").
+
+La salida vive en `public/docs/` y **se versiona en el repositorio**. Se genera
+con Python (MkDocs) y el backend, que no están disponibles en la etapa Docker
+del frontend; por eso la salida viaja con el repo para que `/docs` funcione en
+despliegues que construyen desde GitHub (Railway). Vite copia `public/docs` a
+`dist/docs` durante el build.
+
+### Regenerar la documentación
+
+```bash
+# 1) Dependencias de la documentación del backend (una vez)
+py -m pip install -r backend/requirements-docs.txt
+
+# 2) Regenerar las tres secciones + la portada de /docs
+pnpm docs:build
+```
+
+`pnpm docs:build` ejecuta, en orden: MkDocs (backend), TypeDoc (frontend), el
+volcado del esquema OpenAPI + copia de Redoc (API) y la portada de `/docs`, y
+elimina los source maps al final. Tras regenerar, commitea los cambios en
+`public/docs/`.
+
+En producción, `/docs` usa una CSP propia (en `nginx.conf.template`) que permite
+estilos y scripts en línea solo bajo `/docs/`, sin ningún dominio externo
+(Mermaid y Redoc van self-hosted). La CSP del resto del sitio no cambia.

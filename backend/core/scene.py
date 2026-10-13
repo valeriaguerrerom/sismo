@@ -11,8 +11,6 @@ El sistema de coordenadas de escena coincide con el que usaba el frontend
     - X = longitud (oeste→este), centrado en 0, ancho BLOCK_WIDTH.
     - Z = latitud (norte hacia −Z), profundidad-plano BLOCK_DEPTH_XY.
     - Y = profundidad del subsuelo (hacia abajo negativo), alto BLOCK_HEIGHT.
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import math
 

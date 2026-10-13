@@ -11,8 +11,6 @@ APP_ENV controla el comportamiento:
       visibles y documentación interactiva habilitada.
     - "production": CORS restringido a ALLOWED_ORIGINS, detalles de error
       ocultos y documentación deshabilitada.
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import os
 

@@ -39,6 +39,14 @@ backend/.env
 *.pem
 *.key
 
+# La documentación generada (public/docs: MkDocs backend, TypeDoc frontend,
+# OpenAPI/Redoc) SÍ se versiona: se produce con Python (no disponible en la
+# etapa Docker del frontend) y debe viajar con el repo para que /docs funcione
+# en despliegues que construyen desde GitHub (Railway). Regenerar con
+# `pnpm docs:build` (ver README). Vite la copia a dist/docs en el build.
+# Log temporal del build de documentación.
+mkdocs_build_log.txt
+
 # Python: caché de bytecode y artefactos de test
 __pycache__/
 *.pyc

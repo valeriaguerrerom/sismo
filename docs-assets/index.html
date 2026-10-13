@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SismoNariño — Documentación técnica</title>
+    <meta
+      name="description"
+      content="Documentación técnica pública de SismoNariño: backend, frontend y referencia de la API."
+    />
+    <style>
+      :root {
+        --terracotta: #c4553a;
+        --forest: #2d6a4f;
+        --gold: #d4a853;
+        --ink: #1a1a2e;
+        --bg: #fafaf8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        line-height: 1.5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3rem 1.25rem;
+      }
+      main {
+        width: 100%;
+        max-width: 920px;
+      }
+      header {
+        margin-bottom: 2.5rem;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.9rem;
+        color: var(--terracotta);
+      }
+      p.lead {
+        margin: 0;
+        color: #4a4a5a;
+        font-size: 1.05rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.25rem;
+      }
+      a.card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: #fff;
+        border: 1px solid #e7e5e0;
+        border-radius: 14px;
+        padding: 1.5rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease,
+          border-color 0.15s ease;
+      }
+      a.card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 28px rgba(26, 26, 46, 0.1);
+        border-color: var(--terracotta);
+      }
+      a.card h2 {
+        margin: 0 0 0.4rem;
+        font-size: 1.15rem;
+      }
+      a.card.backend h2 {
+        color: var(--terracotta);
+      }
+      a.card.frontend h2 {
+        color: var(--forest);
+      }
+      a.card.api h2 {
+        color: #a07a1f;
+      }
+      a.card p {
+        margin: 0;
+        color: #55555f;
+        font-size: 0.95rem;
+      }
+      footer {
+        margin-top: 3rem;
+        color: #8a8a96;
+        font-size: 0.85rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Documentación técnica de SismoNariño</h1>
+        <p class="lead">
+          Simulador Triaxial de Pseudo-Sismogramas del subsuelo de Nariño,
+          Colombia. Documentación de solo lectura, generada a partir del código.
+        </p>
+      </header>
+
+      <section class="grid">
+        <a class="card backend" href="backend/">
+          <h2>Backend</h2>
+          <p>
+            API REST (FastAPI) y motor de simulación por diferencias finitas.
+            Arquitectura, despliegue, pruebas y referencia del código.
+          </p>
+        </a>
+        <a class="card frontend" href="frontend/">
+          <h2>Frontend</h2>
+          <p>
+            Componentes, hooks, utilidades y tipos de la interfaz web
+            (React + TypeScript), documentados con TypeDoc.
+          </p>
+        </a>
+        <a class="card api" href="api/">
+          <h2>API</h2>
+          <p>
+            Referencia interactiva de solo lectura de los endpoints REST,
+            generada del esquema OpenAPI del backend.
+          </p>
+        </a>
+      </section>
+
+      <footer>
+        Documentación generada automáticamente. No contiene credenciales ni
+        datos de usuarios.
+      </footer>
+    </main>
+  </body>
+</html>
