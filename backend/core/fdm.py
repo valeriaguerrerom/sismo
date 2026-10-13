@@ -21,8 +21,6 @@ Características:
 
 Este módulo es la fuente canónica del motor FDM del backend. El archivo
 backend/simulation.py re-exporta desde aquí para mantener compatibilidad.
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import base64
 import math

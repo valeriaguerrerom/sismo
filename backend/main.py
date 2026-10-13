@@ -15,8 +15,6 @@ Endpoints:
     - GET /api/stats: Estadísticas generales
     - POST /api/import/quakeml: Parsear catálogo QuakeML del SGC (RF-16)
     - POST /api/upload/mseed: Procesar MiniSEED subido por un investigador
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import os
 from contextlib import asynccontextmanager

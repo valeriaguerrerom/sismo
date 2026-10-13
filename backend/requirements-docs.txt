@@ -1,0 +1,25 @@
+# Dependencias SOLO para generar la documentación pública (/docs/backend).
+# No forman parte de la imagen de ejecución del backend: se instalan únicamente
+# en el paso de build de la documentación. Se mantienen aparte de
+# requirements.txt para no engordar el contenedor de producción.
+#
+#   py -m pip install -r requirements-docs.txt
+#   py -m mkdocs build   (desde la raíz del repositorio, con mkdocs.yml)
+#
+# MkDocs: generador de sitios estáticos a partir de Markdown.
+mkdocs>=1.6,<2
+# Material for MkDocs: tema y componentes de la documentación.
+mkdocs-material>=9.5,<10
+# mkdocstrings + handler de Python: extrae los docstrings del código fuente
+# (Griffe los lee de forma estática, sin importar los módulos).
+mkdocstrings[python]>=0.26,<1
+# Extensiones Markdown que usa el tema (admoniciones, superfences, etc.).
+# pymdown-extensions 10.16+ cambió la firma de Highlight y rompe el handler de
+# mkdocstrings 0.30; se fija por debajo de 10.16.
+pymdown-extensions>=10,<10.16
+# markdown 3.9+ cambió la firma de la extensión de resaltado y rompe el
+# handler de mkdocstrings 0.30; se fija por debajo de 3.9.
+markdown>=3.6,<3.9
+# Pygments 2.19+ dejó de tolerar filename=None al resaltar firmas, lo que
+# rompe el render de mkdocstrings; se fija por debajo de 2.19.
+pygments>=2.16,<2.19

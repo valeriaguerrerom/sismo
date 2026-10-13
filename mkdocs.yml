@@ -1,0 +1,117 @@
+# Configuración de la documentación técnica pública del backend.
+#
+# Se genera de forma estática con MkDocs + Material + mkdocstrings y se publica
+# bajo /docs/backend. La salida va a public/docs/backend para que el build del
+# frontend (Vite) la copie tal cual a dist/docs/backend y Nginx la sirva como
+# archivos estáticos. No se publica ninguna URL interna ni variable secreta.
+#
+#   py -m pip install -r backend/requirements-docs.txt
+#   py -m mkdocs build        # genera public/docs/backend
+#   py -m mkdocs serve        # vista previa local en http://127.0.0.1:8000
+
+site_name: SismoNariño — Documentación del backend
+site_description: >-
+  Documentación técnica del backend (API REST en FastAPI y motor de simulación
+  por diferencias finitas) del Simulador Triaxial de Pseudo-Sismogramas.
+# Ruta pública bajo la que se sirve esta sección.
+site_url: https://sismonarino.com/docs/backend/
+# Idioma de la interfaz del tema.
+docs_dir: mkdocs-src
+site_dir: public/docs/backend
+# Sin enlaces a repositorios ni a archivos de código fuente.
+repo_url: ""
+edit_uri: ""
+# Rutas relativas: la doc se sirve bajo un subdirectorio, no en la raíz.
+use_directory_urls: true
+
+theme:
+  name: material
+  language: es
+  # Sin Google Fonts: se usa la fuente del sistema para no cargar dominios
+  # externos (fonts.googleapis.com / fonts.gstatic.com).
+  font: false
+  palette:
+    - scheme: default
+      primary: deep orange
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a modo oscuro
+    - scheme: slate
+      primary: deep orange
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a modo claro
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - toc.follow
+  icon:
+    logo: material/pulse
+
+# Sin analíticas ni enlaces sociales externos.
+extra:
+  generator: false
+
+# Mermaid servido localmente (sin CDN): al cargarlo antes que el bundle del
+# tema, 'window.mermaid' queda definido y Material NO lo descarga de unpkg.
+extra_javascript:
+  - assets/javascripts/mermaid.min.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search:
+      lang: es
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          # Griffe resuelve los módulos (core.*, api.*, main) desde backend/.
+          paths: [backend]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: false
+            show_signature_annotations: true
+            filters: ["!^_"]
+
+nav:
+  - Visión general: index.md
+  - Arquitectura: arquitectura.md
+  - Despliegue: despliegue.md
+  - Pruebas por sprint: pruebas.md
+  - Referencia del código:
+      - Motor de simulación (FDM): referencia/fdm.md
+      - Utilidades geográficas: referencia/geo.md
+      - Escena 3D: referencia/scene.md
+      - Catálogo de estaciones: referencia/stations.md
+      - Configuración y entorno: referencia/config.md
+      - Límite de peticiones: referencia/rate_limit.md
+      - Carga de MiniSEED: referencia/mseed_upload.md
+      - Importación QuakeML: referencia/quakeml.md
+      - Buzón de contacto: referencia/feedback.md

@@ -3,7 +3,7 @@ Formulario de contacto "Escríbenos" (página Acerca de).
 
 Endpoint:
     POST /api/feedback — recibe un mensaje del formulario y lo guarda en la
-    tabla ``feedback_messages`` usando la clave de servicio de Supabase.
+    tabla ``feedback_messages`` usando el cliente de servicio del backend.
 
 Seguridad y anti spam (todo del lado del servidor):
     - Valida el tipo (sugerencia | error | datos | otro), la longitud del
@@ -16,9 +16,10 @@ Seguridad y anti spam (todo del lado del servidor):
     - Si el visitante tiene sesión, el id del usuario se toma del token
       verificado contra Supabase, NUNCA de lo que envíe el navegador.
 
-La escritura la hace el cliente de servicio (``SUPABASE_SERVICE_ROLE_KEY``),
-que salta las RLS. La tabla NO permite INSERT desde anon ni authenticated
-(ver la migración 20260926_feedback_backend_only.sql).
+La escritura la hace un cliente de servicio del backend, autenticado con una
+variable secreta configurada en el servidor, que salta las RLS. La tabla NO
+permite INSERT desde anon ni authenticated (ver la migración
+20260926_feedback_backend_only.sql).
 """
 from __future__ import annotations
 

@@ -10,8 +10,6 @@ Dominio del "Mapa 3D":
     latitud   0.3  a  2.7  N
     longitud -79.6 a -76.6 W
     profundidad 0 a 200 km
-
-Autores: Valeria Guerrero, Luisa Basante — Universidad Mariana, Nariño (2026)
 """
 import math
 
