@@ -1,11 +1,20 @@
 {
   "entryPointStrategy": "expand",
   "entryPoints": ["src"],
-  "out": "docs/frontend",
+  "out": "public/docs/frontend",
   "name": "SismoNariño — Frontend",
   "readme": "none",
   "excludePrivate": true,
   "excludeExternals": true,
-  "exclude": ["**/node_modules/**", "**/*.css"],
+  "skipErrorChecking": true,
+  "disableSources": true,
+  "exclude": [
+    "**/node_modules/**",
+    "**/*.css",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "src/vite-env.d.ts"
+  ],
   "tsconfig": "tsconfig.app.json"
 }
