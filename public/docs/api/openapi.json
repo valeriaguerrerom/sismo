@@ -1,0 +1,3329 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SismoNariño API",
+    "description": "Simulador Triaxial de Pseudo-Sismogramas — Backend",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/stations": {
+      "get": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Estaciones sismológicas de Nariño",
+        "description": "Devuelve el catálogo de las 7 estaciones del dominio de Nariño.\n\nReturns:\n    dict: { estaciones: [...] } con código, nombre, lat, lon, altitud y flag approx.",
+        "operationId": "stations_api_stations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/travel-times": {
+      "post": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Tiempos de viaje P/S por estación",
+        "description": "Calcula los tiempos de llegada P y S a cada estación.\n\n- homogeneous: tP = d_hipocentral / vp, tS = d_hipocentral / vs.\n- iasp91: usa obspy.taup con el primer arribo de cada tipo.\n\nArgs:\n    req: Epicentro, profundidad, velocidades y modelo.\n\nReturns:\n    TravelTimeResponse con una entrada por estación, ordenada por\n    distancia epicentral ascendente.\n\nRaises:\n    HTTPException(400): Si el modelo no es reconocido.",
+        "operationId": "travel_times_api_travel_times_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TravelTimeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravelTimeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scene-geometry": {
+      "get": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Geometría de escena del Mapa 3D (posiciones calculadas)",
+        "description": "Devuelve el bloque, estaciones, eje de profundidad, Moho y escala.\n\nTodas las posiciones vienen ya convertidas a unidades de escena Three.js.\nEl frontend solo las coloca; no calcula proyecciones.\n\nReturns:\n    SceneGeometry con posiciones listas para renderizar.",
+        "operationId": "scene_geometry_api_scene_geometry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneGeometry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scene-geometry/events": {
+      "post": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Posiciones de escena de hipocentros (tamaño/color calculados)",
+        "description": "Convierte eventos (lat/lon/prof/mag) en hipocentros de escena.\n\nEl tamaño de la esfera codifica la magnitud y el color la profundidad,\ncalculados aquí en el backend.\n\nArgs:\n    req: Lista de eventos con lat, lon, profundidad y magnitud.\n\nReturns:\n    EventsResponse con esferas posicionadas y la rampa de color usada.",
+        "operationId": "scene_events_api_scene_geometry_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/synthetic": {
+      "post": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Sismograma sintético FDM 2D a una distancia dada",
+        "description": "Genera un sismograma sintético con el FDM 2D.\n\nColoca la fuente al centro del dominio y un receptor en superficie a\n`distance_km` de ella. Resuelve la ecuación de onda elástica 2D con la\nmisma física del motor del frontend (Ricker doble-par/isótropa, superficie\nlibre, sponge, CFL) y devuelve las tres componentes N/E/Z.\n\nArgs:\n    params: Velocidades, densidad, magnitud, profundidad, tipo de fuente,\n        distancia del receptor y malla (nx, nz, dt_max_s).\n\nReturns:\n    SyntheticResult con t, north, east, vertical, tP/tS y tiempo de cómputo.\n\nRaises:\n    HTTPException(500): Si ocurre un error durante la simulación.",
+        "operationId": "synthetic_api_synthetic_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyntheticParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyntheticResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/waveforms/{event_id}/{station_code}": {
+      "get": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Forma de onda real (MiniSEED) de una estación",
+        "description": "Devuelve la forma de onda real triaxial de una estación para un evento.\n\nLee el MiniSEED (desde disco local o Supabase Storage), filtra por estación,\naplica detrend y un pasabanda (freqmin–freqmax Hz), decima a máx. 2000\nmuestras por canal y devuelve las componentes Z, N, E disponibles.\n\nArgs:\n    event_id: Identificador del evento (nombre de archivo/carpeta).\n    station_code: Código de la estación (p.ej. 'PAS2').\n    freqmin: Frecuencia mínima del pasabanda (Hz).\n    freqmax: Frecuencia máxima del pasabanda (Hz).\n\nReturns:\n    dict con t, canales {Z, N, E}, fs y starttime_utc.\n\nRaises:\n    HTTPException(404): Si no hay archivo o no hay señal para esa estación.\n    HTTPException(500): Si falla la lectura/procesamiento.",
+        "operationId": "waveforms_api_waveforms__event_id___station_code__get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "station_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Station Code"
+            }
+          },
+          {
+            "name": "freqmin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0.0,
+              "description": "Frecuencia mínima del pasabanda (Hz)",
+              "default": 1.0,
+              "title": "Freqmin"
+            },
+            "description": "Frecuencia mínima del pasabanda (Hz)"
+          },
+          {
+            "name": "freqmax",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0.0,
+              "description": "Frecuencia máxima del pasabanda (Hz)",
+              "default": 10.0,
+              "title": "Freqmax"
+            },
+            "description": "Frecuencia máxima del pasabanda (Hz)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ray-path": {
+      "get": {
+        "tags": [
+          "Mapa 3D"
+        ],
+        "summary": "Trayectoria del rayo P hacia una estación",
+        "description": "Calcula la trayectoria del rayo P desde el hipocentro a una estación.\n\nEn modo homogéneo devuelve la recta hipocentro→estación (dos puntos).\nEn modo iasp91 devuelve la curva real del rayo P vía obspy.taup.\n\nArgs:\n    lat, lon: Epicentro en grados.\n    depth_km: Profundidad focal en km.\n    station: Código de la estación destino.\n    model: Modelo de tiempos ('homogeneous' | 'iasp91').\n\nReturns:\n    RayPathResponse con la polilínea (dist_km, depth_km).\n\nRaises:\n    HTTPException(404): Si la estación no existe.\n    HTTPException(400): Si el modelo no es válido.",
+        "operationId": "ray_path_api_ray_path_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "description": "Latitud del epicentro",
+              "title": "Lat"
+            },
+            "description": "Latitud del epicentro"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "description": "Longitud del epicentro",
+              "title": "Lon"
+            },
+            "description": "Longitud del epicentro"
+          },
+          {
+            "name": "depth_km",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "minimum": 0.0,
+              "description": "Profundidad focal (km)",
+              "title": "Depth Km"
+            },
+            "description": "Profundidad focal (km)"
+          },
+          {
+            "name": "station",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Código de la estación destino",
+              "title": "Station"
+            },
+            "description": "Código de la estación destino"
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "homogeneous | iasp91",
+              "default": "homogeneous",
+              "title": "Model"
+            },
+            "description": "homogeneous | iasp91"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RayPathResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/home": {
+      "get": {
+        "tags": [
+          "Datos Sísmicos"
+        ],
+        "summary": "Cifras reales para la página de inicio",
+        "description": "Calcula las cifras del Home.\n\nFuente de verdad: la tabla seismic_events de Supabase (misma que usan el\nExplorer y el Mapa 3D). Si Supabase no está disponible o la tabla aún no\ntiene datos, cae a los índices JSON para no romper el Home.\n\nReturns:\n    HomeStats con total de eventos, rango de años y magnitud máxima.",
+        "operationId": "stats_home_api_stats_home_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/import/quakeml": {
+      "post": {
+        "tags": [
+          "Importación"
+        ],
+        "summary": "Parsear un catálogo QuakeML del SGC",
+        "description": "Extrae eventos de un archivo QuakeML usando ObsPy.\n\nArgs:\n    file: Archivo .xml en formato QuakeML 1.2.\n\nReturns:\n    ImportResponse: eventos normalizados listos para insertar en\n    ``seismic_events``.\n\nRaises:\n    HTTPException 400: archivo vacío, demasiado grande o no parseable.",
+        "operationId": "import_quakeml_api_import_quakeml_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_quakeml_api_import_quakeml_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/upload/mseed": {
+      "post": {
+        "tags": [
+          "Importación"
+        ],
+        "summary": "Procesar un archivo MiniSEED subido por un investigador",
+        "description": "Devuelve el registro triaxial normalizado de una estación del archivo.\n\nRequiere sesión: la carga de MiniSEED es una función para investigadores\nautenticados, así que el token se verifica contra Supabase del lado del\nservidor (no basta con que la interfaz oculte el botón sin sesión).\n\nRegistra cada intento de carga (éxito o fallo) en mseed_upload_logs para\nanálisis de uso y debugging.\n\nRaises:\n    HTTPException 401: sin sesión o token inválido.\n    HTTPException 400: archivo vacío, demasiado grande o ilegible.\n    HTTPException 404: estación inexistente o sin componente vertical.\n    HTTPException 422: estación fuera del proyecto o falta componente.\n    HTTPException 429: si se supera el límite de cargas por IP.",
+        "operationId": "upload_mseed_api_upload_mseed_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_mseed_api_upload_mseed_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MseedUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/examples/mseed": {
+      "get": {
+        "tags": [
+          "Importación"
+        ],
+        "summary": "Descargar el MiniSEED de ejemplo (estación CUM)",
+        "description": "Sirve el archivo MiniSEED de ejemplo (registro real corto de CUM).\n\nEs un registro tectónico de la estación CUM (Cumbal, Nariño) con velocímetro\ny acelerómetro, para probar la carga. Se sirve como descarga desde el propio\nbackend (no depende de Supabase Storage).\n\nRaises:\n    HTTPException 404: si el archivo no está en la imagen.",
+        "operationId": "download_example_mseed_api_examples_mseed_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/examples/mseed/{kind}": {
+      "get": {
+        "tags": [
+          "Importación"
+        ],
+        "summary": "Descargar un MiniSEED de ejemplo por tipo",
+        "description": "Sirve un MiniSEED de ejemplo según el tipo de fuente.\n\nArgs:\n    kind: 'tectonico' (estación CUM, red del SGC) o 'volcanico' (estación\n        CUFP del Volcán Galeras, OVSP). Ambos son registros reales cortos y\n        triaxiales para probar la carga.\n\nRaises:\n    HTTPException 404: tipo desconocido o archivo no disponible.",
+        "operationId": "download_example_mseed_by_kind_api_examples_mseed__kind__get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{event_id}/waveforms": {
+      "get": {
+        "tags": [
+          "Datos Sísmicos"
+        ],
+        "summary": "Obtener waveforms reales de un evento del catálogo",
+        "description": "Devuelve los datos reales MiniSEED de un evento sin requerir Supabase.\n\nArgs:\n    event_id: ID del evento (ej: '0602081159GVA' para Galeras,\n              'CM_M2.5_2023-01-09T00-24-00' para CM).\n    source: Origen de los datos ('galeras' o 'cm').\n    station: Código de estación a cargar (solo aplica para CM).\n\nReturns:\n    EventWaveformResponse con waveData triaxial y metadatos.\n\nRaises:\n    HTTPException 404: El archivo de datos no existe.\n    HTTPException 400: source inválido.",
+        "operationId": "get_event_waveforms_api_events__event_id__waveforms_get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Origen de datos: 'galeras' o 'cm'",
+              "title": "Source"
+            },
+            "description": "Origen de datos: 'galeras' o 'cm'"
+          },
+          {
+            "name": "station",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Código de estación",
+              "default": "BBAC",
+              "title": "Station"
+            },
+            "description": "Código de estación"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventWaveformResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{target_id}": {
+      "delete": {
+        "tags": [
+          "Cuenta"
+        ],
+        "summary": "Eliminar una cuenta (admin)",
+        "description": "Un administrador elimina la cuenta de otro usuario, anonimizando sus\nreportes (se conservan sin datos personales) y registrando la eliminación.\n\nArgs:\n    target_id: id del usuario a eliminar.\n    authorization: encabezado ``Bearer`` con el access token del admin.\n    reason: motivo de la eliminación (opcional).\n\nRaises:\n    HTTPException 401: token ausente o inválido.\n    HTTPException 403: quien llama no es administrador.\n    HTTPException 409: se intenta eliminar al único administrador.",
+        "operationId": "admin_delete_user_api_admin_users__target_id__delete",
+        "parameters": [
+          {
+            "name": "target_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Target Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_admin_delete_user_api_admin_users__target_id__delete"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "delete": {
+        "tags": [
+          "Cuenta"
+        ],
+        "summary": "Eliminar la propia cuenta",
+        "description": "El usuario elimina su propia cuenta: anonimiza sus reportes (se conservan\nsin datos personales), borra su perfil/credenciales y registra la baja.\n\nArgs:\n    authorization: Encabezado ``Bearer`` con el access token del usuario.\n\nRaises:\n    HTTPException 401: token ausente o inválido.\n    HTTPException 409: el usuario es el único administrador.\n    HTTPException 503: el servidor no tiene configurada la clave de servicio.",
+        "operationId": "delete_own_account_api_account_delete",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "tags": [
+          "Contacto"
+        ],
+        "summary": "Enviar un mensaje de contacto",
+        "description": "Recibe y guarda un mensaje del formulario \"Escríbenos\".\n\nArgs:\n    request: Petición (para obtener la IP y aplicar el rate limit).\n    body: Tipo, mensaje, correo opcional, consentimiento y honeypot.\n    authorization: Encabezado ``Bearer`` opcional; si es válido, asocia el\n        usuario autenticado.\n\nReturns:\n    ``{\"ok\": True}`` si el mensaje se guardó (o si el honeypot lo descartó\n    silenciosamente).\n\nRaises:\n    HTTPException 400: tipo inválido, mensaje vacío o muy largo, correo mal\n        formado, o falta la autorización de datos cuando hay correo.\n    HTTPException 429: se superó el límite de envíos por IP.\n    HTTPException 503: el servidor no tiene configurada la clave de servicio.",
+        "operationId": "create_feedback_api_feedback_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Estado del servicio",
+        "description": "Verifica que el servicio esté activo.\n\nReturns:\n    dict: Estado del servicio con nombre y versión.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check detallado",
+        "description": "Verifica el estado del servicio y la conexión con Supabase.\n\nReturns:\n    dict: Estado de salud incluyendo conectividad con la base de datos.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulate": {
+      "post": {
+        "tags": [
+          "Simulación"
+        ],
+        "summary": "Ejecutar simulación FDM 2D",
+        "description": "Ejecuta una simulación de propagación de ondas sísmicas usando el Método de Diferencias Finitas (FDM) 2D.\n\nResuelve la ecuación de onda elástica en un medio isótropo con:\n- Fuente Ricker wavelet (doble-cupla para tectónico, isótropa para volcánico)\n- Condiciones de frontera absorbentes (sponge layer)\n- Superficie libre en z=0\n- Registro triaxial (N, E, Z) en un receptor en superficie\n\nArgs:\n    params: Parámetros de simulación incluyendo velocidades, densidad, magnitud, profundidad y configuración de malla.\n\nReturns:\n    SimulationResult: Sismogramas triaxiales, métricas de amplitud, llegadas P/S y metadatos de la malla.\n\nRaises:\n    HTTPException(429): Si se supera el límite de peticiones por IP.\n    HTTPException(500): Si ocurre un error durante la simulación.",
+        "operationId": "simulate_api_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulate/full": {
+      "post": {
+        "tags": [
+          "Simulación"
+        ],
+        "summary": "Ejecutar simulación FDM 2D con snapshots del campo (mapa de calor)",
+        "description": "Ejecuta el FDM 2D y devuelve además los snapshots del campo de ondas.\n\nIgual que ``/api/simulate`` pero incluye ``snapshots`` (frames del campo\nsubmuestreado, codificados en base64 Float32) y ``snapshotGrid`` para que el\nnavegador dibuje el mapa de calor sin recomputar nada. El cómputo pesado\nocurre íntegramente en el backend.\n\nArgs:\n    params: Parámetros de simulación (velocidades, densidad, fuente, malla).\n\nReturns:\n    SimulationFullResult: Sismogramas, métricas, llegadas P/S, snapshots y grid.\n\nRaises:\n    HTTPException(429): Si se supera el límite de peticiones por IP.\n    HTTPException(500): Si ocurre un error durante la simulación.",
+        "operationId": "simulate_full_api_simulate_full_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationFullResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lame": {
+      "get": {
+        "tags": [
+          "Simulación"
+        ],
+        "summary": "Calcular parámetros de Lamé",
+        "description": "Calcula los parámetros elásticos de Lamé (λ y μ) a partir de velocidades sísmicas.\n\nRelaciones utilizadas:\n    μ = ρ · Vs²\n    λ = ρ · Vp² - 2μ\n\nArgs:\n    vp: Velocidad de onda P en m/s.\n    vs: Velocidad de onda S en m/s.\n    density: Densidad del medio en kg/m³.\n\nReturns:\n    dict: Parámetros de Lamé (lambda, mu) y valores de entrada.",
+        "operationId": "lame_params_api_lame_get",
+        "parameters": [
+          {
+            "name": "vp",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Velocidad de onda P (m/s)",
+              "default": 3500,
+              "title": "Vp"
+            },
+            "description": "Velocidad de onda P (m/s)"
+          },
+          {
+            "name": "vs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Velocidad de onda S (m/s)",
+              "default": 2000,
+              "title": "Vs"
+            },
+            "description": "Velocidad de onda S (m/s)"
+          },
+          {
+            "name": "density",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Densidad del medio (kg/m³)",
+              "default": 2600,
+              "title": "Density"
+            },
+            "description": "Densidad del medio (kg/m³)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "tags": [
+          "Datos Sísmicos"
+        ],
+        "summary": "Consultar eventos sísmicos",
+        "description": "Consulta eventos sísmicos históricos de Nariño (1827–2023).\n\nPermite filtrar por tipo de evento, rango de magnitud, rango de años\ny búsqueda textual por ubicación. Los resultados se ordenan según\nel campo y dirección especificados.\n\nFuentes de datos: SGC, OVSP, USGS.\n\nReturns:\n    dict: Lista de eventos y conteo total.",
+        "operationId": "get_events_api_events_get",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tipo de evento: tectonic | volcanic",
+              "title": "Type"
+            },
+            "description": "Tipo de evento: tectonic | volcanic"
+          },
+          {
+            "name": "min_mag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Magnitud mínima",
+              "title": "Min Mag"
+            },
+            "description": "Magnitud mínima"
+          },
+          {
+            "name": "max_mag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Magnitud máxima",
+              "title": "Max Mag"
+            },
+            "description": "Magnitud máxima"
+          },
+          {
+            "name": "start_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Año de inicio del rango",
+              "title": "Start Year"
+            },
+            "description": "Año de inicio del rango"
+          },
+          {
+            "name": "end_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Año de fin del rango",
+              "title": "End Year"
+            },
+            "description": "Año de fin del rango"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Búsqueda por nombre de ubicación",
+              "title": "Search"
+            },
+            "description": "Búsqueda por nombre de ubicación"
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Campo de ordenamiento",
+              "default": "event_date",
+              "title": "Sort By"
+            },
+            "description": "Campo de ordenamiento"
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Dirección: asc | desc",
+              "default": "desc",
+              "title": "Sort Dir"
+            },
+            "description": "Dirección: asc | desc"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "description": "Máximo de resultados",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Máximo de resultados"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{event_id}": {
+      "get": {
+        "tags": [
+          "Datos Sísmicos"
+        ],
+        "summary": "Obtener evento por ID",
+        "description": "Obtiene los detalles completos de un evento sísmico específico.\n\nArgs:\n    event_id: UUID del evento sísmico.\n\nReturns:\n    dict: Datos completos del evento (fecha, magnitud, profundidad, ubicación, etc.).\n\nRaises:\n    HTTPException(404): Si el evento no existe.",
+        "operationId": "get_event_api_events__event_id__get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quiz": {
+      "get": {
+        "tags": [
+          "Educación"
+        ],
+        "summary": "Obtener preguntas del quiz",
+        "description": "Retorna preguntas aleatorias del quiz educativo sobre sismología.\n\nLas preguntas cubren categorías: ondas sísmicas, volcanes de Nariño,\ntectónica de placas y conceptos generales de sismología.\n\nArgs:\n    count: Número de preguntas deseadas (máximo 20).\n\nReturns:\n    dict: Lista de preguntas con opciones, índice correcto y explicación.",
+        "operationId": "get_quiz_api_quiz_get",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "description": "Número de preguntas a retornar",
+              "default": 8,
+              "title": "Count"
+            },
+            "description": "Número de preguntas a retornar"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wave-facts": {
+      "get": {
+        "tags": [
+          "Educación"
+        ],
+        "summary": "Datos curiosos sobre ondas",
+        "description": "Retorna datos curiosos sobre ondas sísmicas agrupados por tipo.\n\nTipos disponibles: P (primarias), S (secundarias), Love y Rayleigh.\nCada tipo incluye múltiples datos curiosos seleccionados aleatoriamente\nen el frontend para variedad educativa.\n\nReturns:\n    dict: Diccionario con tipo de onda como clave y lista de facts como valor.",
+        "operationId": "get_wave_facts_api_wave_facts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timeline": {
+      "get": {
+        "tags": [
+          "Educación"
+        ],
+        "summary": "Línea de tiempo histórica",
+        "description": "Retorna eventos históricos sísmicos y volcánicos de Nariño para la línea de tiempo.\n\nIncluye eventos desde 1834 hasta 2023, ordenados cronológicamente.\nCada evento tiene año, magnitud (si aplica), título, descripción y tipo.\n\nReturns:\n    dict: Lista de eventos históricos ordenados por año.",
+        "operationId": "get_timeline_api_timeline_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Datos Sísmicos"
+        ],
+        "summary": "Estadísticas generales",
+        "description": "Retorna conteos generales de registros en la base de datos.\n\nReturns:\n    dict: Conteo de eventos sísmicos, preguntas del quiz, datos curiosos y eventos de timeline.",
+        "operationId": "get_stats_api_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_admin_delete_user_api_admin_users__target_id__delete": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "Body_admin_delete_user_api_admin_users__target_id__delete"
+      },
+      "Body_import_quakeml_api_import_quakeml_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Archivo QuakeML (.xml)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_quakeml_api_import_quakeml_post"
+      },
+      "Body_upload_mseed_api_upload_mseed_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Archivo MiniSEED (.mseed/.msd/.seed)"
+          },
+          "station": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station",
+            "description": "Código de estación a extraer"
+          },
+          "freqmin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freqmin",
+            "description": "Pasabanda: frecuencia mínima (Hz)"
+          },
+          "freqmax": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freqmax",
+            "description": "Pasabanda: frecuencia máxima (Hz)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_mseed_api_upload_mseed_post"
+      },
+      "DepthLevel": {
+        "properties": {
+          "km": {
+            "type": "integer",
+            "title": "Km"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y"
+          },
+          "is_moho": {
+            "type": "boolean",
+            "title": "Is Moho"
+          }
+        },
+        "type": "object",
+        "required": [
+          "km",
+          "y",
+          "is_moho"
+        ],
+        "title": "DepthLevel",
+        "description": "Nivel del eje de profundidad."
+      },
+      "EventIn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
+          },
+          "depth_km": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth Km"
+          },
+          "magnitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnitude"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "EventIn",
+        "description": "Evento de entrada para posicionar como hipocentro."
+      },
+      "EventWaveformResponse": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "station": {
+            "type": "string",
+            "title": "Station"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "num_samples": {
+            "type": "integer",
+            "title": "Num Samples"
+          },
+          "sampling_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampling Rate"
+          },
+          "waveData": {
+            "$ref": "#/components/schemas/WaveDataModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "station",
+          "source",
+          "duration",
+          "num_samples",
+          "waveData"
+        ],
+        "title": "EventWaveformResponse",
+        "description": "Datos reales MiniSEED de un evento del catálogo."
+      },
+      "EventsRequest": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventIn"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "EventsRequest",
+        "description": "Lista de eventos a posicionar en la escena."
+      },
+      "EventsResponse": {
+        "properties": {
+          "hypocenters": {
+            "items": {
+              "$ref": "#/components/schemas/SceneHypocenter"
+            },
+            "type": "array",
+            "title": "Hypocenters"
+          },
+          "depth_color_ramp": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Depth Color Ramp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hypocenters",
+          "depth_color_ramp"
+        ],
+        "title": "EventsResponse",
+        "description": "Hipocentros posicionados + rampa de color usada."
+      },
+      "FeedbackIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Tipo: sugerencia | error | datos | otro"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Mensaje (1..1000 caracteres)"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Correo opcional para responder"
+          },
+          "consent": {
+            "type": "boolean",
+            "title": "Consent",
+            "description": "Autorización de datos (Ley 1581), obligatoria si hay correo",
+            "default": false
+          },
+          "honeypot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Honeypot",
+            "description": "Campo trampa anti spam (dejar vacío)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "message"
+        ],
+        "title": "FeedbackIn",
+        "description": "Cuerpo del formulario de contacto."
+      },
+      "GridInfo": {
+        "properties": {
+          "nx": {
+            "type": "integer",
+            "title": "Nx"
+          },
+          "nz": {
+            "type": "integer",
+            "title": "Nz"
+          },
+          "dx": {
+            "type": "number",
+            "title": "Dx"
+          },
+          "dt": {
+            "type": "number",
+            "title": "Dt"
+          },
+          "dtAdjusted": {
+            "type": "boolean",
+            "title": "Dtadjusted"
+          },
+          "dxAdjusted": {
+            "type": "boolean",
+            "title": "Dxadjusted"
+          },
+          "totalSteps": {
+            "type": "integer",
+            "title": "Totalsteps"
+          },
+          "receiverX": {
+            "type": "integer",
+            "title": "Receiverx"
+          },
+          "receiverZ": {
+            "type": "integer",
+            "title": "Receiverz"
+          },
+          "sourceX": {
+            "type": "integer",
+            "title": "Sourcex"
+          },
+          "sourceZ": {
+            "type": "integer",
+            "title": "Sourcez"
+          },
+          "pointsPerWavelength": {
+            "type": "number",
+            "title": "Pointsperwavelength"
+          },
+          "firstBounceP": {
+            "type": "number",
+            "title": "Firstbouncep",
+            "description": "Tiempo del primer rebote de borde para la onda P (s)",
+            "default": 0.0
+          },
+          "firstBounceS": {
+            "type": "number",
+            "title": "Firstbounces",
+            "description": "Tiempo del primer rebote de borde para la onda S (s)",
+            "default": 0.0
+          },
+          "sourceDelay": {
+            "type": "number",
+            "title": "Sourcedelay",
+            "description": "Retardo del pico del pulso de la fuente Ricker, t0 (s). Los frentes teóricos parten en t0.",
+            "default": 0.0
+          },
+          "subsurfaceModel": {
+            "type": "string",
+            "title": "Subsurfacemodel",
+            "description": "Modelo de subsuelo usado: homogeneous | twoLayer",
+            "default": "homogeneous"
+          },
+          "interfaceZ": {
+            "type": "integer",
+            "title": "Interfacez",
+            "description": "Índice Z de la interfaz entre capas (solo twoLayer); 0 si no aplica",
+            "default": 0
+          },
+          "interfaceDepthKm": {
+            "type": "number",
+            "title": "Interfacedepthkm",
+            "description": "Profundidad de la interfaz entre capas (km); 0 si no aplica",
+            "default": 0.0
+          },
+          "interfaceReflP": {
+            "type": "number",
+            "title": "Interfacereflp",
+            "description": "Tiempo teórico de la reflexión P en la interfaz al receptor (s); 0 si no aplica",
+            "default": 0.0
+          },
+          "durationCappedByBounce": {
+            "type": "boolean",
+            "title": "Durationcappedbybounce",
+            "description": "True si la duración se acotó al primer rebote de borde (el backend la redujo).",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "nx",
+          "nz",
+          "dx",
+          "dt",
+          "dtAdjusted",
+          "dxAdjusted",
+          "totalSteps",
+          "receiverX",
+          "receiverZ",
+          "sourceX",
+          "sourceZ",
+          "pointsPerWavelength"
+        ],
+        "title": "GridInfo",
+        "description": "Información de la malla computacional y posiciones clave.\n\nAttributes:\n    nx: Número de nodos en dirección horizontal.\n    nz: Número de nodos en dirección vertical (profundidad).\n    dx: Espaciado de malla utilizado (m).\n    dt: Paso temporal utilizado (s), puede diferir del solicitado si se ajustó por CFL.\n    dtAdjusted: True si dt fue reducido para cumplir la condición CFL.\n    dxAdjusted: True si dx fue aumentado para acomodar la profundidad focal.\n    totalSteps: Número total de pasos temporales ejecutados.\n    receiverX: Índice X del receptor en la malla.\n    receiverZ: Índice Z del receptor en la malla.\n    sourceX: Índice X de la fuente en la malla.\n    sourceZ: Índice Z de la fuente en la malla.\n    pointsPerWavelength: Nodos por longitud de onda mínima (Vs / f_max / dx)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HomeStats": {
+        "properties": {
+          "total_eventos": {
+            "type": "integer",
+            "title": "Total Eventos"
+          },
+          "anio_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anio Min"
+          },
+          "anio_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anio Max"
+          },
+          "anios_registro": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anios Registro"
+          },
+          "magnitud_maxima": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnitud Maxima"
+          },
+          "magnitud_minima": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnitud Minima"
+          },
+          "eventos_cm": {
+            "type": "integer",
+            "title": "Eventos Cm"
+          },
+          "eventos_galeras": {
+            "type": "integer",
+            "title": "Eventos Galeras"
+          },
+          "anio_cm_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anio Cm Min"
+          },
+          "anio_cm_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anio Cm Max"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_eventos",
+          "anio_min",
+          "anio_max",
+          "anios_registro",
+          "magnitud_maxima",
+          "magnitud_minima",
+          "eventos_cm",
+          "eventos_galeras",
+          "anio_cm_min",
+          "anio_cm_max"
+        ],
+        "title": "HomeStats",
+        "description": "Estadísticas reales para el Home.\n\nAttributes:\n    total_eventos: Número total de eventos (CM + Galeras).\n    anio_min: Año del evento más antiguo.\n    anio_max: Año del evento más reciente.\n    anios_registro: Cantidad de años cubiertos (anio_max - anio_min + 1).\n    magnitud_maxima: Mayor magnitud observada en los datos (o None si ninguno la trae).\n    magnitud_minima: Menor magnitud observada (para la escala del mini gráfico).\n    eventos_cm: Conteo de eventos de la red CM (tectónicos).\n    eventos_galeras: Conteo de eventos del Volcán Galeras (volcánicos).\n    anio_cm_min: Año más antiguo de la red CM (inicio del tramo reciente).\n    anio_cm_max: Año más reciente de la red CM."
+      },
+      "ImportResponse": {
+        "properties": {
+          "total_en_archivo": {
+            "type": "integer",
+            "title": "Total En Archivo"
+          },
+          "importados": {
+            "type": "integer",
+            "title": "Importados"
+          },
+          "descartados": {
+            "type": "integer",
+            "title": "Descartados"
+          },
+          "eventos": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedEvent"
+            },
+            "type": "array",
+            "title": "Eventos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_en_archivo",
+          "importados",
+          "descartados",
+          "eventos"
+        ],
+        "title": "ImportResponse",
+        "description": "Respuesta de la importación QuakeML."
+      },
+      "ImportedEvent": {
+        "properties": {
+          "event_date": {
+            "type": "string",
+            "title": "Event Date",
+            "description": "Fecha UTC (YYYY-MM-DD)"
+          },
+          "event_time": {
+            "type": "string",
+            "title": "Event Time",
+            "description": "Hora UTC (HH:MM:SS)"
+          },
+          "magnitude": {
+            "type": "number",
+            "title": "Magnitude",
+            "description": "Magnitud preferida"
+          },
+          "magnitude_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnitude Type",
+            "description": "Tipo de magnitud (Mw, ML, ...)"
+          },
+          "depth_km": {
+            "type": "number",
+            "title": "Depth Km",
+            "description": "Profundidad focal en km"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "location_name": {
+            "type": "string",
+            "title": "Location Name",
+            "description": "Descripción o región del evento"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "tectonic",
+              "volcanic"
+            ],
+            "title": "Event Type",
+            "default": "tectonic"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agencia de origen",
+            "default": "SGC"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "description": "Identificador público del catálogo",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_date",
+          "event_time",
+          "magnitude",
+          "depth_km",
+          "latitude",
+          "longitude",
+          "location_name"
+        ],
+        "title": "ImportedEvent",
+        "description": "Evento sísmico extraído de un catálogo QuakeML."
+      },
+      "MseedUploadResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "stations": {
+            "items": {
+              "$ref": "#/components/schemas/StationInfo"
+            },
+            "type": "array",
+            "title": "Stations",
+            "description": "Estaciones encontradas en el archivo"
+          },
+          "station": {
+            "type": "string",
+            "title": "Station",
+            "description": "Estación seleccionada"
+          },
+          "network": {
+            "type": "string",
+            "title": "Network"
+          },
+          "channels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Channels",
+            "description": "Canal usado por componente N/E/Z"
+          },
+          "sensor_kind": {
+            "type": "string",
+            "title": "Sensor Kind",
+            "description": "Tipo de sensor usado: 'velocimetro' o 'acelerometro'"
+          },
+          "sampling_rate": {
+            "type": "number",
+            "title": "Sampling Rate"
+          },
+          "starttime_utc": {
+            "type": "string",
+            "title": "Starttime Utc"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "num_samples": {
+            "type": "integer",
+            "title": "Num Samples"
+          },
+          "normalization_factor": {
+            "type": "number",
+            "title": "Normalization Factor"
+          },
+          "filtro": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filtro"
+          },
+          "waveData": {
+            "$ref": "#/components/schemas/api__mseed_upload__WaveData"
+          },
+          "orientation_confirmed": {
+            "type": "boolean",
+            "title": "Orientation Confirmed",
+            "description": "True si las horizontales están orientadas a Norte/Este. False si vienen como 1/2 sin azimut (no se rotaron).",
+            "default": true
+          },
+          "orientation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation Note",
+            "description": "Aviso cuando la orientación no está confirmada."
+          },
+          "horizontal_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Horizontal Labels",
+            "description": "Rótulos a mostrar para las dos horizontales."
+          },
+          "sp_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Seconds",
+            "description": "Diferencia de tiempo S−P en segundos (None si no se detectó)."
+          },
+          "distance_km_est": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Km Est",
+            "description": "Distancia aproximada al foco en km, estimada por S−P (≈ 8·(tS−tP))."
+          },
+          "origin_class": {
+            "type": "string",
+            "title": "Origin Class",
+            "description": "Clasificación del origen: 'local' | 'regional' | 'lejano' | 'desconocido'.",
+            "default": "desconocido"
+          },
+          "distance_note": {
+            "type": "string",
+            "title": "Distance Note",
+            "description": "Aviso honesto sobre la estimación de distancia con una sola estación.",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "stations",
+          "station",
+          "network",
+          "channels",
+          "sensor_kind",
+          "sampling_rate",
+          "starttime_utc",
+          "duration",
+          "num_samples",
+          "normalization_factor",
+          "filtro",
+          "waveData"
+        ],
+        "title": "MseedUploadResponse",
+        "description": "Resultado del procesamiento de un MiniSEED subido por un investigador.\n\nReúne los metadatos de la estación elegida, la forma de onda normalizada\nlista para visualizar y, cuando es posible, una estimación de la distancia\nal foco a partir de la diferencia de llegada S−P. Nada de esto se persiste.\n\nAttributes:\n    filename: Nombre del archivo original cargado.\n    stations: Estaciones encontradas en el archivo.\n    station: Estación seleccionada para la visualización.\n    network: Red de la estación seleccionada.\n    channels: Canal usado por cada componente (claves ``N``/``E``/``Z``).\n    sensor_kind: Tipo de sensor usado (``velocimetro`` o ``acelerometro``).\n    sampling_rate: Frecuencia de muestreo en hercios (Hz).\n    starttime_utc: Instante inicial de la traza en formato ISO 8601 (UTC).\n    duration: Duración de la señal en segundos.\n    num_samples: Número de muestras por componente tras el procesamiento.\n    normalization_factor: Factor por el que se dividió la señal para\n        normalizarla al rango [-1, 1].\n    filtro: Parámetros del filtro pasabanda aplicado, o ``None`` si no se filtró.\n    waveData: Series temporales de las tres componentes.\n    orientation_confirmed: ``True`` si las horizontales están orientadas a\n        Norte/Este; ``False`` si vienen como 1/2 sin azimut (no se rotaron).\n    orientation_note: Aviso cuando la orientación no está confirmada.\n    horizontal_labels: Rótulos a mostrar para las dos horizontales.\n    sp_seconds: Diferencia de tiempo S−P en segundos (``None`` si no se detectó).\n    distance_km_est: Distancia aproximada al foco en km, estimada por S−P.\n    origin_class: Clasificación del origen de la señal."
+      },
+      "RayPathResponse": {
+        "properties": {
+          "modelo_usado": {
+            "type": "string",
+            "title": "Modelo Usado"
+          },
+          "fase": {
+            "type": "string",
+            "title": "Fase"
+          },
+          "station": {
+            "type": "string",
+            "title": "Station"
+          },
+          "distancia_epicentral_km": {
+            "type": "number",
+            "title": "Distancia Epicentral Km"
+          },
+          "puntos": {
+            "items": {
+              "$ref": "#/components/schemas/RayPoint"
+            },
+            "type": "array",
+            "title": "Puntos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "modelo_usado",
+          "fase",
+          "station",
+          "distancia_epicentral_km",
+          "puntos"
+        ],
+        "title": "RayPathResponse",
+        "description": "Trayectoria del rayo y metadatos.\n\nAttributes:\n    modelo_usado: 'homogeneous' o 'iasp91'.\n    fase: Nombre de la fase (p.ej. 'P') o 'recto' en homogéneo.\n    station: Código de la estación destino.\n    distancia_epicentral_km: Distancia epicentral a la estación.\n    puntos: Polilínea (dist_km, depth_km) del hipocentro a la superficie."
+      },
+      "RayPoint": {
+        "properties": {
+          "dist_km": {
+            "type": "number",
+            "title": "Dist Km"
+          },
+          "depth_km": {
+            "type": "number",
+            "title": "Depth Km"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dist_km",
+          "depth_km"
+        ],
+        "title": "RayPoint",
+        "description": "Un punto de la trayectoria del rayo.\n\nAttributes:\n    dist_km: Distancia horizontal desde el epicentro (km).\n    depth_km: Profundidad (km, positiva hacia abajo)."
+      },
+      "SceneBlock": {
+        "properties": {
+          "width": {
+            "type": "number",
+            "title": "Width"
+          },
+          "depth_xy": {
+            "type": "number",
+            "title": "Depth Xy"
+          },
+          "height": {
+            "type": "number",
+            "title": "Height"
+          }
+        },
+        "type": "object",
+        "required": [
+          "width",
+          "depth_xy",
+          "height"
+        ],
+        "title": "SceneBlock",
+        "description": "Dimensiones del bloque de escena."
+      },
+      "SceneGeometry": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/SceneBlock"
+          },
+          "terrain_scene_height": {
+            "type": "number",
+            "title": "Terrain Scene Height"
+          },
+          "terrain_exaggeration": {
+            "type": "number",
+            "title": "Terrain Exaggeration"
+          },
+          "hillshade_azimuth_deg": {
+            "type": "integer",
+            "title": "Hillshade Azimuth Deg"
+          },
+          "hillshade_altitude_deg": {
+            "type": "integer",
+            "title": "Hillshade Altitude Deg"
+          },
+          "domain": {
+            "type": "object",
+            "title": "Domain"
+          },
+          "stations": {
+            "items": {
+              "$ref": "#/components/schemas/SceneStation"
+            },
+            "type": "array",
+            "title": "Stations"
+          },
+          "depth_levels": {
+            "items": {
+              "$ref": "#/components/schemas/DepthLevel"
+            },
+            "type": "array",
+            "title": "Depth Levels"
+          },
+          "moho_km": {
+            "type": "integer",
+            "title": "Moho Km"
+          },
+          "moho_y": {
+            "type": "number",
+            "title": "Moho Y"
+          },
+          "scale_bar": {
+            "type": "object",
+            "title": "Scale Bar"
+          },
+          "domain_width_km": {
+            "type": "number",
+            "title": "Domain Width Km"
+          },
+          "domain_height_km": {
+            "type": "number",
+            "title": "Domain Height Km"
+          }
+        },
+        "type": "object",
+        "required": [
+          "block",
+          "terrain_scene_height",
+          "terrain_exaggeration",
+          "hillshade_azimuth_deg",
+          "hillshade_altitude_deg",
+          "domain",
+          "stations",
+          "depth_levels",
+          "moho_km",
+          "moho_y",
+          "scale_bar",
+          "domain_width_km",
+          "domain_height_km"
+        ],
+        "title": "SceneGeometry",
+        "description": "Geometría estática de la escena del Mapa 3D."
+      },
+      "SceneHypocenter": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "surface_y": {
+            "type": "number",
+            "title": "Surface Y",
+            "description": "Y de escena en superficie (prof=0)"
+          },
+          "depth_km": {
+            "type": "number",
+            "title": "Depth Km"
+          },
+          "magnitude": {
+            "type": "number",
+            "title": "Magnitude"
+          },
+          "radius": {
+            "type": "number",
+            "title": "Radius",
+            "description": "Radio de la esfera (unidades de escena)"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color",
+            "description": "Color hex según profundidad"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "x",
+          "y",
+          "z",
+          "surface_y",
+          "depth_km",
+          "magnitude",
+          "radius",
+          "color",
+          "label"
+        ],
+        "title": "SceneHypocenter",
+        "description": "Hipocentro con posición de escena, radio y color ya calculados."
+      },
+      "SceneStation": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "approx": {
+            "type": "boolean",
+            "title": "Approx"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          },
+          "marker_offset_y": {
+            "type": "number",
+            "title": "Marker Offset Y",
+            "description": "Altura del cono sobre el relieve"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "latitude",
+          "longitude",
+          "approx",
+          "source",
+          "x",
+          "z",
+          "marker_offset_y"
+        ],
+        "title": "SceneStation",
+        "description": "Estación con su posición de escena en superficie (sin relieve).\n\nLa Y final la ajusta el frontend sumando la altura del relieve muestreada\ndel heightmap; aquí se entrega la posición horizontal y un offset del marcador."
+      },
+      "SimulationFullResult": {
+        "properties": {
+          "waveData": {
+            "$ref": "#/components/schemas/core__fdm__WaveData"
+          },
+          "maxAmplitude": {
+            "type": "number",
+            "title": "Maxamplitude"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "dominantFrequency": {
+            "type": "number",
+            "title": "Dominantfrequency"
+          },
+          "params": {
+            "$ref": "#/components/schemas/SimulationParams"
+          },
+          "gridInfo": {
+            "$ref": "#/components/schemas/GridInfo"
+          },
+          "pArrival": {
+            "type": "number",
+            "title": "Parrival"
+          },
+          "sArrival": {
+            "type": "number",
+            "title": "Sarrival"
+          },
+          "pArrivalDetected": {
+            "type": "boolean",
+            "title": "Parrivaldetected"
+          },
+          "sArrivalDetected": {
+            "type": "boolean",
+            "title": "Sarrivaldetected"
+          },
+          "snapshotCount": {
+            "type": "integer",
+            "title": "Snapshotcount"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotFrame"
+            },
+            "type": "array",
+            "title": "Snapshots"
+          },
+          "snapshotGrid": {
+            "$ref": "#/components/schemas/SnapshotGrid"
+          },
+          "snapshotScale": {
+            "type": "number",
+            "title": "Snapshotscale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "waveData",
+          "maxAmplitude",
+          "duration",
+          "dominantFrequency",
+          "params",
+          "gridInfo",
+          "pArrival",
+          "sArrival",
+          "pArrivalDetected",
+          "sArrivalDetected",
+          "snapshotCount",
+          "snapshots",
+          "snapshotGrid",
+          "snapshotScale"
+        ],
+        "title": "SimulationFullResult",
+        "description": "Resultado de simulación con los snapshots del campo incluidos.\n\nIgual que :class:`SimulationResult` pero añade ``snapshots`` (frames del\ncampo submuestreado, base64) y ``snapshotGrid`` (dimensiones y posiciones\nde fuente/receptor en ese grid), para que el mapa de calor se renderice en\nel navegador sin recomputar nada."
+      },
+      "SimulationParams": {
+        "properties": {
+          "vp": {
+            "type": "number",
+            "maximum": 8000.0,
+            "minimum": 1500.0,
+            "title": "Vp",
+            "description": "Velocidad de onda P (m/s)",
+            "default": 3500
+          },
+          "vs": {
+            "type": "number",
+            "maximum": 4500.0,
+            "minimum": 500.0,
+            "title": "Vs",
+            "description": "Velocidad de onda S (m/s)",
+            "default": 2000
+          },
+          "density": {
+            "type": "number",
+            "maximum": 3500.0,
+            "minimum": 1500.0,
+            "title": "Density",
+            "description": "Densidad del medio (kg/m³)",
+            "default": 2600
+          },
+          "lambda_": {
+            "type": "number",
+            "title": "Lambda ",
+            "description": "Primer parámetro de Lamé (Pa)",
+            "default": 0
+          },
+          "mu": {
+            "type": "number",
+            "title": "Mu",
+            "description": "Módulo de corte (Pa)",
+            "default": 0
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "tectonic",
+              "volcanic"
+            ],
+            "title": "Sourcetype",
+            "description": "Tipo de fuente: tectonic | volcanic",
+            "default": "tectonic"
+          },
+          "magnitude": {
+            "type": "number",
+            "maximum": 9.0,
+            "minimum": 2.0,
+            "title": "Magnitude",
+            "description": "Magnitud momento (Mw)",
+            "default": 5.0
+          },
+          "depth": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Depth",
+            "description": "Profundidad focal (km)",
+            "default": 15
+          },
+          "epicenterLat": {
+            "type": "number",
+            "maximum": 3.0,
+            "minimum": -1.0,
+            "title": "Epicenterlat",
+            "description": "Latitud del epicentro (Nariño y entorno)",
+            "default": 1.2136
+          },
+          "epicenterLon": {
+            "type": "number",
+            "maximum": -75.5,
+            "minimum": -79.5,
+            "title": "Epicenterlon",
+            "description": "Longitud del epicentro (Nariño y entorno)",
+            "default": -77.2811
+          },
+          "duration": {
+            "type": "number",
+            "maximum": 120.0,
+            "minimum": 5.0,
+            "title": "Duration",
+            "description": "Duración de simulación (s)",
+            "default": 60
+          },
+          "dx": {
+            "type": "number",
+            "maximum": 200.0,
+            "minimum": 10.0,
+            "title": "Dx",
+            "description": "Espaciado de malla (m)",
+            "default": 100
+          },
+          "dt": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Dt",
+            "description": "Paso temporal (s)",
+            "default": 0.02
+          },
+          "strike": {
+            "type": "number",
+            "maximum": 360.0,
+            "minimum": 0.0,
+            "title": "Strike",
+            "description": "Rumbo de la falla (°), 0-360 desde el norte",
+            "default": 30
+          },
+          "dip": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": 0.0,
+            "title": "Dip",
+            "description": "Buzamiento de la falla (°), 0-90",
+            "default": 45
+          },
+          "rake": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Rake",
+            "description": "Deslizamiento (°), 90=inversa, -90=normal, 0=desgarre",
+            "default": 90
+          },
+          "stationAzimuth": {
+            "type": "number",
+            "maximum": 360.0,
+            "minimum": 0.0,
+            "title": "Stationazimuth",
+            "description": "Dirección de la estación (°), 0-360 desde el norte",
+            "default": 45
+          },
+          "epicentralDistanceKm": {
+            "type": "number",
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Epicentraldistancekm",
+            "description": "Distancia epicentral fuente→estación (km)",
+            "default": 2.5
+          },
+          "sourceCycles": {
+            "type": "number",
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Sourcecycles",
+            "description": "Ciclos del pulso de la fuente (1=Ricker, 3-4=tren de ondas llamativo)",
+            "default": 1.0
+          },
+          "sourceFreq": {
+            "type": "number",
+            "maximum": 12.0,
+            "minimum": 0.0,
+            "title": "Sourcefreq",
+            "description": "Frecuencia dominante de la fuente (Hz); 0 = automática por tipo",
+            "default": 0.0
+          },
+          "subsurfaceModel": {
+            "type": "string",
+            "title": "Subsurfacemodel",
+            "description": "Modelo de subsuelo: homogeneous | twoLayer",
+            "default": "homogeneous"
+          },
+          "layerThickness": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 0.05,
+            "title": "Layerthickness",
+            "description": "Espesor de la capa superficial (km), solo twoLayer",
+            "default": 0.5
+          },
+          "layerVp": {
+            "type": "number",
+            "maximum": 8000.0,
+            "minimum": 1500.0,
+            "title": "Layervp",
+            "description": "Vp de la capa superficial (m/s), solo twoLayer",
+            "default": 1800
+          },
+          "layerVs": {
+            "type": "number",
+            "maximum": 4500.0,
+            "minimum": 300.0,
+            "title": "Layervs",
+            "description": "Vs de la capa superficial (m/s), solo twoLayer",
+            "default": 600
+          },
+          "layerDensity": {
+            "type": "number",
+            "maximum": 3500.0,
+            "minimum": 1200.0,
+            "title": "Layerdensity",
+            "description": "Densidad de la capa superficial (kg/m³), solo twoLayer",
+            "default": 1900
+          }
+        },
+        "type": "object",
+        "title": "SimulationParams",
+        "description": "Parámetros de entrada para la simulación FDM.\n\nAttributes:\n    vp: Velocidad de onda P en m/s. Rango típico: 1500-8000.\n    vs: Velocidad de onda S en m/s. Rango típico: 800-4500.\n    density: Densidad del medio en kg/m³. Rango típico: 1800-3300.\n    lambda_: Primer parámetro de Lamé (Pa). Se calcula automáticamente si es 0.\n    mu: Segundo parámetro de Lamé / módulo de corte (Pa). Se calcula si es 0.\n    sourceType: Tipo de fuente sísmica: 'tectonic' (doble-cupla) o 'volcanic' (isótropo).\n    magnitude: Magnitud momento (Mw) del evento. Controla la amplitud de la fuente.\n    depth: Profundidad focal en kilómetros.\n    epicenterLat: Latitud del epicentro en grados decimales.\n    epicenterLon: Longitud del epicentro en grados decimales.\n    duration: Duración total de la simulación en segundos.\n    dx: Espaciado de la malla en metros.\n    dt: Paso temporal en segundos. Se ajusta automáticamente si viola CFL."
+      },
+      "SimulationResult": {
+        "properties": {
+          "waveData": {
+            "$ref": "#/components/schemas/core__fdm__WaveData"
+          },
+          "maxAmplitude": {
+            "type": "number",
+            "title": "Maxamplitude"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration"
+          },
+          "dominantFrequency": {
+            "type": "number",
+            "title": "Dominantfrequency"
+          },
+          "params": {
+            "$ref": "#/components/schemas/SimulationParams"
+          },
+          "gridInfo": {
+            "$ref": "#/components/schemas/GridInfo"
+          },
+          "pArrival": {
+            "type": "number",
+            "title": "Parrival"
+          },
+          "sArrival": {
+            "type": "number",
+            "title": "Sarrival"
+          },
+          "pArrivalDetected": {
+            "type": "boolean",
+            "title": "Parrivaldetected"
+          },
+          "sArrivalDetected": {
+            "type": "boolean",
+            "title": "Sarrivaldetected"
+          },
+          "snapshotCount": {
+            "type": "integer",
+            "title": "Snapshotcount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "waveData",
+          "maxAmplitude",
+          "duration",
+          "dominantFrequency",
+          "params",
+          "gridInfo",
+          "pArrival",
+          "sArrival",
+          "pArrivalDetected",
+          "sArrivalDetected",
+          "snapshotCount"
+        ],
+        "title": "SimulationResult",
+        "description": "Resultado completo de una simulación FDM.\n\nAttributes:\n    waveData: Series temporales triaxiales (N, E, Z) en el receptor.\n    maxAmplitude: Amplitud máxima absoluta registrada en cualquier componente.\n    duration: Duración total de la simulación (s).\n    dominantFrequency: Frecuencia dominante de la fuente Ricker (Hz).\n    params: Parámetros utilizados (pueden diferir de los solicitados si dt fue ajustado).\n    gridInfo: Información de la malla computacional.\n    pArrival: Tiempo estimado de llegada de la onda P al receptor (s).\n    sArrival: Tiempo estimado de llegada de la onda S al receptor (s).\n    pArrivalDetected: True si el arribo P fue detectado por STA, False si es estimado.\n    sArrivalDetected: True si el arribo S fue detectado por STA, False si es estimado.\n    snapshotCount: Número de snapshots del campo de ondas generados."
+      },
+      "SnapshotFrame": {
+        "properties": {
+          "time": {
+            "type": "number",
+            "title": "Time"
+          },
+          "ux": {
+            "type": "string",
+            "title": "Ux"
+          },
+          "uz": {
+            "type": "string",
+            "title": "Uz"
+          },
+          "scale": {
+            "type": "number",
+            "title": "Scale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "ux",
+          "uz",
+          "scale"
+        ],
+        "title": "SnapshotFrame",
+        "description": "Un frame del campo de ondas submuestreado para el corte del subsuelo.\n\nCada componente se cuantiza a 8 bits (int8 con signo) usando la escala\nPROPIA de ese fotograma (``scale``): valor_real ≈ byte/127 · scale. Al\ncuantizar cada fotograma contra su propio máximo se aprovecha todo el rango\n[-127, 127] incluso en los residuos tardíos (débiles), lo que elimina el\n\"escalonado\" (bloques de color) que producía una única escala global. El\nnavegador recompone la escala de color global a partir de estos factores,\nasí que el aspecto en modo \"global\" no cambia. La magnitud |u| se calcula\nen el navegador a partir de ``ux`` y ``uz``.\n\nAttributes:\n    time: Instante de tiempo del frame (s).\n    ux: Componente radial (int8 en base64), índice k = i·nz + j.\n    uz: Componente vertical (int8 en base64), mismo layout.\n    scale: Factor de escala propio del fotograma (máx |ux|,|uz| del frame)."
+      },
+      "SnapshotGrid": {
+        "properties": {
+          "nx": {
+            "type": "integer",
+            "title": "Nx"
+          },
+          "nz": {
+            "type": "integer",
+            "title": "Nz"
+          },
+          "sourceX": {
+            "type": "integer",
+            "title": "Sourcex"
+          },
+          "sourceZ": {
+            "type": "integer",
+            "title": "Sourcez"
+          },
+          "receiverX": {
+            "type": "integer",
+            "title": "Receiverx"
+          },
+          "receiverZ": {
+            "type": "integer",
+            "title": "Receiverz"
+          },
+          "interfaceZ": {
+            "type": "integer",
+            "title": "Interfacez",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "nx",
+          "nz",
+          "sourceX",
+          "sourceZ",
+          "receiverX",
+          "receiverZ"
+        ],
+        "title": "SnapshotGrid",
+        "description": "Metadatos del grid submuestreado de los snapshots (para el heatmap)."
+      },
+      "StationInfo": {
+        "properties": {
+          "station": {
+            "type": "string",
+            "title": "Station"
+          },
+          "network": {
+            "type": "string",
+            "title": "Network"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Channels"
+          },
+          "sampling_rate": {
+            "type": "number",
+            "title": "Sampling Rate"
+          },
+          "triaxial": {
+            "type": "boolean",
+            "title": "Triaxial"
+          }
+        },
+        "type": "object",
+        "required": [
+          "station",
+          "network",
+          "channels",
+          "sampling_rate",
+          "triaxial"
+        ],
+        "title": "StationInfo",
+        "description": "Resumen de una estación encontrada dentro del archivo MiniSEED.\n\nSe usa para listar las estaciones disponibles y señalar cuál es apta\npara una visualización triaxial (tres componentes ortogonales).\n\nAttributes:\n    station: Código de la estación (p. ej. ``CUFP``).\n    network: Código de la red sísmica a la que pertenece la estación.\n    channels: Canales presentes para la estación (p. ej. ``HHE``, ``HHN``, ``HHZ``).\n    sampling_rate: Frecuencia de muestreo en hercios (Hz).\n    triaxial: ``True`` si la estación tiene las tres componentes necesarias."
+      },
+      "StationTravelTime": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "approx": {
+            "type": "boolean",
+            "title": "Approx"
+          },
+          "distancia_epicentral_km": {
+            "type": "number",
+            "title": "Distancia Epicentral Km"
+          },
+          "distancia_hipocentral_km": {
+            "type": "number",
+            "title": "Distancia Hipocentral Km"
+          },
+          "distancia_grados": {
+            "type": "number",
+            "title": "Distancia Grados"
+          },
+          "azimut": {
+            "type": "number",
+            "title": "Azimut"
+          },
+          "tP": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tp"
+          },
+          "tS": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "tS_menos_tP": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts Menos Tp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "latitude",
+          "longitude",
+          "approx",
+          "distancia_epicentral_km",
+          "distancia_hipocentral_km",
+          "distancia_grados",
+          "azimut",
+          "tP",
+          "tS",
+          "tS_menos_tP"
+        ],
+        "title": "StationTravelTime",
+        "description": "Tiempos de viaje calculados para una estación.\n\nAttributes:\n    code: Código de la estación.\n    name: Nombre / municipio.\n    latitude, longitude: Coordenadas de la estación.\n    approx: True si la ubicación es aproximada.\n    distancia_epicentral_km: Distancia horizontal epicentro→estación.\n    distancia_hipocentral_km: Distancia 3D foco→estación.\n    distancia_grados: Distancia epicentral en grados de arco.\n    azimut: Azimut epicentro→estación (grados, desde el norte).\n    tP: Tiempo de llegada de la onda P (s).\n    tS: Tiempo de llegada de la onda S (s).\n    tS_menos_tP: Diferencia S−P (s)."
+      },
+      "SyntheticParams": {
+        "properties": {
+          "vp": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Vp",
+            "default": 3500
+          },
+          "vs": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Vs",
+            "default": 2000
+          },
+          "density": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Density",
+            "default": 2600
+          },
+          "magnitude": {
+            "type": "number",
+            "title": "Magnitude",
+            "default": 5.0
+          },
+          "depth_km": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Depth Km",
+            "default": 15.0
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "tectonic",
+              "volcanic"
+            ],
+            "title": "Source Type",
+            "default": "tectonic"
+          },
+          "distance_km": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Distance Km",
+            "default": 3.0
+          },
+          "nx": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 40.0,
+            "title": "Nx",
+            "default": 200
+          },
+          "nz": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 40.0,
+            "title": "Nz",
+            "default": 150
+          },
+          "dt_max_s": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Dt Max S",
+            "default": 0.02
+          }
+        },
+        "type": "object",
+        "title": "SyntheticParams",
+        "description": "Parámetros para un sintético con receptor a distancia controlada.\n\nA diferencia de SimulationParams (que coloca el receptor a un offset\nfijo), aquí el receptor se ubica en superficie a `distance_km` de la\nfuente, y la malla (nx, nz) y el paso temporal máximo son explícitos.\nLa física del solver es idéntica a run_fdm.\n\nAttributes:\n    vp: Velocidad de onda P (m/s).\n    vs: Velocidad de onda S (m/s).\n    density: Densidad (kg/m³).\n    magnitude: Magnitud Mw.\n    depth_km: Profundidad focal (km).\n    source_type: 'tectonic' | 'volcanic'.\n    distance_km: Distancia epicentral fuente→receptor en superficie (km).\n    nx: Nodos en X (horizontal).\n    nz: Nodos en Z (profundidad).\n    dt_max_s: Paso temporal máximo solicitado (se recorta por CFL)."
+      },
+      "SyntheticResult": {
+        "properties": {
+          "t": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "T"
+          },
+          "north": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "North"
+          },
+          "east": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "East"
+          },
+          "vertical": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vertical"
+          },
+          "tP_detectado": {
+            "type": "number",
+            "title": "Tp Detectado"
+          },
+          "tS_detectado": {
+            "type": "number",
+            "title": "Ts Detectado"
+          },
+          "cfl_ok": {
+            "type": "boolean",
+            "title": "Cfl Ok"
+          },
+          "tiempo_computo_ms": {
+            "type": "number",
+            "title": "Tiempo Computo Ms"
+          },
+          "nx": {
+            "type": "integer",
+            "title": "Nx"
+          },
+          "nz": {
+            "type": "integer",
+            "title": "Nz"
+          },
+          "dx_m": {
+            "type": "number",
+            "title": "Dx M"
+          },
+          "dt_s": {
+            "type": "number",
+            "title": "Dt S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "t",
+          "north",
+          "east",
+          "vertical",
+          "tP_detectado",
+          "tS_detectado",
+          "cfl_ok",
+          "tiempo_computo_ms",
+          "nx",
+          "nz",
+          "dx_m",
+          "dt_s"
+        ],
+        "title": "SyntheticResult",
+        "description": "Resultado del sintético para el Mapa 3D.\n\nAttributes:\n    t: Vector de tiempos (s).\n    north, east, vertical: Componentes del sismograma.\n    tP_detectado: Llegada P estimada/detectada (s).\n    tS_detectado: Llegada S estimada/detectada (s).\n    cfl_ok: True si el dt solicitado cumplía CFL sin recorte.\n    tiempo_computo_ms: Tiempo de cómputo del solver en milisegundos.\n    nx, nz, dx_m, dt_s: Parámetros efectivos de la malla."
+      },
+      "TravelTimeRequest": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat",
+            "description": "Latitud del epicentro"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon",
+            "description": "Longitud del epicentro"
+          },
+          "depth_km": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Depth Km",
+            "description": "Profundidad focal (km)"
+          },
+          "vp_km_s": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Vp Km S",
+            "description": "Vp para modo homogéneo (km/s)",
+            "default": 6.0
+          },
+          "vs_km_s": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Vs Km S",
+            "description": "Vs para modo homogéneo (km/s)",
+            "default": 3.5
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "homogeneous | iasp91",
+            "default": "homogeneous"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "depth_km"
+        ],
+        "title": "TravelTimeRequest",
+        "description": "Entrada para el cálculo de tiempos de viaje.\n\nAttributes:\n    lat: Latitud del epicentro (grados).\n    lon: Longitud del epicentro (grados).\n    depth_km: Profundidad focal (km).\n    vp_km_s: Velocidad P para el modo homogéneo (km/s).\n    vs_km_s: Velocidad S para el modo homogéneo (km/s).\n    model: 'homogeneous' o 'iasp91'."
+      },
+      "TravelTimeResponse": {
+        "properties": {
+          "modelo_usado": {
+            "type": "string",
+            "title": "Modelo Usado"
+          },
+          "estaciones": {
+            "items": {
+              "$ref": "#/components/schemas/StationTravelTime"
+            },
+            "type": "array",
+            "title": "Estaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "modelo_usado",
+          "estaciones"
+        ],
+        "title": "TravelTimeResponse",
+        "description": "Respuesta con los tiempos por estación y el modelo usado."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WaveDataModel": {
+        "properties": {
+          "time": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Time",
+            "description": "Tiempo en segundos desde el inicio"
+          },
+          "north": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "North",
+            "description": "Componente Norte normalizada [-1, 1]"
+          },
+          "east": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "East",
+            "description": "Componente Este normalizada [-1, 1]"
+          },
+          "vertical": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vertical",
+            "description": "Componente Vertical normalizada [-1, 1]"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "north",
+          "east",
+          "vertical"
+        ],
+        "title": "WaveDataModel",
+        "description": "Serie temporal triaxial de un registro sísmico real."
+      },
+      "api__mseed_upload__WaveData": {
+        "properties": {
+          "time": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Time"
+          },
+          "north": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "North"
+          },
+          "east": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "East"
+          },
+          "vertical": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vertical"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "north",
+          "east",
+          "vertical"
+        ],
+        "title": "WaveData",
+        "description": "Series temporales de las tres componentes de una forma de onda.\n\nTodas las listas comparten la misma longitud y el mismo eje de tiempo;\nlas amplitudes vienen normalizadas al rango [-1, 1].\n\nAttributes:\n    time: Instantes de muestreo en segundos.\n    north: Amplitud de la componente Norte (N) en cada instante.\n    east: Amplitud de la componente Este (E) en cada instante.\n    vertical: Amplitud de la componente vertical (Z) en cada instante."
+      },
+      "core__fdm__WaveData": {
+        "properties": {
+          "time": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Time"
+          },
+          "north": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "North"
+          },
+          "east": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "East"
+          },
+          "vertical": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vertical"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "north",
+          "east",
+          "vertical"
+        ],
+        "title": "WaveData",
+        "description": "Series temporales triaxiales registradas en el receptor.\n\nAttributes:\n    time: Vector de tiempos en segundos.\n    north: Componente Norte (transversal) del desplazamiento.\n    east: Componente Este (radial) del desplazamiento.\n    vertical: Componente Vertical (Z) del desplazamiento."
+      }
+    }
+  }
+}
