@@ -12,12 +12,24 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    // Excluir dependencias y el backend (pytest) de la suite de Vitest.
-    exclude: ['node_modules/**', 'backend/**', 'dist/**'],
+    // Excluir dependencias, el backend (pytest) y las pruebas E2E (Playwright,
+    // que se corren con `playwright test`, no con Vitest) de la suite de Vitest.
+    exclude: ['node_modules/**', 'backend/**', 'dist/**', 'e2e/**'],
   },
   server: {
     proxy: {
       // Redirige las llamadas /api al backend FastAPI en desarrollo.
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    // `vite preview` sirve el dist de producción; proxyea /api al backend local
+    // (equivalente al proxy de Nginx del contenedor e2e) para las pruebas E2E
+    // en local sin Docker.
+    proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
