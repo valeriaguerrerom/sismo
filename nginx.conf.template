@@ -17,6 +17,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Redirecciones RELATIVAS. Detrás del proxy de Railway, nginx escucha en el
+    # puerto interno 8080; con redirects absolutos (por defecto) el redirect de
+    # directorio de /docs -> /docs/ saldría como http://host:8080/docs/, que el
+    # navegador no puede alcanzar (el borde público solo expone 443). Con
+    # absolute_redirect off el Location es relativo (/docs/) y se resuelve contra
+    # el host y esquema públicos. No afecta a la CSP ni a ninguna otra cabecera.
+    absolute_redirect off;
+
     gzip on;
     gzip_types text/plain text/css application/json application/javascript image/svg+xml;
     client_max_body_size 25m;

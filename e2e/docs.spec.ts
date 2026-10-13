@@ -14,14 +14,19 @@ import { test, expect } from '@playwright/test';
  * allí; cuando se despliegue, basta quitar el skip o correrla en local.
  */
 
+// La documentación /docs ya está desplegada; esta prueba se corre tanto en
+// local (Nginx) como en producción. Si en algún momento se quisiera volver a
+// omitir en producción (p. ej. en un entorno donde /docs no esté publicado),
+// basta con poner E2E_DOCS_SKIP_PROD=1.
 const ENV = (process.env.E2E_ENV || 'local') as 'local' | 'prod';
 const IS_PROD = ENV === 'prod';
+const SKIP_PROD = IS_PROD && process.env.E2E_DOCS_SKIP_PROD === '1';
 
 test.describe('Documentación pública /docs (smoke, no-CPR)', () => {
   test.skip(
-    IS_PROD,
-    'La documentación /docs todavía no está desplegada en producción; esta ' +
-      'prueba se corre contra el entorno local (Nginx). Quitar este skip cuando /docs esté en prod.',
+    SKIP_PROD,
+    'Omitida en producción por E2E_DOCS_SKIP_PROD=1 (la documentación /docs no ' +
+      'está publicada en este entorno).',
   );
 
   test('/docs — portada con las tres secciones', async ({ page }) => {
